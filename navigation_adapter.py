@@ -157,7 +157,7 @@ class NavigationAdapter:
             description=f"현재 약 {b.state.get('speed_kph',0):g}km/h로 주행하고 있으며 앞차 간격은 약 {sc['gap_m']:g}m입니다. "
             description+='시야가 제한되는 구간에서 감속하며 주행합니다.' if active else '경로를 따라 앞차와의 간격을 유지합니다.'
             event.update(title=title,description=description)
-            destination.update(name='안개 주행 체험',detail='30초 후 안개가 짙어지는 약 5분 주행')
+            destination.update(name='안개 주행 체험',detail='10초 후 짙은 안개에 진입하는 약 5분 주행')
         if sc['completed']:
             event.update(title='주행 체험을 마쳤습니다',description='구간 끝에 도착해 정지했습니다. 처음으로를 누르면 다시 체험할 수 있습니다.')
         if blockade:

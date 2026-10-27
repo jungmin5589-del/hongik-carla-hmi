@@ -1,9 +1,9 @@
-"""Five-minute finite drive, external fog starts at 30 driving seconds."""
+"""Five-minute finite drive, sudden dense fog after ten driving seconds."""
 import math
 import time
 import numpy as np
 from scenario2 import Scenario2
-from fog_scene import LEAD_TRACK_ID,CONTEXT_TRACK_IDS
+from fog_scene import LEAD_TRACK_ID,CONTEXT_TRACK_IDS,ONSET_SECONDS,BASE_GAP_M,EXTINCTION_TIMES,EXTINCTION_BETAS
 
 
 def smooth(value):
@@ -13,21 +13,20 @@ def smooth(value):
 
 def fog_at(seconds):
     # Continuous optical extinction, not a claimed measured visibility distance.
-    keys=[30.,65.,130.,220.,300.]
-    betas=[0.,.025,.085,.18,.25]
+    keys=EXTINCTION_TIMES
+    betas=EXTINCTION_BETAS
     beta=0.
     for i in range(len(keys)-1):
         if seconds>=keys[i]:
             u=smooth((seconds-keys[i])/(keys[i+1]-keys[i]))
             beta=betas[i]+u*(betas[i+1]-betas[i])
-    stage=('clear' if seconds<=30 else 'developing' if seconds<65 else
-           'thick' if seconds<130 else 'dense' if seconds<220 else 'whiteout')
-    return dict(stage=stage,beta=beta,strength=beta/.25,onset_s=30.)
+    stage=('clear' if seconds<=ONSET_SECONDS else 'developing' if seconds<12 else 'whiteout')
+    return dict(stage=stage,beta=beta,strength=beta/betas[-1],onset_s=ONSET_SECONDS)
 
 
 class DenseFog(Scenario2):
-    ONSET_SECONDS=30.
-    BASE_GAP=14.
+    ONSET_SECONDS=ONSET_SECONDS
+    BASE_GAP=BASE_GAP_M
     WIDE_GAP=36.
     SUPPRESS_OTHER_TRAFFIC=True
     TYPE_ID='dense_fog'
@@ -42,14 +41,15 @@ class DenseFog(Scenario2):
     def reset(self,enabled=None):
         super().reset(enabled)
         with self.lock:
-            self.lead_s=24.
+            self.lead_s=self.BASE_GAP+self.half_length+1.85
+            self.gap=self.BASE_GAP
             self.lead_speed=0.
             self.extra_caution=False
             self.stop_requested=False
             self.last_stage='clear'
             self.times=np.linspace(0.,300.,3001)
             t=self.times
-            u=np.clip((t-30.)/210.,0.,1.)
+            u=np.clip((t-self.ONSET_SECONDS)/210.,0.,1.)
             envelope=(1.-.65*u*u*(3.-2.*u))
             start=np.clip(t/5.,0.,1.);end=np.clip((288.-t)/12.,0.,1.)
             envelope*=start*start*(3.-2.*start)*end*end*(3.-2.*end)
@@ -57,7 +57,7 @@ class DenseFog(Scenario2):
             travel=self.route.length-10.-self.lead_s
             self.positions=self.lead_s+integral*travel/integral[-1]
             self.speeds=envelope*travel/integral[-1]
-            self.log('fog_trial_ready',duration_s=300,fog_onset_s=30.,loop=False)
+            self.log('fog_trial_ready',duration_s=300,fog_onset_s=self.ONSET_SECONDS,base_gap_m=self.BASE_GAP,loop=False)
 
     def advance(self,dt,driving,ego_xy,speed):
         with self.lock:
@@ -66,13 +66,13 @@ class DenseFog(Scenario2):
                 self.elapsed+=min(max(dt,0.),.2)
                 self.lead_s=float(np.interp(self.elapsed,self.times,self.positions))
                 self.lead_speed=float(np.interp(self.elapsed,self.times,self.speeds))
-                if not self.onset and self.elapsed>=30.:
+                if not self.onset and self.elapsed>=self.ONSET_SECONDS:
                     self.onset=True;self.onset_monotonic=time.monotonic()
                     self.log('fog_started')
                 stage=fog_at(self.elapsed)['stage']
                 if stage!=self.last_stage:
                     self.last_stage=stage;self.log('fog_stage_changed',stage=stage)
-            baseline=14.+10.*smooth((self.elapsed-30.)/140.)
+            baseline=self.BASE_GAP
             self.desired_gap=max(baseline,self.WIDE_GAP if self.extra_caution else baseline)
             self.gap=max(0.,self.lead_s-self.ego_s-self.half_length-1.85)
             if self.last_action=='widen' and not self.action_complete and self.gap>=self.desired_gap-.5:
@@ -84,7 +84,7 @@ class DenseFog(Scenario2):
 
     def target_speed(self):
         if not self.enabled:return None
-        return max(0.,min(25.,(self.lead_speed+.35*(self.gap-self.desired_gap))*3.6))
+        return max(0.,min(25.,(self.lead_speed+1.0*(self.gap-self.desired_gap))*3.6))
 
     def pose(self):
         with self.lock:return self.route.sample(self.lead_s,height=self.height),0.,0.

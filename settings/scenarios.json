@@ -20,25 +20,22 @@
   },
   "fog": {
     "duration_s": 300,
-    "onset_s": 30,
+    "onset_s": 10.0,
+    "base_gap_m": 8.0,
     "lead": "6",
     "native_context": [
       "7",
       "36"
     ],
     "extinction_keys_s": [
-      30,
-      65,
-      130,
-      220,
-      300
+      10.0,
+      12.0,
+      300.0
     ],
     "extinction_beta": [
-      0,
-      0.025,
-      0.085,
-      0.18,
-      0.25
+      0.0,
+      0.2,
+      0.2
     ],
     "compositor": "same-frame native distance/opacity; camera-relative ground completion",
     "physical_weather_engine": false

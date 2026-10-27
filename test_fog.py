@@ -19,14 +19,23 @@ class FogTrialChecks(unittest.TestCase):
     def tearDown(self):self.sc.events.close();self.tmp.cleanup()
     def advance(self,seconds):
         for _ in range(round(seconds*10)):self.sc.advance(.1,True,[0.,0.],0.)
-    def test_clear_until_30_seconds_then_continuous_monotonic_fog(self):
-        self.assertEqual(fog_at(29.99)['beta'],0.)
-        self.assertEqual(fog_at(30.)['beta'],0.)
-        self.assertGreater(fog_at(30.1)['beta'],0.)
+    def test_clear_until_ten_seconds_then_sudden_continuous_dense_fog(self):
+        self.assertEqual(fog_at(9.99)['beta'],0.)
+        self.assertEqual(fog_at(10.)['beta'],0.)
+        self.assertGreater(fog_at(10.1)['beta'],0.)
         values=[fog_at(t)['beta'] for t in np.arange(0,301,.25)]
         self.assertTrue(np.all(np.diff(values)>=0))
-        self.assertLess(transmission(15.,fog_at(290)['beta']),.03)
-        self.assertLess(transmission(80.,fog_at(60.)['beta']),.2)
+        self.assertLess(transmission(20.,fog_at(290)['beta']),.02)
+        self.assertLess(transmission(30.,fog_at(12.)['beta']),.003)
+        self.assertGreater(transmission(9.,fog_at(15.)['beta']),.12)
+        self.assertLess(transmission(9.,fog_at(15.)['beta']),.2)
+        self.assertEqual(fog_at(15.)['beta'],fog_at(290.)['beta'])
+    def test_close_gap_from_departure_until_an_explicit_distance_request(self):
+        self.assertAlmostEqual(self.sc.lead_s-self.sc.half_length-1.85,8.)
+        self.advance(9.9);self.assertFalse(self.sc.onset)
+        self.advance(.2);self.assertTrue(self.sc.onset)
+        self.assertEqual(self.sc.desired_gap,8.)
+        self.advance(200);self.assertEqual(self.sc.desired_gap,8.)
     def test_pause_freezes_fog_and_lead_pose(self):
         self.advance(75);before=self.sc.public();pose=self.sc.pose()[0].copy()
         for _ in range(500):self.sc.advance(.1,False,[0,0],0.)

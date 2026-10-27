@@ -3,10 +3,15 @@
 Private source and configuration history for the local passenger-interaction prototype.
 
 Three independent scenes: four-lane blocked traffic, a weaving vehicle at night,
-and progressively reduced visibility in fog. Passengers open the Hongik AI
+and sudden dense fog. Passengers open the Hongik AI
 notification, inspect an explanation, choose an action, then receive the observed
 result and an end message. Scenario explanations use scripted simulator state;
 they are not YOLO or LLM perception claims.
+
+The five-minute fog trial stays clear for ten driving seconds, then builds dense
+fog over two seconds. It requests an 8m bumper-to-bumper following gap; the
+actual gap follows CARLA vehicle dynamics. A distance-increase choice still
+widens the gap explicitly.
 
 ## Run in the existing authorized environment
 
