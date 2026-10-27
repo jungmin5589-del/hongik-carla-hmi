@@ -1,0 +1,32 @@
+# Explicit source-only backup. Runtime data and credentials are denied by default.
+*
+!/.gitignore
+!/README.md
+!/AGENTS.md
+!/*.py
+!/*.js
+!/*.cjs
+!/*.css
+!/*.html
+!/*.sh
+!/*.bat
+!/mobile-requirements.txt
+!/docs/
+!/docs/*.md
+!/settings/
+!/settings/runtime-lock.json
+!/settings/scenarios.json
+!/settings/requirements.lock.txt
+!/course_ui/
+!/course_ui/*.js
+!/course_ui/*.cjs
+!/course_ui/*.css
+!/course_ui/*.html
+!/course_ui/vendor/
+!/course_ui/vendor/three.core.js
+!/course_ui/vendor/three.module.js
+!/course_ui/vendor/THREE-LICENSE.txt
+!/course_ui/vendor/PretendardVariable.woff2
+!/course_ui/vendor/Pretendard-LICENSE.txt
+# This is an unmodified proprietary SDK source copy, not our application.
+/serve-reference.py

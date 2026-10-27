@@ -1,0 +1,52 @@
+.hongik-entry,#hongik-dialog,#experience-setup,#input-status,#input-preview,#control-panel,#suggestion,#show-suggestion,#landmark-hud{display:none!important}
+.music-dock,.music-sheet,#voice-footer,#music-footer,#navigation-footer,#search-open,#route-change,#route-cancel,#destination-panel{display:none!important}
+.settings-sheet .setting,.settings-sheet>.settings-note{display:none}
+.settings-sheet .setting:has(#fullscreen){display:flex}
+.nurec-controls{position:fixed;z-index:48;right:26px;bottom:100px;display:flex;align-items:center;gap:10px;padding:12px;background:#fff;border:1px solid #e6e8ec;border-radius:14px;box-shadow:0 5px 25px #1118270b;font:500 13px Pretendard,sans-serif}
+.nurec-controls button,.nurec-controls select{border:0;border-radius:7px;background:#f2f4f7;color:#171a20;padding:10px 12px;font:inherit;cursor:pointer}.nurec-controls .primary{background:#3e6ae1;color:white}.nurec-controls a{color:#3e6ae1;text-decoration:none;padding:6px}.nurec-controls button:disabled{opacity:.5}
+.map-panel .route-card{max-width:540px}.nurec-trial-status{font-size:12px;color:#6c7480;max-width:160px}
+@media(max-width:1000px){.nurec-controls{right:16px;bottom:82px;gap:6px;flex-wrap:wrap;width:min(310px,calc(100vw - 32px))}.nurec-controls button,.nurec-controls select{padding:8px}.nurec-trial-status{max-width:100%}}
+@media(max-width:800px){.research-driving #research-launch{bottom:calc(94px + var(--nurec-controls-height,150px));max-width:calc(100vw - 36px)}}
+@media(max-width:500px){.route-card{padding:16px 12px!important}.route-details{gap:6px!important}.route-details strong{font-size:16px!important;white-space:nowrap}.route-details small{font-size:8px!important;white-space:nowrap}.route-turn{gap:8px!important}.route-turn b{font-size:24px!important}.route-turn span{font-size:11px!important;word-break:keep-all}.route-note{font-size:10px!important}}
+
+/* The click invitation stays small; details and every choice open together. */
+#research-launch{border-radius:30px;min-width:186px;padding:14px 20px 14px 14px}
+#research-launch .hongik-orb{width:40px;height:40px;flex:none}
+#research-launch.has-update{animation:hongik-click-invite 2.4s ease-in-out infinite}
+#research-launch.has-update .hongik-orb{animation:hongik-click-orb 2.4s ease-in-out infinite}
+.hongik-panel-name{display:flex;align-items:center;gap:10px;color:#171a20;font-size:16px;font-weight:700}
+.hongik-panel-name .hongik-orb{width:24px;height:24px}
+#research-dialog{top:90px;bottom:calc(120px + var(--nurec-controls-height,66px));border-radius:18px}
+#research-dialog header{padding:18px 24px}
+.research-dialog-content{padding:24px 28px}
+#research-title{font-size:clamp(22px,1.9vw,29px);margin-bottom:14px}
+#research-description{font-size:16px;line-height:1.75;margin-bottom:20px}
+#research-options-label{font-size:13px;font-weight:650;color:#737b86;margin:4px 0 12px}
+#research-options{grid-template-columns:1fr;gap:9px}
+.research-option{min-height:0;padding:17px 19px;gap:5px}
+.research-option strong{font-size:16px}.research-option small{font-size:12px}
+#research-feedback{margin-bottom:18px}
+#research-ending{position:fixed;z-index:60;top:90px;right:34px;width:min(460px,calc(100vw - 40px));box-sizing:border-box;padding:26px 28px;background:#fff;border:1px solid #e2e7ef;border-radius:18px;box-shadow:0 12px 48px #1823371a;font-family:Pretendard,sans-serif}
+#research-ending[hidden]{display:none}#research-ending small{color:#3e6ae1;font-size:12px;font-weight:650}#research-ending h2{font-size:23px;margin:12px 0}#research-ending p{font-size:14px;line-height:1.7;color:#646d79;margin:10px 0}#research-ending button{margin-top:12px;border:0;border-radius:8px;background:#3e6ae1;color:white;padding:12px 20px;font:600 14px inherit;cursor:pointer}
+#research-dialog:not([hidden])~#research-ending{display:none}
+@media(max-width:800px){#research-ending{top:78px;right:20px;padding:21px}#research-ending h2{font-size:21px}}
+@keyframes hongik-click-invite{0%,100%{border-color:#e1e4e8;box-shadow:0 5px 25px #1118270b}50%{border-color:#8ba4eb;box-shadow:0 0 0 5px #3e6ae110,0 0 24px #6e8de72a}}
+@keyframes hongik-click-orb{0%,100%{filter:brightness(1)}50%{filter:brightness(1.17)}}
+@media(max-width:800px){#research-dialog{top:72px;bottom:calc(92px + var(--nurec-controls-height,150px));left:16px;right:16px}.research-dialog-content{padding:20px}.research-option{padding:16px}#research-title{font-size:23px}}
+@media(prefers-reduced-motion:reduce){#research-launch.has-update,#research-launch.has-update .hongik-orb{animation:none}#research-launch.has-update{border-color:#7394eb;box-shadow:0 0 0 3px #3e6ae114}}
+#research-live-detail{font-size:12px;color:#89929e;line-height:1.6;margin:-9px 0 14px}
+.research-voice{display:flex;align-items:center;gap:12px;margin:0 0 22px}.research-voice button{border:0;border-radius:7px;background:#eff3fa;color:#3e6ae1;padding:9px 12px;font:600 12px inherit;cursor:pointer}.research-voice small{font-size:11px;color:#8c95a1}
+@media(max-width:800px){
+ #research-dialog{top:16px;bottom:16px}
+ #research-dialog header{padding:13px 17px}
+ .research-dialog-content{padding:16px 18px}
+ #research-caption{font-size:11px;margin-bottom:9px}
+ #research-title{font-size:21px;line-height:1.35;margin-bottom:12px}
+ #research-description{font-size:14px;line-height:1.65;margin-bottom:14px}
+ #research-live-detail{font-size:10px;margin-bottom:12px}
+ .research-voice{margin-bottom:16px;gap:9px}
+ #research-options-label{font-size:12px;margin-bottom:8px}
+ #research-options{gap:7px}
+ .research-option{padding:12px 14px;gap:4px}
+ .research-option strong{font-size:14px}.research-option small{font-size:11px;line-height:1.5}
+}

@@ -1,0 +1,12 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NuRec · 큰 주행 화면</title>
+<style>*{box-sizing:border-box}html,body{overflow:hidden}body{margin:0;background:#080a0e;color:#fff;font:14px system-ui}img{display:block;width:100vw;height:100vh;object-fit:contain}nav{position:fixed;bottom:18px;right:18px;display:flex;gap:10px;align-items:center;background:#10131cd9;padding:10px 14px;border-radius:12px}a,button{color:white;background:#262d3e;border:0;padding:9px 12px;border-radius:7px;text-decoration:none;font:inherit}small{opacity:.7}</style>
+<img src="/stream" alt="CARLA와 실시간으로 연결된 NuRec 주행 영상"><nav><strong id="beam" style="color:#58a0ff" hidden>≡◖ 상향등</strong><small id="state">연결 중</small><a href="/navigation" target="nurec-navigation">내비 열기</a><button id="full">전체 화면</button></nav>
+<script>
+document.getElementById('full').onclick=()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();
+const video=document.querySelector('img');let retry,lastImpact=null;
+const alert=document.createElement("strong");alert.id="crash-alert";alert.hidden=true;alert.style.cssText="position:fixed;top:20px;left:20px;right:20px;padding:16px;background:#5a2024e8;border-radius:12px";document.body.append(alert);
+
+video.onerror=()=>{clearTimeout(retry);retry=setTimeout(()=>{video.src='/stream?reconnect='+Date.now()},1000)};
+async function refreshState(){try{if(!document.hidden){const s=await(await fetch('/state',{cache:'no-store'})).json();document.getElementById('beam').hidden=!s.scenario?.high_beam?.on;document.getElementById('state').textContent=`${s.width}×${s.height} · ${Math.round(s.speed_kph)} km/h`;const sc=s.scenario||{},c=sc.crash||{},key=sc.session+':'+c.phase;alert.hidden=sc.action!=='overtake';alert.textContent=sc.completed?sc.outcome.message:sc.feedback;if(lastImpact?.session===sc.session&&lastImpact.key!==key&&c.primary_collision_verified&&['primary_impact','secondary_impact'].includes(c.phase)){video.animate([{transform:'translateX(-5px)'},{transform:'translateX(5px)'},{transform:'translateX(0)'}],{duration:280});}lastImpact={session:sc.session,key}}}catch{}finally{setTimeout(refreshState,document.hidden?2000:200)}}
+refreshState();
+</script></html>

@@ -1,0 +1,43 @@
+{
+  "congestion": {
+    "lanes": 4,
+    "ego_lane": 2,
+    "lead_speed_range_kph": [
+      25,
+      35
+    ],
+    "large_vehicles": 3,
+    "fast_speed_kph": 90,
+    "fast_spacing_m": 20,
+    "standard_fast_count": 12,
+    "compact_fast_count": 8
+  },
+  "night": {
+    "ego_straight": true,
+    "native_lead": "108",
+    "weaving_boundary_m": -1.8,
+    "weaving_amplitude_m": 0.65
+  },
+  "fog": {
+    "duration_s": 300,
+    "onset_s": 30,
+    "lead": "7",
+    "native_context": [],
+    "extinction_keys_s": [
+      30,
+      85,
+      170,
+      260,
+      300
+    ],
+    "extinction_beta": [
+      0,
+      0.008,
+      0.065,
+      0.25,
+      0.25
+    ],
+    "compositor": "same-frame native range and previous local ground completion",
+    "physical_weather_engine": false
+  }
+}

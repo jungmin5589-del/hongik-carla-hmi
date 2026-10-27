@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "python": "3.12.10",
+  "platform": "Windows",
+  "carla": {
+    "version": "0.9.16",
+    "graphics": "DX12",
+    "asynchronous": true,
+    "physics_only": true,
+    "rpc_port": 2016
+  },
+  "nurec": {
+    "release": "26.4",
+    "renderer": "trained",
+    "cache_size": 1,
+    "grpc_port": 46435,
+    "image": "nvcr.io/nvidia/nre/nre-ga@sha256:97f43e7130c5636ce3e80ea3184d97f56a87fdd989b05cce42230881dbdea284",
+    "wsl": "Ubuntu-22.04"
+  },
+  "application": {
+    "drive_port": 8774,
+    "chooser_port": 8775,
+    "mobile_http_port": 8776,
+    "mobile_https_port": 8777,
+    "default_performance": "standard",
+    "fps_cap": 30,
+    "fps_cap_is_not_measured_performance": true,
+    "scenario_load": "essential",
+    "static_view_cache_enabled": false
+  },
+  "performance_presets": {
+    "balanced": {
+      "quality": "balanced",
+      "traffic_load": "compact",
+      "size": [
+        960,
+        540
+      ]
+    },
+    "standard": {
+      "quality": "high",
+      "traffic_load": "standard",
+      "size": [
+        1280,
+        720
+      ]
+    }
+  },
+  "packages": {
+    "carla": "0.9.16",
+    "numpy": "2.5.2",
+    "scipy": "1.18.1",
+    "Pillow": "12.3.0",
+    "pygame": "2.6.1",
+    "grpcio": "1.84.0"
+  },
+  "memory": {
+    "startup_commit_floor_gib": 16,
+    "validation_commit_floor_gib": 2
+  },
+  "external_resources": {
+    "models": "separately licensed; not in Git",
+    "narration": "local cached Qwen Sohee; not in Git",
+    "private_keys": "local only; never in Git"
+  }
+}

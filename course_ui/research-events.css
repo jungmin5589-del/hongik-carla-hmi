@@ -1,0 +1,27 @@
+#research-ui[hidden],#research-ui [hidden]{display:none!important}
+.research-driving .hongik-entry,.research-driving #hongik-dialog,.research-driving .hongik-voice-badge,.research-driving #input-status,.research-driving #input-preview,.research-driving #show-suggestion,.experience-open #research-ui{display:none!important}
+#research-ui{font-family:Pretendard,-apple-system,BlinkMacSystemFont,sans-serif;color:#171a20}
+#research-launch{position:fixed;z-index:45;left:28px;bottom:102px;display:flex;align-items:center;gap:14px;min-width:184px;padding:16px 22px;border:1px solid #e1e4e8;border-radius:24px;background:#fff;box-shadow:0 5px 25px #1118270b;text-align:left;color:inherit;cursor:pointer}
+#research-launch svg{width:27px;height:27px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round}
+#research-launch strong{display:block;font-size:17px;font-weight:700}#research-launch small{display:block;margin-top:4px;font-size:12px;color:#767c86;font-weight:500}
+#research-launch:disabled{opacity:.5;cursor:default}
+#research-unread{width:7px;height:7px;border-radius:50%;background:#3e6ae1;margin-left:8px}
+#research-launch.has-update{animation:research-pulse 1.4s ease-in-out 2}
+@keyframes research-pulse{0%,100%{box-shadow:0 5px 25px #1118270b;border-color:#e1e4e8}50%{box-shadow:0 0 0 5px #3e6ae114,0 0 22px #3e6ae124;border-color:#7394eb}}
+#research-dialog{position:fixed;z-index:60;top:100px;bottom:105px;left:calc(42% + 20px);right:24px;background:#fff;border:1px solid #e8eaed;border-radius:20px;box-shadow:0 18px 65px #11182720;overflow:auto}
+#research-dialog header{position:sticky;top:0;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:22px 28px;border-bottom:1px solid #f0f1f3;z-index:1;font-size:13px;font-weight:600;color:#747b85}
+#research-close{border:0;background:#f4f5f6;width:36px;height:36px;border-radius:50%;font-size:26px;color:#68707c;cursor:pointer}
+.research-dialog-content{padding:30px 32px}#research-caption{margin:0 0 13px;font-size:12px;font-weight:600;color:#7b828c}
+#research-title{font-size:clamp(23px,2.2vw,33px);line-height:1.4;letter-spacing:-1px;font-weight:750;margin:0 0 20px;text-wrap:balance}
+#research-description{font-size:17px;line-height:1.85;word-break:keep-all;color:#5c6370;margin:0 0 28px}
+.research-primary{border:0;border-radius:9px;background:#3e6ae1;color:#fff;padding:15px 22px;font:600 15px inherit;cursor:pointer}
+#research-options-open{width:100%;display:flex;justify-content:space-between;font-family:inherit;font-size:15px;font-weight:650}
+#research-options{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.research-option{display:flex;flex-direction:column;gap:10px;padding:22px 20px;min-height:115px;background:#f5f6f8;border:1px solid transparent;border-radius:12px;font-family:inherit;text-align:left;cursor:pointer;color:#171a20}
+.research-option:hover{background:#eef2fb;border-color:#d5dff8}.research-option strong{font-size:17px;font-weight:700}.research-option small{font-size:13px;line-height:1.6;color:#747b85;word-break:keep-all}
+#research-feedback{padding:16px 18px;margin:0 0 24px;border-radius:10px;background:#f0f4fc;font-size:15px;line-height:1.7;color:#394f7d;word-break:keep-all}
+#research-confirm-copy{font-size:17px;line-height:1.8;word-break:keep-all}.research-confirm-actions{display:flex;gap:10px;margin-top:22px}.research-confirm-actions button{flex:1;font-family:inherit;font-size:15px;font-weight:600;border:0;border-radius:9px;padding:15px;background:#f1f2f4;cursor:pointer}.research-confirm-actions .research-primary{background:#3e6ae1;color:#fff}
+#research-ui button:disabled{cursor:default;opacity:.5}#research-ui button:focus-visible{outline:3px solid #8ca9f2;outline-offset:3px}
+.research-setup .experience-disclaimer{visibility:hidden}
+@media(max-width:800px){#research-dialog{left:16px;right:16px;top:76px;bottom:85px}.research-dialog-content{padding:24px}#research-launch{left:18px;bottom:90px}#research-options{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){#research-launch.has-update{animation:none;border-color:#7394eb}}
