@@ -23,7 +23,7 @@ def compose_native_fog(color,distance,opacity,beta,seconds,rays=None):
     height,width=distance.shape
     y=torch.arange(height,device=color.device,dtype=torch.float32)[:,None]/height
     x=torch.arange(width,device=color.device,dtype=torch.float32)[None,:]/width
-    eddies=.055*torch.sin(x*13.+y*7.+seconds*.17)+.035*torch.sin(x*7.-y*9.-seconds*.11)
+    eddies=.025*torch.sin(x*13.+y*7.+seconds*.07)+.015*torch.sin(x*7.-y*9.-seconds*.05)
     valid=torch.isfinite(distance)&(distance>.1)
     if opacity is not None:
         valid=valid&(opacity>=.5)
@@ -36,19 +36,40 @@ def compose_native_fog(color,distance,opacity,beta,seconds,rays=None):
         xs=slice(width//4,width*3//4,max(1,width//32))
         direction=rays[...,3:6].float()
         origins=rays[...,:3].float()-rays[0,0,:3].float()
+        # Work in a basis derived from this calibrated camera. Reconstructed
+        # model coordinates need not use global Z as their vertical axis.
+        right=direction[height//2,width*3//4]-direction[height//2,width//4]
+        right=right/torch.linalg.vector_norm(right).clamp_min(1e-8)
+        forward=direction[height//2,width//2]
+        down=torch.linalg.cross(forward,right)
+        down=down/torch.linalg.vector_norm(down).clamp_min(1e-8)
+        forward=torch.linalg.cross(right,down)
+        basis=torch.stack((right,down,forward),dim=1)
+        direction=direction@basis;origins=origins@basis
         hits=origins[ys,xs]+direction[ys,xs]*ranges[ys,xs,None]
         confidence=((opacity-.5)/.45).clamp(0.,1.) if opacity is not None else torch.ones_like(distance)
         confidence=confidence*confidence*(3.-2.*confidence)
         weight=((valid[ys,xs]&(ranges[ys,xs]>.5)&(ranges[ys,xs]<30.)).float()*confidence[ys,xs]).flatten()
         hits=hits.reshape(-1,3)
-        design=torch.cat((hits[:,:2],torch.ones_like(hits[:,:1])),dim=1)
-        normal=design.T@(design*weight[:,None])+torch.eye(3,device=color.device)*1e-4
-        coef=torch.linalg.solve(normal,design.T@(hits[:,2]*weight))
-        denominator=direction[...,2]-coef[0]*direction[...,0]-coef[1]*direction[...,1]
-        numerator=coef[0]*origins[...,0]+coef[1]*origins[...,1]+coef[2]-origins[...,2]
+        # Center the fit so regularization cannot bias the camera/ground
+        # height and amplify a tiny near-road error into a far-road band.
+        centre=(hits*weight[:,None]).sum(0)/weight.sum().clamp_min(1e-6)
+        xz=hits[:,[0,2]]-centre[[0,2]];y_vertical=hits[:,1]-centre[1]
+        normal=xz.T@(xz*weight[:,None])+torch.eye(2,device=color.device)*1e-4
+        slope=torch.linalg.solve(normal,xz.T@(y_vertical*weight))
+        coef=torch.cat((slope,(centre[1]-slope@centre[[0,2]])[None]))
+        denominator=direction[...,1]-coef[0]*direction[...,0]-coef[1]*direction[...,2]
+        numerator=coef[0]*origins[...,0]+coef[1]*origins[...,2]+coef[2]-origins[...,1]
         ground=numerator/torch.where(denominator.abs()>1e-5,denominator,torch.full_like(denominator,1e-5))
-        fill=(weight.sum()>=8)&torch.isfinite(ground)&(ground>.5)&(ground<30.)
-        completed=ground*(1.-confidence)+ranges*confidence
+        # A 30m cutoff made low-confidence roadside geometry jump abruptly to
+        # the 500m sky sentinel: white bands instead of continuous ground fog.
+        # Extend the same measured local plane only to downward ground hits.
+        plausible=(weight.sum()>=8)&(coef[2]>.25)&(coef[2]<4.)&(torch.linalg.vector_norm(coef[:2])<1.2)
+        fill=plausible&torch.isfinite(ground)&(denominator>.0001)&(ground>.5)&(ground<500.)
+        # A reconstructed grass/shoulder may be opaque but incorrectly placed
+        # far behind the local road. Alpha alone is not geometric confidence.
+        # Keep nearer vehicles/vegetation; cap impossible far ground hits.
+        completed=torch.minimum(ranges,ground)
         ranges=torch.where(fill,completed,ranges)
     transmittance=torch.exp(-ranges*beta*(1.+eddies))[...,None]
     air=torch.tensor([.79,.82,.84],device=color.device,dtype=torch.float32).pow(2.2)

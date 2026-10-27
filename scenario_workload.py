@@ -9,4 +9,4 @@ def required_proxy_ids(scenario, workload='essential', include_all=False):
             or getattr(scenario,'OVERTAKE_TRIAL',False)
             or not getattr(scenario,'SUPPRESS_OTHER_TRAFFIC',True)):
         return None
-    return {scenario.TRACK_ID}
+    return {scenario.TRACK_ID,*getattr(scenario,'context_track_ids',())}

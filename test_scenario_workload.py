@@ -22,6 +22,9 @@ class WorkloadTests(unittest.TestCase):
         trial=self.trial(config={'vehicles':{key:{} for key in ids}})
         self.assertEqual(required_proxy_ids(trial),set(ids))
         self.assertEqual(len(required_proxy_ids(trial)),16)
+    def test_fog_retains_native_context_and_independent_lead(self):
+        trial=self.trial(TRACK_ID='6',context_track_ids=('7','36'))
+        self.assertEqual(required_proxy_ids(trial),{'6','7','36'})
 
     def model(self):
         return NS(gaussians_nodes={

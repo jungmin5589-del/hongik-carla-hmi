@@ -51,6 +51,7 @@ from actor_visibility import visible_fast_traffic
 from frame_validation import validate_jpeg
 from range_transport import decode_range_hint
 from performance_presets import traffic_config
+from fog_scene import LEAD_TRACK_ID as FOG_LEAD_TRACK_ID
 
 MIRROR = np.diag([1., -1., 1., 1.])
 QUALITY_PRESETS = {"smooth": (640, 360), "balanced": (960, 540), "high": (1280, 720), "fullhd": (1920, 1080)}
@@ -268,7 +269,7 @@ class Bridge:
             if config['scene_id'] != self.scene.scene_id:
                 raise RuntimeError('Long drive scene/config mismatch')
             trial=DenseFog if args.profile=='fog' else Congestion
-            self.scenario = trial(self.scene.route, self.run_dir / 'interactions.jsonl', config['lead_track_id'])
+            self.scenario = trial(self.scene.route, self.run_dir / 'interactions.jsonl', FOG_LEAD_TRACK_ID)
         else:
             straight = getattr(args, 'night_mode', 'straight') == 'straight'
             trial = BoundaryWeaving if straight else NightOvertakeScenario
@@ -456,11 +457,13 @@ class Bridge:
             has_traffic=isinstance(self.scenario,HighwayBlockade) or getattr(self.scenario,'OVERTAKE_TRIAL',False)
             overrides=self.scenario.traffic_poses() if has_traffic and self.scenario.enabled else {self.scenario.TRACK_ID:scenario_pose} if scenario_pose is not None else {}
             render_scenario = self.scenario.public()
+            context_ids=set(getattr(self.scenario,'context_track_ids',()))
         for track_id, actor, poses, ts in self.track_actors:
             override = track_id in overrides
             # Isolate the study stimulus. Other editable cars are absent from
             # both rendering and collisions; static reconstructed context stays.
             suppressed = (scenario_pose is not None and track_id in self.editable_ids and not override
+                          and track_id not in context_ids
                           and getattr(self.scenario, 'SUPPRESS_OTHER_TRAFFIC', True))
             active = not suppressed and (override or bool(ts[0] <= timestamp <= ts[-1]))
             if active != self.track_active[track_id]:
@@ -563,7 +566,7 @@ class Bridge:
                     self.scenario.config['vehicles'][actor.id]['size']=[d.size_x,d.size_y,d.size_z]
         lead = next(a for a in catalog.dynamic_objects if a.id == self.scenario.TRACK_ID)
         self.scenario.height = lead.object_size.size_z / 2
-        if getattr(self.scenario,'STRAIGHT_TRIAL',False):
+        if getattr(self.scenario,'STRAIGHT_TRIAL',False) or getattr(self.scenario,'CALIBRATE_LEAD_HEIGHT',False):
             track=next(row for row in self.track_actors if row[0]==self.scenario.TRACK_ID)
             aligned=[]
             for source_pose in track[2]:

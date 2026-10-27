@@ -26,6 +26,7 @@ class FogTrialChecks(unittest.TestCase):
         values=[fog_at(t)['beta'] for t in np.arange(0,301,.25)]
         self.assertTrue(np.all(np.diff(values)>=0))
         self.assertLess(transmission(15.,fog_at(290)['beta']),.03)
+        self.assertLess(transmission(80.,fog_at(60.)['beta']),.2)
     def test_pause_freezes_fog_and_lead_pose(self):
         self.advance(75);before=self.sc.public();pose=self.sc.pose()[0].copy()
         for _ in range(500):self.sc.advance(.1,False,[0,0],0.)

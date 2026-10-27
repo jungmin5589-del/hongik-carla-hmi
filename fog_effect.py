@@ -128,8 +128,8 @@ class FogEffect:
             ranges,count=self.ranges(source_camera,lead_source_pose,max_range=radius)
         t=float(scenario['elapsed_s'])
         # Smooth moving density variation, continuous in driving time (pause freezes it).
-        eddies=(.055*np.sin(self.x*13.+self.y*7.+t*.17)+
-                 .035*np.sin(self.x*7.-self.y*9.-t*.11))
+        eddies=(.025*np.sin(self.x*13.+self.y*7.+t*.07)+
+                 .015*np.sin(self.x*7.-self.y*9.-t*.05))
         field=transmission(ranges,beta*(1.+eddies))
         with Image.open(io.BytesIO(jpeg)) as original:
             size=original.size;rgb=np.asarray(original.convert('RGB'))

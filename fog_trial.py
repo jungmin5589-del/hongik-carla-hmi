@@ -3,6 +3,7 @@ import math
 import time
 import numpy as np
 from scenario2 import Scenario2
+from fog_scene import LEAD_TRACK_ID,CONTEXT_TRACK_IDS
 
 
 def smooth(value):
@@ -12,15 +13,15 @@ def smooth(value):
 
 def fog_at(seconds):
     # Continuous optical extinction, not a claimed measured visibility distance.
-    keys=[30.,85.,170.,260.,300.]
-    betas=[0.,.008,.065,.25,.25]
+    keys=[30.,65.,130.,220.,300.]
+    betas=[0.,.025,.085,.18,.25]
     beta=0.
     for i in range(len(keys)-1):
         if seconds>=keys[i]:
             u=smooth((seconds-keys[i])/(keys[i+1]-keys[i]))
             beta=betas[i]+u*(betas[i+1]-betas[i])
-    stage=('clear' if seconds<=30 else 'developing' if seconds<85 else
-           'thick' if seconds<170 else 'dense' if seconds<260 else 'whiteout')
+    stage=('clear' if seconds<=30 else 'developing' if seconds<65 else
+           'thick' if seconds<130 else 'dense' if seconds<220 else 'whiteout')
     return dict(stage=stage,beta=beta,strength=beta/.25,onset_s=30.)
 
 
@@ -30,8 +31,10 @@ class DenseFog(Scenario2):
     WIDE_GAP=36.
     SUPPRESS_OTHER_TRAFFIC=True
     TYPE_ID='dense_fog'
+    CALIBRATE_LEAD_HEIGHT=True
+    context_track_ids=CONTEXT_TRACK_IDS
 
-    def __init__(self,route,event_path,track_id='7'):
+    def __init__(self,route,event_path,track_id=LEAD_TRACK_ID):
         self.TRACK_ID=str(track_id)
         self.duration=300
         super().__init__(route,event_path)
