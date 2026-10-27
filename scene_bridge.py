@@ -557,6 +557,8 @@ class Bridge:
         catalog = self.stub.get_dynamic_objects(proto.AvailableDynamicObjectsRequest(
             scene_id=self.scene.scene_id), timeout=30)
         self.editable_ids = {a.id for a in catalog.dynamic_objects}
+        self.track_dimensions={a.id:[a.object_size.size_x,a.object_size.size_y,a.object_size.size_z]
+            for a in catalog.dynamic_objects}
         if isinstance(self.scenario,HighwayBlockade):
             wanted=set(self.scenario.config['vehicles'])
             if not wanted.issubset(self.editable_ids):raise RuntimeError('Selected native traffic is not editable: '+str(wanted-self.editable_ids))

@@ -27,6 +27,11 @@ The selector is at `http://127.0.0.1:8775/`; navigation at
 - `settings/scenarios.json`: scenario timing and traffic settings.
 - `docs/SETUP.md`: local runtime/data prerequisites and reproduction limits.
 - `course_ui/`: the versioned navigation interface and licensed browser dependencies.
+- `map_context.py` / `map_context.js`: cached OSM building footprints and roads,
+  with actual CARLA vehicle positions on the navigation map. Context is loaded
+  once per source; the driving renderer performs no extra inference for it.
+- `record_three_scenarios.py`: record each current 720p route and copy verified
+  silent MP4s into the local course folder's `시나리오별 주행영상` directory.
 - `test_*.py`: focused behavior and integration checks.
 - `validate_*.py`: actual local-driving checks; generated results stay outside Git.
 
@@ -43,3 +48,7 @@ limitations near its image edges.
 
 Third-party browser code retains its own notices: Three.js r180 (MIT) and
 Pretendard (SIL OFL). See `course_ui/vendor/`.
+Building/road map data is © OpenStreetMap contributors, available under ODbL:
+https://www.openstreetmap.org/copyright. Geographic caches remain local, outside
+Git. These footprints are map context, not buildings detected from the camera;
+an unmapped/forest segment may have no buildings.

@@ -43,7 +43,7 @@
   if(lastImpact?.session===s.session&&lastImpact.key!==impactKey&&s.crash?.primary_collision_verified&&
      ['primary_impact','secondary_impact'].includes(impactPhase)&&document.visibilityState==='visible')impactSound();
   lastImpact={session:s.session,key:impactKey};
-  $('map-attribution').textContent='실측 촬영 경로 · NuRec × CARLA';$('scene-source').textContent='CARLA 실시간 차량 위치 · 주행 경로 개략도';
+  $('map-attribution').innerHTML=data.map_context?'실측 촬영 경로 · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors · ODbL</a>':'실측 촬영 경로 · NuRec × CARLA';$('scene-source').textContent=data.map_context?.building_count?'실시간 차량 위치 · 주변 건물 지도':'실시간 차량 위치 · 주행 경로';
   $('route-name').textContent=s.completed?'주행 체험 완료':'야간 주행 체험';$('turn-instruction').textContent=s.completed?'주행 체험을 마쳤습니다':s.layout==='two_lane_boundary_weaving'?'같은 차로를 유지하며 직진':'앞차를 따라 주행';
   $('route-note').textContent='현재 주행 창과 같은 차량·상황에 연결되어 있습니다.';
   if(congestion){const remain=Math.ceil(s.remaining_s);const time=`${Math.floor(remain/60)}분 ${remain%60}초`;$('route-name').textContent=s.completed?'주행 체험 완료':'고속도로 서행 체험';$('turn-instruction').textContent=s.completed?'구간 끝에 도착했습니다':'차간 거리를 유지하며 서행';$('route-time').textContent=time;const eta=new Date(Date.now()+remain*1000);$('route-eta').textContent=eta.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false});$('route-note').textContent=`정체·서행 포함 · 남은 체험 약 ${time} · 일시정지 시간 제외`;}

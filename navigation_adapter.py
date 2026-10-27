@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 from voice_bank import narration
+from map_context import load_context
 
 ROOT = Path(__file__).resolve().parent
 COURSE = Path.home()/'Desktop/홍익대/2026 2학기/휴먼 자율주행 인터렉션 디자인/CARLA-YOLO-실습'
@@ -34,7 +35,7 @@ def navigation_html():
     # Same HTML, Three.js, cockpit and research UI as 36; this route alone omits
     # providers which would start another session or claim unsupported inputs.
     html = re.sub(r'<script[^>]*src="/(?:qwen-speech|navigation-voice|hongik-wake|hongik-assistant|experience|multimodal)\.js[^>]*></script>', '', html)
-    html = html.replace('<script src="/cockpit.js', '<script src="/nurec-nav-boot.js"></script><script src="/cockpit.js', 1)
+    html = html.replace('<script src="/cockpit.js', '<script src="/nurec-nav-boot.js"></script><script src="/nurec-map-context.js"></script><script src="/cockpit.js', 1)
     html = html.replace('<script type="module">', '<script src="/nurec-nav.js"></script><script type="module">', 1)
     html = html.replace('</head>', '<link rel="stylesheet" href="/nurec-nav.css"></head>')
     return html.encode('utf-8')
@@ -43,6 +44,7 @@ def navigation_html():
 def static_asset(path):
     local = {'/nurec-nav.js': 'navigation.js', '/nurec-nav.css': 'navigation.css',
              '/research-events.js': 'hongik_panel.js',
+             '/nurec-map-context.js': 'map_context.js',
              '/nurec-nav-boot.js': 'navigation_boot.js', '/drive': 'drive.html'}
     if path in local:
         file = ROOT / local[path]
@@ -70,6 +72,8 @@ class NavigationAdapter:
         self.last_session = None
         self.options_open = False
         self.choice = None
+        self.context=None
+        self.atlas_cache=None
 
     def options(self):
         sc=self.bridge.scenario
@@ -79,10 +83,15 @@ class NavigationAdapter:
         return BLOCKADE_OPTIONS if hasattr(sc,'high_beam') else FOG_OPTIONS if getattr(sc,'TYPE_ID',None)=='dense_fog' else OPTIONS
 
     def atlas(self):
+        if self.atlas_cache is not None:return self.atlas_cache
         points = self.bridge.scene.route[:, :2, 3].copy()
+        # The recorded ego is one half-lane left of the carriageway centre.
+        points += self.bridge.scene.route[:, :2, 1]*-1.8
         points[:, 1] *= -1  # CARLA left-handed XY, same as world_pose.
         width = 14.4 if self.bridge.scenario.public().get('layout') == 'four_lane_blockade' else 7.2
-        return dict(map='NuRec measured route', roads=[dict(points=points.tolist(), width=width)], destinations=[])
+        self.context=load_context(self.bridge.scene)
+        self.atlas_cache=dict(map='NuRec measured route', roads=[dict(points=points.tolist(), width=width)], destinations=[],**self.context)
+        return self.atlas_cache
 
     def state(self):
         b = self.bridge
@@ -93,7 +102,8 @@ class NavigationAdapter:
             dx, dy = x - tr.location.x, y - tr.location.y
             return dict(forward_m=round(dx*cos+dy*sin, 3), right_m=round(-dx*sin+dy*cos, 3),
                         up_m=round(z-tr.location.z, 3), yaw_deg=(angle-tr.rotation.yaw+180)%360-180)
-        points = self.atlas()['roads'][0]['points']
+        self.atlas()
+        points=b.scene.route[:,:2,3].copy();points[:,1]*=-1;points=points.tolist()
         index = int(b.state.get('route_index', 0))
         route = b.scenario.route
         remaining = max(0, round(route.length - b.scenario.ego_s))
@@ -115,8 +125,8 @@ class NavigationAdapter:
                 samples = [dict(forward_m=f, right_m=-offset, up_m=-.4, yaw_deg=0, width_m=3.6) for f in (-15, 15)]
             lanes.append(dict(id=lane, points=samples))
         actors = []
+        visible_tracks=set(b.scenario.traffic_poses()) if getattr(b.scenario,'OVERTAKE_TRIAL',False) else {b.scenario.TRACK_ID,*getattr(b.scenario,'context_track_ids',())}
         for track, actor, _, _ in b.track_actors:
-            visible_tracks=set(b.scenario.traffic_poses()) if getattr(b.scenario,'OVERTAKE_TRIAL',False) else {b.scenario.TRACK_ID}
             if b.scenario.enabled and not blockade and getattr(b.scenario,'SUPPRESS_OTHER_TRAFFIC',True) and track not in visible_tracks:
                 continue
             at = actor.get_transform()
@@ -125,9 +135,13 @@ class NavigationAdapter:
                 continue
             size = actor.bounding_box.extent
             spec=next((v for v in b.scenario.traffic_specs() if v['track_id']==track),None) if blockade else None
-            dimensions=b.scenario.config['vehicles'][track]['size'] if spec else [size.x*2,size.y*2,size.z*2]
-            actors.append(dict(id=actor.id, kind='vehicle', label='앞차', **p,
-                               length_m=dimensions[0], width_m=dimensions[1], height_m=dimensions[2], speed_kmh=spec['speed']*3.6 if spec else 10.8))
+            dimensions=b.scenario.config['vehicles'][track]['size'] if spec else getattr(b,'track_dimensions',{}).get(track,[size.x*2,size.y*2,size.z*2])
+            is_lead=track==b.scenario.TRACK_ID
+            speed=spec['speed']*3.6 if spec else getattr(b.scenario,'lead_speed',b.scenario.LEAD_SPEED)*3.6 if is_lead else None
+            actors.append(dict(id=actor.id, kind='vehicle', label='앞차' if is_lead else '주변 차량', **p,
+                role='lead' if is_lead else 'context',vehicle_type='large' if dimensions[0]>=6. else 'car',
+                world_pose=dict(x=at.location.x,y=at.location.y,yaw=at.rotation.yaw),
+                length_m=dimensions[0], width_m=dimensions[1], height_m=dimensions[2], speed_kmh=speed))
         sc = b.scenario.public()
         outcome = sc['outcome']
         resolving = outcome['phase'] != 'idle'
@@ -186,7 +200,7 @@ class NavigationAdapter:
         event.update(description=voice['text'],narration=voice,
             live_detail=f"현재 속도 {b.state.get('speed_kph',0):g} km/h · 앞차 간격 약 {sc['gap_m']:g} m")
         return dict(connected=b.state['phase']=='live', schema=2, map='NuRec highway' if daytime else 'NuRec nighttime',
-            source='CARLA actual actor positions; scripted scenario, not YOLO detection', frame=b.world.get_snapshot().frame,
+            source='CARLA actual actor positions; scripted scenario, not YOLO detection',map_context=self.context.get('context_source'),frame=b.world.get_snapshot().frame,
             timestamp=time.time(), ego=dict(id=b.ego.id, role='nurec_live_ego', forward_m=0.,right_m=0.,up_m=-.4,yaw_deg=0.,
                 speed_kmh=b.state.get('speed_kph',0), lane_index=2 if blockade else 1, lane_count=4 if blockade else 2, lane_id=-2 if blockade else -1),
             road=dict(id=99002 if daytime else 99001, lanes=lanes), lane_width_m=3.6, actors=actors, destinations=[],

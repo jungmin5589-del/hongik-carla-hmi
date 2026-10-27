@@ -26,6 +26,29 @@ the licensed source archives. Local scenario reports and generated depth caches
 also stay outside Git. They must be supplied by the existing authorized setup;
 cloning this repository alone is insufficient to drive.
 
+For geographic navigation context, prepare each authorized source once:
+
+```powershell
+python prepare_map_context.py --profile night --provider osm-map
+python prepare_map_context.py --profile congestion --provider osm-map
+python prepare_map_context.py --profile fog --provider osm-map
+```
+
+These are three small one-off OSM extracts, transformed into the same local ENU
+frame as the measured road, then mirrored into CARLA XY. The default Overpass
+provider is also available. Raw/converted geographic data is cached in
+`../cache/map-context/` and excluded from Git. Existing caches are preserved.
+The navigation service reads the cache once and needs no map network access
+during driving. Display © OpenStreetMap contributors and the ODbL link on the
+map; data license: https://www.openstreetmap.org/copyright.
+
+`python record_three_scenarios.py` records each baseline route to its natural
+end without choosing a response, verifies MP4 decoding/duration, and copies only
+the finished videos into the user's course folder. Raw JPEGs and detailed traces
+stay on D. The files preserve wall-clock timing in a 30fps container by repeating
+frames, without interpolation; that is not a measured 30fps rendering result.
+Recordings are silent and do not capture the desktop, camera or microphone.
+
 Start the scenario selector with `python open_app.py`. The existing course
 `48-NuRec-Long-Congestion.bat` calls the same selector. For an explicit scene:
 

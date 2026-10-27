@@ -17,6 +17,7 @@ import urllib.request
 from pathlib import Path
 
 from PIL import Image
+from benchmark_fps30 import require_memory
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parent / 'recording-tools'))
@@ -125,6 +126,7 @@ def main():
         with (folder / 'drive-state.jsonl').open('w', encoding='utf-8', buffering=1) as trace:
             deadline = time.monotonic() + 600
             while time.monotonic() < deadline:
+                require_memory()
                 current = state()
                 scenario = current['scenario']
                 trace.write(json.dumps(dict(recording_s=time.monotonic()-began,state=current))+'\n')
@@ -189,11 +191,12 @@ def main():
                 completion_reason=finish['scenario']['completion_reason'],duration_s=duration,
                 resolution=[initial['width'],initial['height']],silent=True,unique_images=len(frames),
                 timing='original wall-clock frame arrival; repeated output frames; no interpolation',
-                decoded_cleanly=True,sha256=hashlib.sha256(output.read_bytes()).hexdigest())
+                decoded_cleanly=True,sha256=hashlib.file_digest(output.open('rb'),'sha256').hexdigest())
     (folder/'result.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     print(json.dumps(dict(event='recording_complete',**result)),flush=True)
     if not full_route:
         raise RuntimeError('A response ended the run early; this file is not a full-route recording.')
+    return result
 
 
 if __name__ == '__main__':
