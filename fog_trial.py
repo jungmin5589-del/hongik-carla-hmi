@@ -3,7 +3,7 @@ import math
 import time
 import numpy as np
 from scenario2 import Scenario2
-from fog_scene import LEAD_TRACK_ID,CONTEXT_TRACK_IDS,ONSET_SECONDS,BASE_GAP_M,EXTINCTION_TIMES,EXTINCTION_BETAS
+from fog_scene import LEAD_TRACK_ID,LEAD_ASSET_GROUND_HEIGHT,CONTEXT_TRACK_IDS,ONSET_SECONDS,BASE_GAP_M,EXTINCTION_TIMES,EXTINCTION_BETAS
 
 
 def smooth(value):
@@ -30,7 +30,7 @@ class DenseFog(Scenario2):
     WIDE_GAP=36.
     SUPPRESS_OTHER_TRAFFIC=True
     TYPE_ID='dense_fog'
-    CALIBRATE_LEAD_HEIGHT=True
+    ASSET_GROUND_HEIGHT=LEAD_ASSET_GROUND_HEIGHT
     context_track_ids=CONTEXT_TRACK_IDS
 
     def __init__(self,route,event_path,track_id=LEAD_TRACK_ID):

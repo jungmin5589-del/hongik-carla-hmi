@@ -23,12 +23,25 @@ def recorded_track_height(route, aligned_poses):
 class BoundaryWeaving(Scenario2):
     TRACK_ID = '108'
     STRAIGHT_TRIAL = True
-    BASE_GAP = 11.
+    BASE_GAP = 5.5
     WIDE_GAP = 28.
     # The recorded ego is in the left lane; the neighbouring lane is on its right.
     BOUNDARY = -1.8
     AMPLITUDE = .65
     PERIOD = 10.5
+
+    def reset(self, enabled=None):
+        super().reset(enabled)
+        with self.lock:
+            self.lead_s = self.BASE_GAP + self.half_length + 1.85
+            self.gap = self.BASE_GAP
+            self.log('close_following_ready', bumper_gap_m=self.BASE_GAP)
+
+    def target_speed(self):
+        with self.lock:
+            if not self.enabled:return None
+            lead_speed=0. if self.lead_s>=self.route.length-8.01 else self.LEAD_SPEED
+            return max(0.,min(30.,(lead_speed+.65*(self.gap-self.desired_gap))*3.6))
 
     def pose(self):
         with self.lock:

@@ -15,6 +15,8 @@
   "night": {
     "ego_straight": true,
     "native_lead": "108",
+    "base_gap_m": 5.5,
+    "widen_gap_m": 28.0,
     "weaving_boundary_m": -1.8,
     "weaving_amplitude_m": 0.65
   },
@@ -23,11 +25,14 @@
     "onset_s": 10.0,
     "buildup_s": 5.0,
     "base_gap_m": 8.0,
-    "lead": "14",
+    "lead": "31001",
     "native_context": [
       "7",
       "36"
     ],
+    "lead_asset": "white_sedan",
+    "appearance": "fixed source-time asset; no retraining",
+    "source_time": "continuous route projection",
     "extinction_keys_s": [
       10.0,
       15.0,

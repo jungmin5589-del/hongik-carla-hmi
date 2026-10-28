@@ -2,7 +2,8 @@
 import importlib.metadata,json,platform
 from pathlib import Path
 from performance_presets import PRESETS
-from fog_scene import LEAD_TRACK_ID,CONTEXT_TRACK_IDS,ONSET_SECONDS,BASE_GAP_M,FOG_BUILDUP_SECONDS,EXTINCTION_TIMES,EXTINCTION_BETAS
+from fog_scene import LEAD_TRACK_ID,LEAD_ASSET_NAME,CONTEXT_TRACK_IDS,ONSET_SECONDS,BASE_GAP_M,FOG_BUILDUP_SECONDS,EXTINCTION_TIMES,EXTINCTION_BETAS
+from night_weaving import BoundaryWeaving
 ROOT=Path(__file__).resolve().parent
 
 def snapshot():
@@ -24,8 +25,9 @@ def snapshot():
     (folder/'requirements.lock.txt').write_text('\n'.join(f'{k}=={v}' for k,v in packages.items())+'\n',encoding='utf-8')
     scenarios=dict(congestion=dict(lanes=4,ego_lane=2,lead_speed_range_kph=[25,35],large_vehicles=3,
         fast_speed_kph=90,fast_spacing_m=20,standard_fast_count=12,compact_fast_count=8),
-        night=dict(ego_straight=True,native_lead='108',weaving_boundary_m=-1.8,weaving_amplitude_m=.65),
+        night=dict(ego_straight=True,native_lead='108',base_gap_m=BoundaryWeaving.BASE_GAP,widen_gap_m=BoundaryWeaving.WIDE_GAP,weaving_boundary_m=-1.8,weaving_amplitude_m=.65),
         fog=dict(duration_s=300,onset_s=ONSET_SECONDS,buildup_s=FOG_BUILDUP_SECONDS,base_gap_m=BASE_GAP_M,lead=LEAD_TRACK_ID,native_context=list(CONTEXT_TRACK_IDS),
+            lead_asset=LEAD_ASSET_NAME,appearance='fixed source-time asset; no retraining',source_time='continuous route projection',
             extinction_keys_s=list(EXTINCTION_TIMES),extinction_beta=list(EXTINCTION_BETAS),
             compositor='same-frame native distance/opacity; camera-relative ground completion',physical_weather_engine=False))
     (folder/'scenarios.json').write_text(json.dumps(scenarios,indent=2),encoding='utf-8')

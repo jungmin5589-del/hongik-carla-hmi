@@ -26,6 +26,12 @@ the licensed source archives. Local scenario reports and generated depth caches
 also stay outside Git. They must be supplied by the existing authorized setup;
 cloning this repository alone is insufficient to drive.
 
+Fog reuses `white_sedan` from the existing authorized local traffic asset bank
+at `../source/traffic-assets-temporal-v2/` with its integrity/provenance manifest.
+The local renderer sees it at `/data/traffic-assets-temporal-v2/white_sedan.ply`.
+The model and its manifest are excluded from Git. Its ground offset follows
+the original source road; source data licensing continues to apply.
+
 For geographic navigation context, prepare each authorized source once:
 
 ```powershell

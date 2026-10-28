@@ -207,8 +207,7 @@ class Scene:
         xy = np.array([transform.location.x, -transform.location.y])
         distances = np.linalg.norm(self.route[:, :2, 3] - xy, axis=1)
         i = int(distances.argmin())
-        # Timestamp lookup still uses the nearest recorded sample. Lateral error
-        # is the distance to the continuous path, not the sample spacing.
+        # Steering keeps the nearest-sample index; lateral error is continuous.
         points = self.route[:, :2, 3]
         if len(points) < 2:
             return i, float(distances[i])
@@ -218,6 +217,32 @@ class Scene:
                            np.maximum(lengths2, 1e-12), 0., 1.)
         projected = points[:-1] + fraction[:, None] * segments
         return i, float(np.linalg.norm(projected-xy, axis=1).min())
+
+    def source_timestamp(self, transform):
+        """Advance reconstructed traffic continuously along the measured route.
+
+        A nearest-pose timestamp holds traffic still between recorded points,
+        then jumps an entire source sample. This is especially visible when the
+        independent CARLA ego drives more slowly than the recording vehicle.
+        Pausing the ego also freezes source time; no wall-clock playback is used.
+        """
+        xy = np.array([transform.location.x, -transform.location.y])
+        points = self.route[:, :2, 3]
+        if len(points) < 2:
+            stamp = self.timestamps[0]
+        else:
+            segments = np.diff(points, axis=0)
+            lengths2 = np.einsum('ij,ij->i', segments, segments)
+            fraction = np.clip(np.einsum('ij,ij->i', xy-points[:-1], segments) /
+                               np.maximum(lengths2, 1e-12), 0., 1.)
+            squared_distance = np.sum((points[:-1]+fraction[:,None]*segments-xy)**2, axis=1)
+            # Ignore stationary/duplicate segments if any real segment exists.
+            # Otherwise a duplicate at a junction can pin time to an old sample.
+            if np.any(lengths2 > 1e-12):
+                squared_distance[lengths2 <= 1e-12] = np.inf
+            k = int(np.argmin(squared_distance))
+            stamp = self.timestamps[k] + fraction[k]*(self.timestamps[k+1]-self.timestamps[k])
+        return int(np.clip(stamp, self.start_us, self.end_us-2))
 
     def camera_pose(self, transform):
         # CARLA actor API is left handed. NuRec expects the original right handed
@@ -270,6 +295,8 @@ class Bridge:
                 raise RuntimeError('Long drive scene/config mismatch')
             trial=DenseFog if args.profile=='fog' else Congestion
             self.scenario = trial(self.scene.route, self.run_dir / 'interactions.jsonl', FOG_LEAD_TRACK_ID)
+            from fog_scene import lead_asset_specs
+            self.scenario.insert_asset_specs = lead_asset_specs()
         else:
             straight = getattr(args, 'night_mode', 'straight') == 'straight'
             trial = BoundaryWeaving if straight else NightOvertakeScenario
@@ -398,7 +425,7 @@ class Bridge:
             self.track_actors=kept
         existing={track for track,_,_,_ in self.track_actors}
         data = self.scene.tracks["tracks_data"]
-        insert_specs = self.scenario.config.get('insert_assets',[]) if isinstance(self.scenario,HighwayBlockade) else getattr(self.scenario,'crash_asset_specs',[])
+        insert_specs = self.scenario.config.get('insert_assets',[]) if isinstance(self.scenario,HighwayBlockade) else getattr(self.scenario,'insert_asset_specs',getattr(self.scenario,'crash_asset_specs',[]))
         if insert_specs:
             for spec in insert_specs:
                 if spec['id'] in data['tracks_id']:continue
@@ -550,7 +577,7 @@ class Bridge:
         if not renderer_matches(config.server_config, getattr(self.args, 'renderer_backend', 'trained')):
             raise RuntimeError('The requested NuRec renderer differs from the running backend')
         self.state['server_renderer_config'] = dict(config.server_config)
-        insert_specs = self.scenario.config.get('insert_assets',[]) if isinstance(self.scenario,HighwayBlockade) else getattr(self.scenario,'crash_asset_specs',[])
+        insert_specs = self.scenario.config.get('insert_assets',[]) if isinstance(self.scenario,HighwayBlockade) else getattr(self.scenario,'insert_asset_specs',getattr(self.scenario,'crash_asset_specs',[]))
         if insert_specs:
             ensure_asset_tracks(self.channel,self.scene.scene_id,self.scene.start_us,self.scene.end_us,
                                 insert_specs)
@@ -570,7 +597,10 @@ class Bridge:
         if self.fog_effect:
             self.fog_effect.configure_lead(self.track_dimensions[self.scenario.TRACK_ID])
         self.scenario.height = lead.object_size.size_z / 2
-        if getattr(self.scenario,'STRAIGHT_TRIAL',False) or getattr(self.scenario,'CALIBRATE_LEAD_HEIGHT',False):
+        if getattr(self.scenario,'ASSET_GROUND_HEIGHT',None) is not None:
+            self.scenario.height = self.scenario.ASSET_GROUND_HEIGHT
+            self.state['lead_grounding']='replacement asset calibrated relative to its source road'
+        elif getattr(self.scenario,'STRAIGHT_TRIAL',False) or getattr(self.scenario,'CALIBRATE_LEAD_HEIGHT',False):
             track=next(row for row in self.track_actors if row[0]==self.scenario.TRACK_ID)
             aligned=[]
             for source_pose in track[2]:
@@ -581,6 +611,10 @@ class Bridge:
             self.scenario.height=recorded_track_height(self.scenario.route,aligned)
             self.state['lead_grounding']='median native track height relative to measured route'
         self.scenario.half_length = lead.object_size.size_x / 2
+        if isinstance(self.scenario,(DenseFog,BoundaryWeaving)):
+            # Initial bumper gap/lead trajectory must use the selected model's
+            # dimensions, including on the first startup before a user reset.
+            self.scenario.reset()
         if getattr(self,'defer_initial_tracks',False):
             self.state.update(phase='warming_renderer_before_proxies')
             self.warm_renderer_before_proxies()
@@ -604,8 +638,8 @@ class Bridge:
 
     def warm_renderer_before_proxies(self):
         """Hidden initialization only; first visible/live frame follows all proxies."""
-        tr=self.ego.get_transform();index,_=self.scene.nearest(tr)
-        timestamp=int(np.clip(self.scene.timestamps[index],self.scene.start_us,self.scene.end_us-2))
+        tr=self.ego.get_transform()
+        timestamp=self.scene.source_timestamp(tr)
         overrides=self.scenario.traffic_poses();overrides[self.scenario.TRACK_ID]=self.scenario.pose()[0]
         objects=[]
         for track,mat in overrides.items():
@@ -695,7 +729,9 @@ class Bridge:
                     ctl.brake = float(np.clip(-error * .12, 0., .8))
                     if self.scenario.enabled:
                         ctl.brake = min(ctl.brake, .30)
-                    if isinstance(self.scenario,HighwayBlockade):
+                    if isinstance(self.scenario,(HighwayBlockade,BoundaryWeaving)):
+                        # Low-speed feed-forward/integral control avoids a
+                        # persistent following-distance error from driveline drag.
                         speed_integral=float(np.clip(speed_integral+error*min(dt,.2),-6.,6.))
                         ctl.throttle=float(np.clip(.18+.07*error+.03*speed_integral,0.,.7))
                         ctl.brake=float(np.clip(-error*.12,0.,.3)) if error<-.6 else 0.
@@ -737,7 +773,7 @@ class Bridge:
         ego_snapshot = snapshot.find(self.ego.id)
         tr = ego_snapshot.get_transform() if ego_snapshot is not None else self.ego.get_transform()
         index, distance = self.scene.nearest(tr)
-        timestamp = int(np.clip(self.scene.timestamps[index], self.scene.start_us, self.scene.end_us - 2))
+        timestamp = self.scene.source_timestamp(tr)
         dynamic_objects, scenario_pose, render_scenario = self.update_tracks(timestamp)
         tracks_done = time.perf_counter()
         cam_matrix = self.scene.camera_pose(tr)

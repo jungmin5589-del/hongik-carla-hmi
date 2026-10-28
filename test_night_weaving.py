@@ -25,6 +25,25 @@ class StraightWeavingTests(unittest.TestCase):
         self.trial.events.close()
         self.temp.cleanup()
 
+    def test_close_gap_on_start_and_reset_uses_actual_selected_car_length(self):
+        self.assertEqual(self.trial.gap,5.5)
+        self.assertAlmostEqual(self.trial.lead_s-self.trial.half_length-1.85,5.5)
+        self.trial.half_length=2.5
+        self.trial.reset()
+        self.assertEqual(self.trial.desired_gap,5.5)
+        self.assertAlmostEqual(self.trial.lead_s-self.trial.half_length-1.85,5.5)
+
+    def test_widen_retains_real_distance_response_from_close_baseline(self):
+        self.trial.onset=True
+        self.trial.onset_monotonic=0.
+        self.trial.interaction('open',self.trial.session)
+        before=self.trial.pose()[0].copy()
+        self.trial.interaction('widen',self.trial.session)
+        self.assertEqual(self.trial.desired_gap,28.)
+        self.assertEqual(self.trial.target_speed(),0.)
+        self.assertFalse(self.trial.action_complete)
+        np.testing.assert_allclose(self.trial.pose()[0],before)
+
     def test_stays_across_the_boundary_after_smooth_onset(self):
         samples = []
         for _ in range(450):
