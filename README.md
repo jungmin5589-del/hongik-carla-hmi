@@ -1,5 +1,10 @@
 # Hongik CARLA / NuRec Passenger HMI
 
+처음 보는 팀원·교수님은 아래 문서부터 읽으면 됩니다.
+
+- [우리 NuRec·세팅 쉬운 설명서](docs/NUREC-EASY-GUIDE-KO.md): 구성, 실행, 세 시나리오, 설정값과 수정 위치.
+- [Ericsson Research 사례 해설](docs/ERICSSON-RESEARCH-KO.md): 공식 자료의 성격, 우리 실험과의 연결, 구현과 제안의 차이.
+
 Private source and configuration history for the local passenger-interaction prototype.
 
 Three independent scenes: four-lane blocked traffic, a weaving vehicle at night,
