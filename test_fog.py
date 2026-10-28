@@ -19,14 +19,20 @@ class FogTrialChecks(unittest.TestCase):
     def tearDown(self):self.sc.events.close();self.tmp.cleanup()
     def advance(self,seconds):
         for _ in range(round(seconds*10)):self.sc.advance(.1,True,[0.,0.],0.)
-    def test_clear_until_ten_seconds_then_sudden_continuous_dense_fog(self):
+    def test_clear_until_ten_seconds_then_five_second_buildup_and_unchanged_whiteout(self):
         self.assertEqual(fog_at(9.99)['beta'],0.)
         self.assertEqual(fog_at(10.)['beta'],0.)
         self.assertGreater(fog_at(10.1)['beta'],0.)
         values=[fog_at(t)['beta'] for t in np.arange(0,301,.25)]
         self.assertTrue(np.all(np.diff(values)>=0))
         self.assertLess(transmission(20.,fog_at(290)['beta']),.02)
-        self.assertLess(transmission(30.,fog_at(12.)['beta']),.003)
+        self.assertEqual(fog_at(10.)['stage'],'clear')
+        self.assertEqual(fog_at(12.5)['stage'],'developing')
+        self.assertAlmostEqual(fog_at(12.5)['beta'],.10)
+        self.assertGreater(fog_at(14.9)['beta'],fog_at(12.5)['beta'])
+        self.assertEqual(fog_at(15.)['stage'],'whiteout')
+        self.assertAlmostEqual(fog_at(15.)['beta'],.20)
+        self.assertLess(transmission(30.,fog_at(15.)['beta']),.003)
         self.assertGreater(transmission(9.,fog_at(15.)['beta']),.12)
         self.assertLess(transmission(9.,fog_at(15.)['beta']),.2)
         self.assertEqual(fog_at(15.)['beta'],fog_at(290.)['beta'])
@@ -102,6 +108,12 @@ class RangeChecks(unittest.TestCase):
         original=b'unmodified-camera-frame'
         result,meta=self.effect.apply(original,None,None,dict(fog=dict(beta=0.)))
         self.assertEqual(original,result);self.assertFalse(meta['applied'])
+    def test_cpu_fallback_uses_the_selected_car_not_an_old_truck(self):
+        effect=FogEffect()
+        effect.configure_lead((3.8,1.84,1.5))
+        np.testing.assert_allclose(np.ptp(effect.lead_override,axis=0),[3.8,1.84,1.5],rtol=1e-6)
+        effect.ranges(np.eye(4),np.eye(4),max_range=10.)
+        np.testing.assert_array_equal(effect.lead,effect.lead_override)
 
 
 if __name__=='__main__':unittest.main(verbosity=2)

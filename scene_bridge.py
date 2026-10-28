@@ -567,6 +567,8 @@ class Bridge:
                     d=actor.object_size
                     self.scenario.config['vehicles'][actor.id]['size']=[d.size_x,d.size_y,d.size_z]
         lead = next(a for a in catalog.dynamic_objects if a.id == self.scenario.TRACK_ID)
+        if self.fog_effect:
+            self.fog_effect.configure_lead(self.track_dimensions[self.scenario.TRACK_ID])
         self.scenario.height = lead.object_size.size_z / 2
         if getattr(self.scenario,'STRAIGHT_TRIAL',False) or getattr(self.scenario,'CALIBRATE_LEAD_HEIGHT',False):
             track=next(row for row in self.track_actors if row[0]==self.scenario.TRACK_ID)

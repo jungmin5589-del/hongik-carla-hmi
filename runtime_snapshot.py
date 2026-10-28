@@ -2,7 +2,7 @@
 import importlib.metadata,json,platform
 from pathlib import Path
 from performance_presets import PRESETS
-from fog_scene import LEAD_TRACK_ID,CONTEXT_TRACK_IDS,ONSET_SECONDS,BASE_GAP_M,EXTINCTION_TIMES,EXTINCTION_BETAS
+from fog_scene import LEAD_TRACK_ID,CONTEXT_TRACK_IDS,ONSET_SECONDS,BASE_GAP_M,FOG_BUILDUP_SECONDS,EXTINCTION_TIMES,EXTINCTION_BETAS
 ROOT=Path(__file__).resolve().parent
 
 def snapshot():
@@ -25,7 +25,7 @@ def snapshot():
     scenarios=dict(congestion=dict(lanes=4,ego_lane=2,lead_speed_range_kph=[25,35],large_vehicles=3,
         fast_speed_kph=90,fast_spacing_m=20,standard_fast_count=12,compact_fast_count=8),
         night=dict(ego_straight=True,native_lead='108',weaving_boundary_m=-1.8,weaving_amplitude_m=.65),
-        fog=dict(duration_s=300,onset_s=ONSET_SECONDS,base_gap_m=BASE_GAP_M,lead=LEAD_TRACK_ID,native_context=list(CONTEXT_TRACK_IDS),
+        fog=dict(duration_s=300,onset_s=ONSET_SECONDS,buildup_s=FOG_BUILDUP_SECONDS,base_gap_m=BASE_GAP_M,lead=LEAD_TRACK_ID,native_context=list(CONTEXT_TRACK_IDS),
             extinction_keys_s=list(EXTINCTION_TIMES),extinction_beta=list(EXTINCTION_BETAS),
             compositor='same-frame native distance/opacity; camera-relative ground completion',physical_weather_engine=False))
     (folder/'scenarios.json').write_text(json.dumps(scenarios,indent=2),encoding='utf-8')

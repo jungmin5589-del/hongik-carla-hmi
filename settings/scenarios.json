@@ -21,15 +21,16 @@
   "fog": {
     "duration_s": 300,
     "onset_s": 10.0,
+    "buildup_s": 5.0,
     "base_gap_m": 8.0,
-    "lead": "6",
+    "lead": "14",
     "native_context": [
       "7",
       "36"
     ],
     "extinction_keys_s": [
       10.0,
-      12.0,
+      15.0,
       300.0
     ],
     "extinction_beta": [

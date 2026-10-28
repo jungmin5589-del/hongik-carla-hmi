@@ -20,7 +20,7 @@ def fog_at(seconds):
         if seconds>=keys[i]:
             u=smooth((seconds-keys[i])/(keys[i+1]-keys[i]))
             beta=betas[i]+u*(betas[i+1]-betas[i])
-    stage=('clear' if seconds<=ONSET_SECONDS else 'developing' if seconds<12 else 'whiteout')
+    stage=('clear' if seconds<=keys[0] else 'developing' if seconds<keys[1] else 'whiteout')
     return dict(stage=stage,beta=beta,strength=beta/betas[-1],onset_s=ONSET_SECONDS)
 
 

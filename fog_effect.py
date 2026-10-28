@@ -69,6 +69,29 @@ class FogEffect:
             pixeldist_to_angle_poly=list(p.pixeldist_to_angle_poly))
         self.update_rays()
 
+    def configure_lead(self,dimensions):
+        """Use the selected car's cuboid if the old fallback cache is another asset.
+
+        This approximation is only for the CPU range fallback. The production
+        renderer's same-frame native distance remains authoritative.
+        """
+        length,width,height=map(float,dimensions)
+        if min(length,width,height)<=0 or not np.isfinite([length,width,height]).all():
+            raise ValueError('Invalid selected lead dimensions')
+        axes=[np.linspace(-extent/2,extent/2,count) for extent,count in
+              zip((length,width,height),(16,8,8))]
+        faces=[]
+        for axis,extent in enumerate((length,width,height)):
+            others=[k for k in range(3) if k!=axis]
+            a,b=np.meshgrid(axes[others[0]],axes[others[1]],indexing='ij')
+            for sign in (-1,1):
+                points=np.empty((a.size,3),dtype=np.float32)
+                points[:,axis]=sign*extent/2
+                points[:,others[0]]=a.ravel();points[:,others[1]]=b.ravel()
+                faces.append(points)
+        self.lead_override=np.concatenate(faces)
+        if hasattr(self,'lead'):self.lead=self.lead_override
+
     def project(self,points,cam):
         local=(points-cam[:3,3])@cam[:3,:3]
         r=np.linalg.norm(local[:,:2],axis=1)
@@ -84,7 +107,7 @@ class FogEffect:
     def ranges(self,source_camera,lead_source_pose,max_range=240.):
         if not hasattr(self,'points'):
             with np.load(ROOT/'cache/fog/highway-range-geometry.npz',allow_pickle=False) as data:
-                self.points=data['static'];self.lead=data['lead'];self.world_to_nre=data['world_to_nre']
+                self.points=data['static'];self.lead=getattr(self,'lead_override',data['lead']);self.world_to_nre=data['world_to_nre']
             self.tree=cKDTree(self.points[:,:2])
             self.road=self.points[self.meta['counts']['background']:]
             self.road_tree=cKDTree(self.road[:,:2])

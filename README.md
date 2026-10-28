@@ -9,9 +9,11 @@ result and an end message. Scenario explanations use scripted simulator state;
 they are not YOLO or LLM perception claims.
 
 The five-minute fog trial stays clear for ten driving seconds, then builds dense
-fog over two seconds. It requests an 8m bumper-to-bumper following gap; the
+fog over five seconds, reaching the existing dense level at 15 seconds.
+It requests an 8m bumper-to-bumper following gap; the
 actual gap follows CARLA vehicle dynamics. A distance-increase choice still
-widens the gap explicitly.
+widens the gap explicitly. The lead uses the source scene's compact hatchback;
+native vehicle reconstructions can still appear soft at close range.
 
 ## Run in the existing authorized environment
 
