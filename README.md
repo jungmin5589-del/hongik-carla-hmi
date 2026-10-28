@@ -5,7 +5,12 @@
 - [우리 NuRec·세팅 쉬운 설명서](docs/NUREC-EASY-GUIDE-KO.md): 구성, 실행, 세 시나리오, 설정값과 수정 위치.
 - [Ericsson Research 사례 해설](docs/ERICSSON-RESEARCH-KO.md): 공식 자료의 성격, 우리 실험과의 연결, 구현과 제안의 차이.
 
-Private source and configuration history for the local passenger-interaction prototype.
+Public source and configuration history for the local passenger-interaction prototype.
+
+공개 열람용 저장소입니다. 직접 수정 권한은 소유자에게만 부여합니다.
+방문자는 내용을 읽고 복사·포크하거나 변경 제안을 보낼 수 있지만,
+원본 저장소에 직접 변경사항을 반영할 수 없습니다.
+모델 원본·음성·실험 영상·인증정보는 포함하지 않습니다.
 
 Three independent scenes: four-lane blocked traffic, a weaving vehicle at night,
 and sudden dense fog. Passengers open the Hongik AI

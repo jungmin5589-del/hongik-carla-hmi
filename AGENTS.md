@@ -5,8 +5,11 @@ Back up existing files uniquely before edits. Preserve DX12/default CARLA graphi
 asynchronous physics and the 16GiB startup/2GiB validation commit-memory guards.
 Do not terminate unrelated user applications or change system security settings.
 
-The user requested ongoing GitHub versioning. The authorized destination is the
-private `jungmin5589-del/hongik-carla-hmi` repository. Verify the remote/visibility,
+The user requested ongoing GitHub versioning and explicitly authorized public
+visibility on 2026-10-28, with direct write access limited to the owner.
+The authorized destination is `jungmin5589-del/hongik-carla-hmi`. Verify the remote,
+visibility and collaborators. Do not grant write access to other people.
+Audit the full reachable history before making a private repository public;
 run relevant checks, audit staged files with `python repo_safety.py`, then commit
 and push reviewed application/configuration changes. Never stage the whole data
 directory or copied proprietary NVIDIA SDK files. Keep source models, generated
