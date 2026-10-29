@@ -161,6 +161,10 @@ class NativeNavigation(NavigationAdapter):
                'night':'앞차가 차선 경계 주변에서 좌우로 흔들리고 있습니다',
                'fog':'전방에 안개가 짙어지고 있습니다'}[profile] if active else '주행 상황을 살피고 있습니다'
         voice=narration('blockade' if profile=='congestion' else profile,active,sc['completed'])
+        if sc['completed'] and sc['completion_reason']=='duration_end':
+            title='주행 체험을 마쳤습니다'
+            voice=dict(text='약 5분의 주행 체험을 마쳤습니다. 시나리오 선택으로 돌아가 다시 체험할 수 있어요.',
+                       speaker='Sohee',url=None,cached=False)
         if outcome['phase']!='idle':
             title='체험이 종료되었습니다' if sc['completed'] else '선택한 행동의 결과를 확인하고 있어요'
             voice=dict(text=outcome['message'] or sc['feedback'],speaker='Sohee',url=None,cached=False)
@@ -237,7 +241,9 @@ class NativeBridge:
 
     def clear_actors(self):
         self.camera_generation+=1
-        for actor in [self.camera,self.collision,*[v['actor'] for v in self.vehicles]]:
+        owned=[self.camera,self.collision,*[v['actor'] for v in self.vehicles]]
+        known_ids={actor.id for actor in owned if actor is not None}
+        for actor in owned:
             if actor is not None:
                 try:
                     if isinstance(actor,carla.Sensor):actor.stop()
@@ -246,7 +252,7 @@ class NativeBridge:
         self.camera=self.collision=self.ego=None;self.vehicles=[]
         if self.world:
             for actor in self.world.get_actors().filter('vehicle.*'):
-                if actor.attributes.get('role_name','').startswith('hongik_native_'):
+                if actor.id not in known_ids and actor.attributes.get('role_name','').startswith('hongik_native_'):
                     actor.destroy()
         if self.scenario:self.scenario.events.close()
         self.scenario=None
@@ -294,6 +300,8 @@ class NativeBridge:
             self.state.update(phase='live',profile=profile,scene_id='native-town04',route_length_m=round(self.route.length),
                               lane_count=4,error=None,mode='paused',speed_kph=0)
             self.navigation=NativeNavigation(self)
+            from launch_native_carla import ensure_native_display
+            ensure_native_display()
 
     def on_collision(self,event):
         if self.scenario:self.scenario.log('collision',other_type=event.other_actor.type_id,frame=event.frame)
@@ -423,6 +431,9 @@ def nav_js():
     js=js.replace('실측 촬영 경로 · NuRec × CARLA','CARLA Town04 · 순환 고속도로')
     js=js.replace('실제 촬영 구간 끝까지','CARLA 순환 고속도로 · 약 5분')
     js=js.replace('촬영 구간 체험 완료','CARLA 체험 완료')
+    js=js.replace('구간 끝에 도착했습니다','주행 체험을 마쳤습니다')
+    js=js.replace("if(blockade){$('route-name').textContent='4차로 저속 차량 체험';",
+                  "if(blockade){$('route-name').textContent=s.completed?'체험 종료':'4차로 저속 차량 체험';")
     js=js.replace("$('route-note').textContent='현재 주행 창과 같은 차량·상황에 연결되어 있습니다.';",
                   "$('route-note').textContent='CARLA RGB · 같은 차량·상황에 연결되어 있습니다.';")
     return js.encode('utf-8')

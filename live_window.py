@@ -54,12 +54,12 @@ def state_reader():
         stop.wait(.4)
 
 
-def main():
+def main(title='NuRec CARLA · Driving Display'):
     pygame.display.init(); pygame.font.init()
     desktop = pygame.display.get_desktop_sizes()[0]
     size = (min(1600, desktop[0]-80), min(900, desktop[1]-140))
     screen = pygame.display.set_mode(size, pygame.RESIZABLE)
-    pygame.display.set_caption('NuRec CARLA · Driving Display')
+    pygame.display.set_caption(title)
     font_path = 'C:/Windows/Fonts/malgun.ttf'
     font = pygame.font.Font(font_path, 18)
     threading.Thread(target=reader, daemon=True).start()
