@@ -17,5 +17,19 @@
   panner.pan.value=.85;filter.type='lowpass';filter.frequency.value=1500;gain.gain.value=quiet?.045:.32;
   source.connect(filter).connect(panner).connect(gain).connect(ctx.destination);source.start();return source;
  }
- const api={doorWave,knock};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.CityExteriorSound=api;
+ class SpeechGate{
+  constructor(){this.reset()}
+  reset(){this.last=0;this.pending=null}
+  offer(cue,elapsed,enabled=true){
+   if(!enabled){this.last=Math.max(this.last,cue?.index||0);this.pending=null;return}
+   if(cue?.index>this.last){this.last=cue.index;this.pending=cue.key?{...cue}:null}
+   if(this.pending&&elapsed>this.pending.expires_s)this.pending=null;
+  }
+  take(elapsed,busy){
+   if(this.pending&&elapsed>this.pending.expires_s)this.pending=null;
+   if(!this.pending||busy)return null;
+   const key=this.pending.key;this.pending=null;return key;
+  }
+ }
+ const api={doorWave,knock,SpeechGate};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.CityExteriorSound=api;
 })(globalThis);

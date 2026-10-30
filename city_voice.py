@@ -4,6 +4,7 @@ import json
 from functools import lru_cache
 from pathlib import Path
 import wave
+from exterior_dialogue import DIALOGUE
 
 CACHE=Path(__file__).resolve().parents[1]/'cache/city-audio'
 TEXTS={
@@ -14,8 +15,9 @@ TEXTS={
  'city_outside_shout':('거기 안에 사람 있잖아! 잠깐 나와 봐요! 여기요!','Aiden'),
  'city_outside_door':('여기 보라고요! 문 좀 열어 봐요! 잠깐만요!','Aiden'),
  'city_notice':('탑승 예약을 확인해 주세요. 도움이 필요하면 관제에 연결하겠습니다.','Sohee')}
+TEXTS.update({key:(text,'Aiden') for _,key,text in DIALOGUE})
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=24)
 def audio_path(key):
  if key not in TEXTS:raise ValueError('Unknown city audio')
  record=json.loads((CACHE/'manifest.json').read_text(encoding='utf-8'))['entries'][key]

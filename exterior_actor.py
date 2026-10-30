@@ -3,6 +3,7 @@ import math
 import carla
 import numpy as np
 from pedestrian_gesture import swing_between,carla_rotation
+from exterior_dialogue import dialogue_cue
 
 IMPACTS=(.75,1.12,1.72)
 
@@ -74,10 +75,10 @@ class ExteriorActor:
    self.arm_weight=0.;b=self.pose['crl_Head__C'].relative;r=b.rotation
    self.actor.set_bones(carla.WalkerBoneControlIn([('crl_Head__C',carla.Transform(b.location,carla.Rotation(pitch=r.pitch+7.,yaw=r.yaw+16.*math.sin(sc.elapsed*.85),roll=r.roll)))]));self.actor.show_pose()
   else:self.arm_weight=0.;self.actor.hide_pose()
-  if driving and sc.elapsed>=5. and not sc.actor_retreat:
-   self.voice_count=max(self.voice_count,2+int((sc.elapsed-14.)//14.) if sc.elapsed>=14. else 1)
+  cue=dialogue_cue(sc.elapsed,sc.actor_retreat)
+  self.voice_count=max(self.voice_count,cue['index'])
   sc.exterior=dict(phase=phase,at_window=near,knock_count=self.knocks,knock_clock_s=round(self.knock_clock,3),
-                   voice_count=self.voice_count,model=self.actor.type_id)
+                   voice_count=self.voice_count,voice_cue=cue,model=self.actor.type_id)
 
  def cleared(self,ego):return self.actor.get_location().distance(ego.get_location())>9.
  def destroy(self):

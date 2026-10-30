@@ -1,6 +1,7 @@
 /* Native city cases: staged choices, no ETA, synthetic exterior/mechanical audio. */
 addEventListener('DOMContentLoaded',()=>{
- let session=null,lastOutside=0,lastNotice=0,lastKnock=0,ctx=null,mechanical=null,outside=null,lastStep=0;
+ let session=null,lastNotice=0,lastKnock=0,ctx=null,mechanical=null,outside=null,lastStep=0,lastVoiceEnd=-1000;
+ const speechGate=new CityExteriorSound.SpeechGate();
  const impacts=new Set();
  const client=crypto.randomUUID();
  const channel=typeof BroadcastChannel==='function'?new BroadcastChannel('nurec-hongik-sohee'):null;
@@ -14,6 +15,7 @@ addEventListener('DOMContentLoaded',()=>{
  }
  function voice(key){
   outside?.pause();outside?.remove();outside=new Audio('/api/narration/audio/'+key+'.wav');outside.id='city-exterior-audio';outside.hidden=true;document.body.appendChild(outside);
+  outside.dataset.voiceKey=key;outside.onended=()=>{lastVoiceEnd=performance.now()};
   const source=ctx.createMediaElementSource(outside),filter=ctx.createBiquadFilter(),panner=ctx.createStereoPanner(),gain=ctx.createGain(),compressor=ctx.createDynamicsCompressor();
   filter.type='lowpass';filter.frequency.value=2600;panner.pan.value=.8;gain.gain.value=key==='city_notice'?.45:.68;
   compressor.threshold.value=-16;compressor.ratio.value=3;compressor.attack.value=.008;compressor.release.value=.15;
@@ -39,7 +41,7 @@ addEventListener('DOMContentLoaded',()=>{
    document.body.classList.toggle('city-study',city);
    if(!city){stop();session=null;return}
    const $=id=>document.getElementById(id);
-   if(session!==s.session){stop();session=s.session;lastOutside=0;lastNotice=0;lastKnock=0}
+   if(session!==s.session){stop();session=s.session;speechGate.reset();lastNotice=0;lastKnock=0;lastVoiceEnd=-1000}
    const event=data.session.navigation.research_event;
    $('route-eta').textContent='—';$('route-time').textContent='—';$('route-distance').textContent='—';
    $('route-name').textContent=s.completed?'체험 종료':data.session.navigation.map_label;
@@ -49,12 +51,16 @@ addEventListener('DOMContentLoaded',()=>{
    $('drive-mode').textContent=s.completed?'체험 종료':data.nurec.speed_kph<.5?'정차 중':'주행 중';
    const enabled=data.nurec.mode==='auto'&&!s.completed&&ownsSound();
    const speaking=Boolean($('research-sohee-audio')&&!$('research-sohee-audio').paused);
+   if(speaking)lastVoiceEnd=performance.now();
    const c=s.context;
-   if(!enabled){lastKnock=c?.exterior?.knock_count||0;stop();return}
-   if(c?.outside_voice_count>lastOutside){lastOutside=c.outside_voice_count;if(!speaking)voice(lastOutside===1?'city_outside_shout':lastOutside%2===0?'city_outside_door':'city_outside_shout')}
+   if(!enabled){speechGate.offer(c?.exterior?.voice_cue,s.elapsed_s,false);lastKnock=c?.exterior?.knock_count||0;stop();return}
+   speechGate.offer(c?.exterior?.voice_cue,s.elapsed_s,!c?.actor_retreat);
+   if(speaking||(c?.actor_retreat&&outside?.dataset.voiceKey!=='city_notice'))outside?.pause();
+   const nextVoice=speechGate.take(s.elapsed_s,speaking||Boolean(outside&&!outside.paused&&!outside.ended)||performance.now()-lastVoiceEnd<800);
+   if(nextVoice)voice(nextVoice);
    const count=c?.exterior?.knock_count||0;
    if(count>lastKnock){lastKnock=count;if(c.exterior.at_window&&window.CityExteriorSound){const hit=CityExteriorSound.knock(ctx,speaking);impacts.add(hit);hit.onended=()=>impacts.delete(hit)}}
-   if(c?.announcement_count>lastNotice){lastNotice=c.announcement_count;outside?.pause();channel?.postMessage({claim:'city-exterior-notice'});voice('city_notice')}
+   if(c?.announcement_count>lastNotice){lastNotice=c.announcement_count;speechGate.offer(c?.exterior?.voice_cue,s.elapsed_s,false);outside?.pause();channel?.postMessage({claim:'city-exterior-notice'});voice('city_notice')}
    if(s.id==='city_carpool'&&data.actors.some(a=>a.kind==='pedestrian'&&a.speed_kmh>.3))footsteps();
    if(c?.rattle_active){startMechanical();mechanical.gain.gain.setTargetAtTime(speaking?.025:.14,ctx.currentTime,.15)}
    else if(mechanical){mechanical.source.stop();mechanical=null}

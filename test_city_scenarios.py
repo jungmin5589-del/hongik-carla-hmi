@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from city_scenarios import ContextScenario,OPTIONS
 from native_carla import NativeNavigation
 from exterior_actor import exterior_target,knock_count
+from exterior_dialogue import DIALOGUE,dialogue_cue
 
 
 class ContextTests(unittest.TestCase):
@@ -58,5 +59,13 @@ class ContextTests(unittest.TestCase):
   sc=self.scene('carpool');self.tick(sc,9);sc.interaction('open',sc.session);sc.interaction('relocate',sc.session)
   self.tick(sc,.1)
   self.assertTrue(sc.actor_retreat,'Move away from the passenger door before the vehicle relocates')
+ def test_taxi_dialogue_is_finite_unique_and_stops_on_departure(self):
+  self.assertEqual(len({key for _,key,_ in DIALOGUE}),6)
+  self.assertEqual(len({text for _,_,text in DIALOGUE}),6)
+  self.assertIsNone(dialogue_cue(4.99)['key'])
+  self.assertEqual(dialogue_cue(5.)['index'],1)
+  self.assertEqual(dialogue_cue(38.)['key'],'city_taxi_plate')
+  self.assertIsNone(dialogue_cue(100.)['key'])
+  for elapsed in (5,13,24,38,54,72):self.assertIsNone(dialogue_cue(elapsed,True)['key'])
 
 if __name__=='__main__':unittest.main()
