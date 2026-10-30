@@ -43,6 +43,15 @@ AI는 '고성과 접근', '동승자인지 미확인'을 설명하며 취했는�
 | 현재 대기 유지하기 | 문이 닫힌 상태로 주변을 확인한다. |
 
 외부인 목소리는 Qwen Aiden으로 만든 합성 음성이다. 실제 취객 녹음이 아니다.
+카풀 외부인은 어두운 버건디 상의와 짙은 바지의 기본 캐릭터(0034)를 사용한다.
+다가온 뒤 차 앞쪽과 조수석 옆을 오가며 안쪽을 살피고, 실제 문 근처에 도착해
+멈춘 경우에만 오른팔로 두드리는 동작을 한다. 이동 중에는 기본 보행 애니메이션을 쓴다.
+접근·기웃거림·문 두드림은 정해진 반복 연출이며 외모로 위험이나 음주 여부를 판정하지 않는다.
+5초부터 외부 대사를 재생하고, 이후 짧은 두 대사를 번갈아 재생한다. 한 번의 문 두드림은
+불규칙한 세 타격이며 실제 인물의 문 근접 상태와 손동작 시계를 기준으로 재생한다.
+일시정지·창 숨김 중 놓친 타격은 복귀 시 몰아서 재생하지 않는다. AI 설명 중에는 타격음을 낮춘다.
+인물이 물러나면 고성과 타격을 멈춘다. 위치 변경을 실행한 경우에는 바로 물러나도록 한다.
+조수석 쪽 움직임이 보이도록 이 조건의 전방 카메라만 오른쪽 25도, 화각 100도로 조정한다.
 AI는 Qwen Sohee를 유지한다. 발소리는 절차적으로 생성한 효과음이다.
 오른쪽에서 들리는 위치와 음색 필터로 차량 밖의 소리를 표현하지만 헤드 트래킹 기반
 공간 음향이나 실제 외부 스피커 장치가 아니다. 문 닫힘/잠금은 실험 상태 표현이며
@@ -77,6 +86,8 @@ PC 내비에서 주행 시작을 눌러 브라우저 환경음을 활성화한�
 `python -m unittest test_native_carla test_pedestrian_yield test_city_scenarios test_navigation_adapter test_action_outcome test_presentation test_repo_safety`
 
 `node test_hongik_panel.cjs`
+
+`node test_exterior_sound.cjs` — 짧은 문 타격음의 샘플레이트별 유한성·클리핑·감쇠 검사.
 
 실제 CARLA 검사: `python validate_city_cases.py <yield|carpool|rattle> <study_...|none>`.
 별도 빈 프로필의 headless 브라우저 검사: `node test_city_browser.cjs <profile> <action>`.

@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from city_scenarios import ContextScenario,OPTIONS
 from native_carla import NativeNavigation
+from exterior_actor import exterior_target,knock_count
 
 
 class ContextTests(unittest.TestCase):
@@ -48,5 +49,14 @@ class ContextTests(unittest.TestCase):
   with self.assertRaises(ValueError):command('study_external_notice')
   command('study_open',{'options_visible':True});command('study_choice',{'choice':'study_external_notice'});command('study_external_notice')
   self.assertEqual(sc.last_action,'external_notice');self.assertEqual(sc.announcement_count,1)
+ def test_exterior_retreat_overrides_every_loitering_phase(self):
+  for elapsed in (0,5,12,19,28,50,82):
+   phase,s,offset=exterior_target(elapsed,5.,True)
+   self.assertEqual(phase,'leaving');self.assertGreater(s,25.);self.assertGreater(offset,5.)
+ def test_door_hits_are_three_irregular_impacts_not_replayed_on_pause(self):
+  self.assertEqual([knock_count(t) for t in (0,.74,.76,1.13,1.73,4.9,5.76)],[0,0,1,2,3,3,4])
+  sc=self.scene('carpool');self.tick(sc,9);sc.interaction('open',sc.session);sc.interaction('relocate',sc.session)
+  self.tick(sc,.1)
+  self.assertTrue(sc.actor_retreat,'Move away from the passenger door before the vehicle relocates')
 
 if __name__=='__main__':unittest.main()

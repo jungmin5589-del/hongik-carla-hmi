@@ -8,6 +8,7 @@ import numpy as np
 
 from scenario2 import Scenario2
 from city_voice import narration
+from exterior_actor import ExteriorActor
 
 PROFILES={'carpool':'카풀 대기 중 외부인 접근','rattle':'주행 중 반복되는 이상음'}
 OPTIONS={
@@ -38,6 +39,7 @@ class ContextScenario(Scenario2):
   self.actor_retreat=False;self.actor_clear=False;self.shoulder_offset=None;self.safe_location=False
   self.inspection_done=False;self.support_done=False;self.relocation_done=False
   self.announcement_count=0;self.highbeam_on=False;self.sound_started=False
+  self.exterior=dict(phase='waiting',at_window=False,knock_count=0,knock_clock_s=0.,voice_count=0,model=None)
 
  def interaction(self,action,session):
   if action in ('notification_exposed','open','close'):return super().interaction(action,session)
@@ -74,7 +76,7 @@ class ContextScenario(Scenario2):
    self.support_done=self.last_action=='support' and age>=8.
    self.inspection_done=self.last_action=='inspect' and age>=8.
    if self.profile=='carpool':
-    self.actor_retreat=age>=6.
+    self.actor_retreat=age>=6. or self.last_action=='relocate'
     self.relocation_done=self.last_action=='relocate' and s>=self.start_s+5.5 and speed<.5
     ready=actor_clear and (self.last_action!='relocate' or self.relocation_done)
    else:
@@ -130,38 +132,11 @@ class ContextScenario(Scenario2):
                             door_closed=True,inspection_done=self.inspection_done,support_done=self.support_done,
                             relocation_done=self.relocation_done,announcement_count=self.announcement_count,
                             safe_location=self.safe_location,shoulder_available=self.shoulder_offset is not None,
-                            outside_voice_count=1 if self.profile=='carpool' and self.elapsed>=5. else 0,
+                            outside_voice_count=self.exterior['voice_count'] if self.profile=='carpool' else 0,
+                            exterior=self.exterior.copy() if self.profile=='carpool' else None,
                             rattle_active=self.profile=='rattle' and self.onset and not self.completed),
                collision_count=getattr(self,'collision_count',0),
                state_source='scripted CARLA actors and synthesized sound; not intoxication or mechanical fault detection')
-
-
-class ExteriorActor:
- def __init__(self,world,route,start_s):
-  self.route=route;self.start_s=start_s
-  candidates=[bp for bp in world.get_blueprint_library().filter('walker.pedestrian.*')
-              if bp.has_attribute('gender') and bp.get_attribute('gender').as_str().lower()=='male'
-              and bp.has_attribute('age') and bp.get_attribute('age').as_str().lower()=='adult']
-  if not candidates:raise RuntimeError('No adult exterior-person model is available')
-  bp=min(candidates,key=lambda b:(b.get_attribute('generation').as_int()!=2 if b.has_attribute('generation') else True,b.id))
-  if bp.has_attribute('is_invincible'):bp.set_attribute('is_invincible','true')
-  if bp.has_attribute('role_name'):bp.set_attribute('role_name','hongik_native_exterior')
-  p,a=route.sample(start_s+12.,7.)
-  self.actor=world.try_spawn_actor(bp,carla.Transform(carla.Location(x=float(p[0]),y=float(p[1]),z=float(p[2]+.4)),carla.Rotation(yaw=math.degrees(a)+180)))
-  if self.actor is None:raise RuntimeError('Exterior person spawn is blocked')
-
- def update(self,sc,driving):
-  target_s=self.start_s+22. if sc.actor_retreat else self.start_s+5.5
-  offset=5.8 if sc.actor_retreat else 5.8+.1*math.sin(sc.elapsed*1.1)
-  xyz,_=self.route.sample(target_s,offset);tr=self.actor.get_location()
-  dx,dy=float(xyz[0])-tr.x,float(xyz[1])-tr.y;distance=math.hypot(dx,dy)
-  speed=(1.0 if sc.actor_retreat else .65) if distance>.25 and driving and sc.elapsed>=4. else 0.
-  self.actor.apply_control(carla.WalkerControl(direction=carla.Vector3D(x=dx/max(.01,distance),y=dy/max(.01,distance)),speed=speed))
-
- def cleared(self,ego):return self.actor.get_location().distance(ego.get_location())>9.
- def destroy(self):
-  try:self.actor.destroy()
-  except RuntimeError:pass
 
 
 def find_shoulder(route,road_map,s):
@@ -198,7 +173,7 @@ def navigation_state(b,options):
  event=dict(active=sc['onset'] and sc['outcome']['phase']=='idle' and not sc['completed'],pending=sc['outcome']['phase']!='idle',
             outcome=sc['outcome'],title=title,description=voice['text'] if sc['outcome']['phase']=='idle' else sc['feedback'],
             narration=voice,feedback=sc['feedback'],options=options,staged_options=True,hide_eta=True,
-            live_detail='문 닫힘 유지 · 동승자 대기 중' if b.profile=='carpool' else f"현재 속도 {b.state['speed_kph']:.0f} km/h")
+            live_detail=({'waiting':'동승자 대기 중','approaching':'차량 쪽으로 접근 중','peering':'차량 안쪽을 들여다보는 중','knocking':'조수석 문 가까이에서 움직이는 중','pacing':'차량 옆을 오가는 중','leaving':'차량에서 물러나는 중'}.get(sc['context']['exterior']['phase'],'주변 확인 중')+' · 문 닫힘 유지') if b.profile=='carpool' else f"현재 속도 {b.state['speed_kph']:.0f} km/h")
  points=route.points[::3,:2].tolist();sid=sc['session'];map_name='CARLA Town03' if b.profile=='carpool' else 'CARLA Town04'
  return dict(connected=b.state['phase']=='live',schema=2,renderer='CARLA RGB',map=map_name,frame=b.state['frame'],timestamp=time.time(),
              source='Scripted passenger interaction and audio, not automated diagnosis',road=dict(id=30,lanes=lanes),lane_width_m=route.width,actors=actors,destinations=[],

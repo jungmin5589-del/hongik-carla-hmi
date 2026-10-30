@@ -2,7 +2,8 @@
 const fs=require('node:fs'),path=require('node:path');
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 async function main(){
- const profile=process.argv[2]||'yield',action=process.argv[3]||'study_direct';
+ const profile=process.argv[2]||'yield',action=process.argv[3]||'study_direct',exteriorCheck=process.argv.includes('--exterior');
+ let exteriorProof=null;
  if(!['yield','carpool','rattle'].includes(profile))throw Error('Invalid profile');
  const tabs=await(await fetch('http://127.0.0.1:9345/json/list')).json();
  const tab=tabs.find(t=>t.type==='page'&&['about:blank','http://127.0.0.1:8774/','http://127.0.0.1:8774/navigation'].includes(t.url));
@@ -18,7 +19,7 @@ async function main(){
  try{
   await send('Runtime.enable');await send('Page.enable');await send('Network.enable');
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:960,deviceScaleFactor:1,mobile:false});
-  await send('Page.addScriptToEvaluateOnNewDocument',{source:"(()=>{window.__qaAudioContexts=[];const Original=window.AudioContext;window.AudioContext=class extends Original{constructor(...a){super(...a);window.__qaAudioContexts.push(this)}}})();"});
+  await send('Page.addScriptToEvaluateOnNewDocument',{source:"(()=>{window.__qaAudioContexts=[];window.__qaDoorHits=0;Object.defineProperty(window,'CityExteriorSound',{configurable:true,get(){return this.__qaDoorApi},set(api){const knock=api.knock;api.knock=(...args)=>{window.__qaDoorHits++;return knock(...args)};this.__qaDoorApi=api}});const Original=window.AudioContext;window.AudioContext=class extends Original{constructor(...a){super(...a);window.__qaAudioContexts.push(this)}}})();"});
   await send('Page.navigate',{url:'http://127.0.0.1:8774/'});
   await until(()=>evaluate("Boolean(document.querySelector('[data-profile="+profile+"]'))"));await shot('selector');
   await evaluate("document.querySelector('[data-profile="+profile+"]').click()");
@@ -28,6 +29,19 @@ async function main(){
   if(profile==='carpool'){
    const external=await evaluate("({time:document.getElementById('city-exterior-audio')?.currentTime||0,contexts:window.__qaAudioContexts.map(c=>c.state)})");
    if(external.time<=0)throw Error('Exterior voice did not play: '+JSON.stringify(external));
+   if(exteriorCheck){
+    await until(async()=>{const s=await(await fetch('http://127.0.0.1:8774/state')).json();if(s.error)throw Error(s.error);return s.scenario.context.exterior.knock_count>=3});
+    await until(()=>evaluate('window.__qaDoorHits>=3'));
+    exteriorProof={state:await(await fetch('http://127.0.0.1:8774/state')).json(),playedHits:await evaluate('window.__qaDoorHits')};
+    if(exteriorProof.state.scenario.collision_count)throw Error('Exterior actor collided with ego');
+    await shot('door-knocking-navigation');
+    fs.writeFileSync(path.join(folder,'door-knocking-camera.jpg'),Buffer.from(await(await fetch('http://127.0.0.1:8774/frame.jpg')).arrayBuffer()));
+    const count=exteriorProof.state.scenario.context.exterior.knock_count;
+    await fetch('http://127.0.0.1:8774/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'paused'})});await delay(1200);
+    const paused=await(await fetch('http://127.0.0.1:8774/state')).json();
+    if(paused.scenario.context.exterior.knock_count!==count)throw Error('Door impacts advanced during pause');
+    await fetch('http://127.0.0.1:8774/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'auto'})});
+   }
   }
   await evaluate("document.getElementById('research-launch').click()");await delay(800);
   const first=await evaluate("({hidden:document.getElementById('research-options').hidden,skip:!document.getElementById('research-options-open').hidden,time:document.getElementById('research-sohee-audio')?.currentTime||0,eta:getComputedStyle(document.querySelector('#route-card .route-details')).display})");
@@ -41,7 +55,7 @@ async function main(){
   const dialogBottom=await evaluate("document.getElementById('research-dialog').getBoundingClientRect().bottom");
   if(layout.at(-1).bottom>dialogBottom-12)throw Error('Fourth option is clipped in the standard viewport');
   await shot('four-vertical-choices');
-  const labels={study_direct:'직접 대응',study_external_notice:'외부 안내로 용건 확인하기',study_inspect:'차량 상태 점검 요청하기'};
+  const labels={study_direct:'직접 대응',study_external_notice:'외부 안내로 용건 확인하기',study_relocate:'다른 대기 장소 요청하기',study_inspect:'차량 상태 점검 요청하기'};
   await evaluate("[...document.querySelectorAll('.research-option')].find(e=>e.querySelector('strong').textContent==="+JSON.stringify(labels[action])+").click()");
   await until(()=>evaluate("!document.getElementById('research-confirmation').hidden&&!document.getElementById('research-execute').disabled"));
   await shot('confirmation');await evaluate("document.getElementById('research-execute').click()");
@@ -54,7 +68,8 @@ async function main(){
   await until(()=>evaluate("!document.getElementById('research-ending').hidden"));await shot('ending');
   if(errors.length)throw Error(errors.join('; '));
   const final=await(await fetch('http://127.0.0.1:8774/state')).json();
-  fs.writeFileSync(path.join(folder,'result.json'),JSON.stringify({passed:true,profile,action,first,layout,audioRequests,final,scope:'Isolated browser + actual CARLA, not physical speaker/iPhone/participant validation'},null,2));
+  if(final.scenario?.collision_count)throw Error('A vehicle collision was recorded during the action');
+  fs.writeFileSync(path.join(folder,'result.json'),JSON.stringify({passed:true,profile,action,exteriorProof,first,layout,audioRequests,final,scope:'Isolated browser + actual CARLA, not physical speaker/iPhone/participant validation'},null,2));
   console.log('PASS '+profile+' staged explanation, Sohee, no ETA, four vertical choices, action and real result: '+folder);
  }finally{await send('Page.navigate',{url:'about:blank'}).catch(()=>{});ws.close()}
 }
