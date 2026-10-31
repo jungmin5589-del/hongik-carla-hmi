@@ -2,6 +2,8 @@
 
 # Hongik CARLA / NuRec Passenger HMI
 
+[음악 내비 · 새 카풀 선택지 · 하부 커버 소리](docs/PASSENGER-NAVIGATION.md): 기존 음악 플레이어에 홍익 AI를 연결하고 참가자 화면의 실험 표기를 정리했습니다.
+
 [CARLA 화면과 장면 소리만 녹화](docs/CARLA-RECORDING.md): 별도 녹화 UI 없이 전체 장면을 저장하고, 기존 대사·효과음을 실제 사건 시점에 맞춰 합칩니다.
 
 처음 보는 팀원·교수님은 아래 문서부터 읽으면 됩니다.

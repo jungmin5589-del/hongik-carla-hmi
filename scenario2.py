@@ -125,7 +125,7 @@ class Scenario2:
 
     def require_action_available(self):
         if self.completed or self.outcome.active:
-            raise ValueError('선택한 행동의 결과를 확인하고 있습니다. 새 체험에서 다시 선택해 주세요.')
+            raise ValueError('선택한 행동의 결과를 확인하고 있습니다. 현재 대응이 끝난 뒤 다시 선택해 주세요.')
 
     def target_speed(self):
         with self.lock:

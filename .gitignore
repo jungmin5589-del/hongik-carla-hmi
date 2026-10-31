@@ -13,6 +13,9 @@
 !/mobile-requirements.txt
 !/docs/
 !/docs/*.md
+!/mobile/
+!/mobile/app.js
+!/mobile/index.html
 !/settings/
 !/settings/runtime-lock.json
 !/settings/scenarios.json

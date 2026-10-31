@@ -265,7 +265,7 @@ def navigation_state(b,options):
         'crossing':'보행자가 횡단하고 있어요. 횡단 구간을 벗어날 때까지 정차합니다.',
         'clearance':'보행자가 횡단 구간을 벗어났습니다. 주변을 다시 확인하고 있어요.',
         'resume':'횡단 구간이 비어 있는 것을 확인하고 다시 출발합니다.',
-        'finishing':'보행자의 반응과 차량의 재출발을 확인했습니다. 체험을 마무리합니다.',
+        'finishing':'보행자의 반응과 차량의 재출발을 확인했습니다. 차량이 서서히 정차합니다.',
         'complete':sc['feedback']}
     title='보행자와 차량이 서로 양보하며 기다리고 있어요' if phase=='mutual_wait' else descriptions[phase]
     voice=dict(text=descriptions[phase],speaker='Sohee',url=None,cached=False)

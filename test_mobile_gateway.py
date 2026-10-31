@@ -49,6 +49,13 @@ class PairTests(unittest.TestCase):
 
 
 class FilterTests(unittest.TestCase):
+    def test_city_voice_and_direct_completion_are_forwarded_without_world_data(self):
+        data=sample();event=data['session']['navigation']['research_event']
+        event.update(direct_pending=True,direct_label='대화 완료',staged_options=True,hide_eta=True,
+                     narration=dict(cached=True,url='/api/narration/audio/city_carpool.wav'))
+        value=filtered_state(data)['event']
+        self.assertTrue(value['direct_pending']);self.assertTrue(value['staged_options']);self.assertTrue(value['hide_eta'])
+        self.assertEqual(value['direct_label'],'대화 완료');self.assertEqual(value['narration']['url'],'/m/audio/city_carpool.wav')
     def test_only_minimal_hmi_crosses_gateway(self):
         value=filtered_state(sample());encoded=json.dumps(value)
         for secret in ('world_pose','actors','source-geometry','points','12345','98765'):self.assertNotIn(secret,encoded)

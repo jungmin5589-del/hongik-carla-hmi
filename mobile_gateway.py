@@ -37,6 +37,7 @@ ASSETS=ROOT/'mobile'
 HTTP_PORT,HTTPS_PORT=8776,8777
 COOKIE='hongik_mobile'
 OBSERVATIONS={'study_presented','study_open','study_close','study_options','study_choice','study_cancel'}
+AUDIO_NAMES={'blockade','congestion','night','fog','normal','complete','yield','city_yield','city_carpool','city_rattle'}
 # Reserved example URI for this local prototype; never transmit the user's email.
 # A public deployment should configure its own operator contact URI.
 VAPID_SUBJECT='https://example.com'
@@ -130,16 +131,18 @@ def validate_subscription(value):
 def filtered_state(data):
     nav=data.get('session',{}).get('navigation',{});event=nav.get('research_event',{});raw=data.get('nurec',{});sc=raw.get('scenario',{});route=data.get('route',{})
     voice=event.get('narration',{});audio=voice.get('url') or ''
-    allowed={'blockade','congestion','night','fog','normal','complete'}
+    allowed=AUDIO_NAMES
     name=audio.rsplit('/',1)[-1].removesuffix('.wav')
     narration=dict(cached=bool(voice.get('cached') and name in allowed),url='/m/audio/'+name+'.wav' if name in allowed else None)
     return dict(connected=bool(data.get('connected')) and not raw.get('error'),session=data.get('session',{}).get('session_id'),navigation_id=nav.get('id'),
         stage=data.get('session',{}).get('stage','ready'),scenario=sc.get('id'),speed_kph=data.get('ego',{}).get('speed_kmh',0),gap_m=sc.get('gap_m'),
-        elapsed_s=sc.get('elapsed_s',0),remaining_m=route.get('remaining_m'),destination=route.get('destination',{}).get('name','주행 체험'),
+        elapsed_s=sc.get('elapsed_s',0),remaining_m=route.get('remaining_m'),destination=route.get('destination',{}).get('name','주행'),
         high_beam_on=sc.get('high_beam',{}).get('on',False),completed=sc.get('completed',False),
         event=dict(active=bool(event.get('active')),pending=bool(event.get('pending')),title=event.get('title','주행을 기다리고 있어요'),
                    description=event.get('description',''),feedback=event.get('feedback',''),live_detail=event.get('live_detail',''),
-                   options=event.get('options',[]),outcome=event.get('outcome',{}),narration=narration))
+                   options=event.get('options',[]),outcome=event.get('outcome',{}),narration=narration,
+                   direct_pending=bool(event.get('direct_pending')),direct_label=event.get('direct_label','대응 완료'),
+                   staged_options=bool(event.get('staged_options')),hide_eta=bool(event.get('hide_eta'))))
 
 
 class NoRedirectSession(requests.Session):
@@ -180,9 +183,9 @@ class Gateway:
         with self.lock:self.snapshot=value;self.updated=time.monotonic()
         if not value.get('connected') or not value.get('session'):return
         session=value['session'];events=[]
-        if value['stage']=='running' and 0<value['elapsed_s']<5:events.append(('start','주행 체험을 시작했어요','휴대폰에서 주행 상황과 선택 결과를 확인할 수 있어요.'))
+        if value['stage']=='running' and 0<value['elapsed_s']<5:events.append(('start','주행을 시작했어요','휴대폰에서 주행 상황과 선택 결과를 확인할 수 있어요.'))
         if value['event'].get('active'):events.append(('situation','새로운 주행 상황이 있어요','홍익 AI를 열어 상황 설명과 대응 방법을 확인해 보세요.'))
-        if value['event'].get('outcome',{}).get('phase')=='complete':events.append(('end','주행 체험이 끝났어요','선택한 행동의 결과를 확인해 주세요.'))
+        if value['event'].get('outcome',{}).get('phase')=='complete':events.append(('end','요청한 대응을 마쳤어요','선택한 행동의 결과를 확인해 주세요.'))
         for kind,title,body in events:
             key=session+':'+kind
             if self.pairing.mark_notification(key):
@@ -247,6 +250,7 @@ class Gateway:
         if not state.get('connected'):raise ValueError('PC와 연결이 끊겼어요. 다시 연결된 뒤 선택해 주세요.')
         if body.get('session_id')!=state.get('session') or body.get('navigation_id')!=state.get('navigation_id'):raise ValueError('이전 주행 알림이에요. 현재 상황을 다시 열어 주세요.')
         allowed=OBSERVATIONS|{o['action'] for o in event.get('options',[])}
+        if event.get('direct_pending'):allowed.add('study_direct_done')
         if body.get('action') not in allowed:raise ValueError('휴대폰에서 사용할 수 없는 조작입니다.')
         request_id=body.get('request_id')
         if not isinstance(request_id,str) or not 1<=len(request_id)<=128:raise ValueError('요청을 다시 확인해 주세요.')
@@ -328,7 +332,7 @@ def handler(gateway):
             if path.startswith('/m/audio/'):
                 if not self.authorized():self.fail('연결이 필요합니다.',401);return
                 name=path.removeprefix('/m/audio/')
-                if name not in {v+'.wav' for v in ('blockade','congestion','night','fog','normal','complete')}:self.send_error(404);return
+                if name not in {v+'.wav' for v in AUDIO_NAMES}:self.send_error(404);return
                 try:
                     with urllib.request.urlopen('http://127.0.0.1:8774/api/narration/audio/'+name,timeout=5) as r:audio=r.read()
                     self.send(audio,'audio/wav')

@@ -29,6 +29,7 @@ from pedestrian_yield import CrossingRoute, YieldScenario, YieldActor, OPTIONS a
 from pedestrian_voice import audio_path as pedestrian_audio_path
 from city_voice import audio_path as city_audio_path
 from city_scenarios import ContextScenario, ExteriorActor, OPTIONS as CONTEXT_OPTIONS, navigation_state as context_navigation_state, find_shoulder
+from passenger_music import library as music_library, stream as stream_music
 
 ROOT = Path(__file__).resolve().parent
 PORT, RPC = 8774, 2026
@@ -174,11 +175,11 @@ class NativeNavigation(NavigationAdapter):
                'fog':'전방에 안개가 짙어지고 있습니다'}[profile] if active else '주행 상황을 살피고 있습니다'
         voice=narration('blockade' if profile=='congestion' else profile,active,sc['completed'])
         if sc['completed'] and sc['completion_reason']=='duration_end':
-            title='주행 체험을 마쳤습니다'
-            voice=dict(text='약 5분의 주행 체험을 마쳤습니다. 시나리오 선택으로 돌아가 다시 체험할 수 있어요.',
+            title='차량이 정차했습니다'
+            voice=dict(text='차량이 안전하게 정차했습니다. 주변 상황을 확인하고 있습니다.',
                        speaker='Sohee',url=None,cached=False)
         if outcome['phase']!='idle':
-            title='체험이 종료되었습니다' if sc['completed'] else '선택한 행동의 결과를 확인하고 있어요'
+            title='차량이 정차했습니다' if sc['completed'] else '요청한 대응을 진행하고 있어요'
             voice=dict(text=outcome['message'] or sc['feedback'],speaker='Sohee',url=None,cached=False)
         event=dict(active=active,pending=outcome['phase']!='idle',outcome=outcome,feedback=sc['feedback'],
                    title=title,description=voice['text'],narration=voice,options=self.options(),
@@ -191,8 +192,8 @@ class NativeNavigation(NavigationAdapter):
                              speed_kmh=b.state['speed_kph'],lane_index=2,lane_count=4,lane_id=-2),
                     road=dict(id=4,lanes=lanes),lane_width_m=b.route.width,actors=actors,destinations=[],
                     world_pose=dict(x=tr.location.x,y=tr.location.y,yaw=tr.rotation.yaw),
-                    route=dict(destination=dict(id='trial_end',name=PROFILES[profile],point=route_points[-1],
-                                                distance_m=round(b.route.length),detail='CARLA 순환 고속도로 · 약 5분'),
+                    route=dict(destination=dict(id='trial_end',name='목적지',point=route_points[-1],
+                                                distance_m=round(b.route.length),detail='경로 안내'),
                                points=route_points,index=int(b.ego_s% b.route.length/6),remaining_m=round(remain*30/3.6),
                                arrived=sc['completed'] and sc['completion_reason']=='duration_end',off_route=False),
                     session=dict(session_id=sc['session'],stage='running' if sc['elapsed_s']>0 or b.command['mode']=='auto' else 'ready',
@@ -520,14 +521,6 @@ class NativeBridge:
 def nav_js():
     js=(ROOT/'navigation.js').read_text(encoding='utf-8')
     js=js.replace("location.assign('http://127.0.0.1:8775/')","location.assign('/')")
-    js=js.replace('실측 촬영 경로 · NuRec × CARLA','CARLA Town04 · 순환 고속도로')
-    js=js.replace('실제 촬영 구간 끝까지','CARLA 순환 고속도로 · 약 5분')
-    js=js.replace('촬영 구간 체험 완료','CARLA 체험 완료')
-    js=js.replace('구간 끝에 도착했습니다','주행 체험을 마쳤습니다')
-    js=js.replace("if(blockade){$('route-name').textContent='4차로 저속 차량 체험';",
-                  "if(blockade){$('route-name').textContent=s.completed?'체험 종료':'4차로 저속 차량 체험';")
-    js=js.replace("$('route-note').textContent='현재 주행 창과 같은 차량·상황에 연결되어 있습니다.';",
-                  "$('route-note').textContent='CARLA RGB · 같은 차량·상황에 연결되어 있습니다.';")
     return js.encode('utf-8')
 
 
@@ -537,7 +530,7 @@ def native_navigation_html():
     html=html.replace('Math.min(devicePixelRatio,2)','Math.min(devicePixelRatio,1)')
     html=html.replace('function animate(now){requestAnimationFrame(animate);',
                       'function animate(now){requestAnimationFrame(animate);if(now-last<1000/24)return;')
-    html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/city-study.js"></script><link rel="stylesheet" href="/city-study.css"></head>')
+    html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/underbody-sound.js"></script><script defer src="/city-study.js"></script><link rel="stylesheet" href="/city-study.css"></head>')
     return html.encode('utf-8')
 
 
@@ -556,7 +549,8 @@ def handler(bridge):
                 elif path=='/state':self.send(dict(bridge.state,scenario=bridge.scenario.public() if bridge.scenario else None))
                 elif path=='/api/state':self.send(bridge.navigation.state())
                 elif path=='/api/atlas':self.send(bridge.navigation.atlas())
-                elif path=='/api/library':self.send({'tracks':[]})
+                elif path=='/api/library':self.send({'tracks':music_library()})
+                elif path.startswith('/media/'):stream_music(self,path.removeprefix('/media/'))
                 elif path=='/api/reply':
                     q=parse_qs(urlparse(self.path).query);self.send(bridge.navigation.reply(q.get('session',[''])[0],q.get('id',[''])[0]))
                 elif path.startswith('/api/narration/audio/'):
@@ -567,6 +561,7 @@ def handler(bridge):
                 elif path=='/city-study.css':self.send((ROOT/'city_study.css').read_bytes(),'text/css; charset=utf-8')
                 elif path=='/city-study.js':self.send((ROOT/'city_study.js').read_bytes(),'application/javascript; charset=utf-8')
                 elif path=='/exterior-sound.js':self.send((ROOT/'exterior_sound.js').read_bytes(),'application/javascript; charset=utf-8')
+                elif path=='/underbody-sound.js':self.send((ROOT/'underbody_sound.js').read_bytes(),'application/javascript; charset=utf-8')
                 elif path=='/research-events.js':
                     self.send((ROOT/'hongik_panel.js').read_bytes().replace(b'http://127.0.0.1:8775/',b'/').replace(b'|normal|complete)',b'|normal|complete|yield|city_yield|city_carpool|city_rattle)'),'application/javascript; charset=utf-8')
                 elif path=='/drive':
@@ -609,6 +604,10 @@ def handler(bridge):
                 elif self.path=='/control':self.send(bridge.control(body))
                 else:self.send_error(404)
             except (ValueError,TypeError,KeyError) as exc:self.send({'error':str(exc)},code=400)
+        def do_HEAD(self):
+            path=urlparse(self.path).path
+            if path.startswith('/media/'):stream_music(self,path.removeprefix('/media/'),head=True)
+            else:self.send_error(404)
     return Handler
 
 

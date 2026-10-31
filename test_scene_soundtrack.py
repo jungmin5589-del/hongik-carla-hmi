@@ -33,5 +33,15 @@ class SoundtrackTests(unittest.TestCase):
         self.assertEqual(np.max(np.abs(a[:round(.8*RATE)])),0)
         self.assertGreater(np.max(np.abs(a[round(.8*RATE):round(1.4*RATE)])),100)
         self.assertEqual(np.max(np.abs(a[round(1.4*RATE):])),0)
+    def test_new_cover_sound_uses_short_contacts_and_stops_when_stationary(self):
+        path=self.output();timeline=[sample(0,'rattle'),sample(.5,'rattle',rattle=True),sample(2,'rattle',rattle=True),sample(3,'rattle')]
+        for item in timeline:
+            item['state']['speed_kph']=18
+            item['state']['scenario']['context']['sound_kind']='loose_underbody_cover'
+            item['state']['scenario']['context']['exterior']=None
+        result=render(timeline,3.2,path)
+        hits=[e for e in result['events'] if e['kind']=='underbody_cover']
+        self.assertGreater(len(hits),1);self.assertTrue(all(e['duration_s']<=.24 for e in hits))
+        self.assertFalse(any(e['kind']=='mechanical_rattle' for e in result['events']))
 
 if __name__=='__main__':unittest.main()

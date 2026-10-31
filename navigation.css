@@ -1,5 +1,5 @@
 .hongik-entry,#hongik-dialog,#experience-setup,#input-status,#input-preview,#control-panel,#suggestion,#show-suggestion,#landmark-hud{display:none!important}
-.music-dock,.music-sheet,#voice-footer,#music-footer,#navigation-footer,#search-open,#route-change,#route-cancel,#destination-panel{display:none!important}
+#voice-footer,#navigation-footer,#search-open,#route-change,#route-cancel,#destination-panel{display:none!important}
 .settings-sheet .setting,.settings-sheet>.settings-note{display:none}
 .settings-sheet .setting:has(#fullscreen){display:flex}
 .nurec-controls{position:fixed;z-index:48;right:26px;bottom:100px;display:flex;align-items:center;gap:10px;padding:12px;background:#fff;border:1px solid #e6e8ec;border-radius:14px;box-shadow:0 5px 25px #1118270b;font:500 13px Pretendard,sans-serif}
@@ -50,3 +50,17 @@
  .research-option{padding:12px 14px;gap:4px}
  .research-option strong{font-size:14px}.research-option small{font-size:11px;line-height:1.5}
 }
+
+/* Original music dock restored; simulator controls live inside settings. */
+.nurec-controls{position:static;display:flex;flex-wrap:wrap;box-shadow:none;border:0;border-top:1px solid #e6e8ec;border-radius:0;margin:18px 0 0;padding:20px 0 0;width:auto;font-size:13px}
+.nurec-controls #nurec-status,.navigation-settings-title{width:100%}
+.navigation-settings-title{font-size:16px;margin-bottom:4px}
+#research-dialog{bottom:120px}
+#research-launch{bottom:86px!important}
+.settings-sheet .setting:has(#voice-toggle){display:flex}
+#passenger-depart{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);border:0;border-radius:24px;padding:14px 42px;color:#fff;background:#3e6ae1;font:600 16px Pretendard,sans-serif;cursor:pointer;z-index:4}
+#passenger-depart[hidden]{display:none}
+#nurec-highbeam{color:#1775ff;font-size:22px;margin-top:14px;display:block}
+#nurec-highbeam[hidden]{display:none}
+body:has(#research-dialog:not([hidden])) #route-card .route-details{visibility:hidden}
+@media(max-width:800px){#research-dialog{top:16px;bottom:16px}.nurec-controls{position:static;width:auto}#research-launch{bottom:86px!important}}

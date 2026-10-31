@@ -14,7 +14,8 @@ TEXTS={
  'city_outside':('어, 이 차 아니야? 잠깐만요! 여기요!','Aiden'),
  'city_outside_shout':('거기 안에 사람 있잖아! 잠깐 나와 봐요! 여기요!','Aiden'),
  'city_outside_door':('여기 보라고요! 문 좀 열어 봐요! 잠깐만요!','Aiden'),
- 'city_notice':('탑승 예약을 확인해 주세요. 도움이 필요하면 관제에 연결하겠습니다.','Sohee')}
+ 'city_notice':('탑승 예약을 확인해 주세요. 도움이 필요하면 관제에 연결하겠습니다.','Sohee'),
+ 'city_taxi_warning':('저는 택시가 아닙니다.','Sohee')}
 TEXTS.update({key:(text,'Aiden') for _,key,text in DIALOGUE})
 
 @lru_cache(maxsize=24)

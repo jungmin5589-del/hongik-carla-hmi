@@ -18,7 +18,7 @@ class ActionOutcome:
 
     def begin(self, action):
         if self.active:
-            raise ValueError('선택한 행동의 결과를 확인하고 있습니다. 새 체험에서 다시 선택해 주세요.')
+            raise ValueError('선택한 행동의 결과를 확인하고 있습니다. 새 주행에서 다시 선택해 주세요.')
         self.action, self.phase = action, 'applying'
 
     def tick(self, dt, driving, speed, trial):
@@ -61,8 +61,8 @@ class ActionOutcome:
             if self.status == 'collision':
                 return '추월 중 앞차와 충돌한 뒤 주변 차량이 엉키며 차로가 막혔습니다. 차량을 정지하고 사고 상황을 확인했습니다.'
             if trial.primary_verified:
-                return '앞차와의 충돌은 감지했지만 사고 결과 장면의 표시를 완료하지 못해 체험을 중지했습니다.'
-            return '추월 장면에서 차량 접촉을 확인하지 못해 체험을 중지했습니다. 충돌 완료로 기록하지 않습니다.'
+                return '앞차와의 충돌은 감지했지만 사고 결과 장면의 표시를 완료하지 못해 주행을 중지했습니다.'
+            return '추월 장면에서 차량 접촉을 확인하지 못해 주행을 중지했습니다. 충돌 완료로 기록하지 않습니다.'
         if self.action == 'stop_request':
             return '정차 공간이 확인되지 않아 갓길 정차는 실행하지 않았습니다. 감속하며 앞차 간격을 확보하는 대응을 확인했습니다.' if trial.gap >= trial.desired_gap - .5 else '정차 공간이 확인되지 않았으며 요청한 간격 확보도 완료되지 않았습니다. 정차 요청이 완료된 상태는 아닙니다.'
         if self.status == 'unfulfilled':
@@ -86,5 +86,5 @@ class ActionOutcome:
         return dict(action=self.action, phase=self.phase, status=self.status, summary=self.summary,
                     observed_s=round(self.observed, 2), observe_s=self.OBSERVE_SECONDS,
                     elapsed_s=round(self.elapsed, 2),
-                    message=('추월 시도 중 충돌이 발생해 주행 체험이 종료되었습니다.' if self.action == 'overtake' and self.status == 'collision'
-                             else '선택한 행동의 결과를 확인했습니다. 체험을 종료합니다.') if self.phase == 'complete' else '')
+                    message=('추월 시도 중 충돌이 발생해 주행 주행이 종료되었습니다.' if self.action == 'overtake' and self.status == 'collision'
+                             else '요청한 대응을 마쳤습니다. 주변 상황을 확인하고 있습니다.') if self.phase == 'complete' else '')

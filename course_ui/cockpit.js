@@ -61,7 +61,7 @@ const canvas=$('navigation-map'),ctx=canvas.getContext('2d');
 function mapSize(){const r=canvas.getBoundingClientRect(),d=Math.min(devicePixelRatio,2);if(canvas.width!==Math.round(r.width*d)||canvas.height!==Math.round(r.height*d)){canvas.width=Math.round(r.width*d);canvas.height=Math.round(r.height*d)}ctx.setTransform(d,0,0,d,0,0);return r}
 function drawMap(){
  const r=mapSize(),w=r.width,h=r.height;ctx.fillStyle='#e8e9e6';ctx.fillRect(0,0,w,h);
- if(!atlas.roads.length){ctx.strokeStyle='#dfe2dd';ctx.lineWidth=1;for(let x=-h;x<w+h;x+=65){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x+h*.5,h);ctx.stroke()}ctx.fillStyle='#979f98';ctx.font='12px Pretendard';ctx.textAlign='center';ctx.fillText('CARLA 도로 정보를 기다리는 중',w/2,h*.47);return}
+ if(!atlas.roads.length){ctx.strokeStyle='#dfe2dd';ctx.lineWidth=1;for(let x=-h;x<w+h;x+=65){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x+h*.5,h);ctx.stroke()}ctx.fillStyle='#979f98';ctx.font='12px Pretendard';ctx.textAlign='center';ctx.fillText('지도를 불러오는 중',w/2,h*.47);return}
  const points=atlas.roads.flatMap(l=>l.points);const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
  const following=!!state?.nurec;
  const scale=(following?Math.min(w,h)/180:Math.min(w/(maxX-minX+100),h/(maxY-minY+100)))*zoom;
@@ -115,7 +115,7 @@ window.CockpitDemoState=()=>{
  const lanes=[-3.5,0,3.5].map((x,i)=>({id:i,points:Array.from({length:35},(_,n)=>({right_m:x,forward_m:-40+n*5,up_m:0,yaw_deg:0,width_m:3.5}))}));
  const ego={id:999,right_m:offset,forward_m:0,up_m:0,yaw_deg:0,speed_kmh:speed,lane_index:offset<-2?1:2,lane_count:3};
  const hazard=previewEpisode%3;const actors=[{id:1,kind:'vehicle',label:'차량',right_m:0,forward_m:23+(previewActionAt?after*5:0),up_m:0,yaw_deg:0,length_m:hazard===0?9:4.4,width_m:2.3,height_m:hazard===0?3.4:1.5},{id:2,kind:'vehicle',label:'버스',right_m:3.5,forward_m:hazard===1?1+after*5:48,up_m:0,yaw_deg:0,length_m:10,width_m:2.5,height_m:3.2},{id:3,kind:'vehicle',label:hazard===1?'버스':'차량',right_m:-3.5,forward_m:hazard===1?2+after*5:60+(Math.sin(t*.2)*10),up_m:0,yaw_deg:0,length_m:hazard===1?10:4.4,width_m:2,height_m:hazard===1?3:1.5}];
- let nav={id:'preview-start',status:'ready',title:'주행을 시작할까요?',body:'목적지와 음악을 선택한 뒤 가상 주행을 체험하세요.',action:'start',label:'주행 시작'};
+ let nav={id:'preview-start',status:'ready',title:'주행을 시작할까요?',body:'목적지와 음악을 선택한 뒤 가상 주행을 주행하세요.',action:'start',label:'주행 시작'};
  if(previewStage==='stopped')nav={id:'preview-stop',status:'stopped',title:'정지했습니다.',body:'설정에서 미리보기를 껐다 켜면 다시 시작합니다.'};
  else if(previewStage==='executing')nav={id:'preview-'+previewEpisode,status:'executing',title:'주행을 조정하고 있습니다.',body:'미리보기 차량이 이동합니다.'};
  else if(previewStage==='resolved')nav={id:'preview-'+previewEpisode,status:'resolved',title:'주행을 조정했습니다.',body:'다음 상황을 확인하며 계속 주행합니다.'};

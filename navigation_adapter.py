@@ -155,11 +155,11 @@ class NavigationAdapter:
             title='앞차가 차선을 반복해서 벗어나고 있습니다' if active else '앞차의 움직임을 살피며 주행합니다',
             description='앞차가 좌우로 흔들리며 차선 경계에 접근하고 있습니다. 차량은 앞차와의 거리를 확인하며 따라갑니다.'
                 if active else '필요할 때 주행 상태를 확인할 수 있습니다.')
-        destination = dict(id='trial_end', name='야간 주행 체험', point=points[-1], distance_m=round(route.length), detail='촬영 구간 끝까지 주행')
+        destination = dict(id='trial_end', name='목적지', point=points[-1], distance_m=round(route.length), detail='경로 안내')
         if daytime:
             event.update(title='앞 차량 흐름에 따라 서행하고 있습니다' if active else '주행 흐름을 살피며 출발합니다',
                          description='앞차의 출발과 정지가 반복되고 있습니다. 차간 거리를 유지하며 서행합니다.' if active else '앞차와 간격을 유지하며 경로를 따라 주행합니다.')
-            destination.update(name='고속도로 서행 체험', detail='정체와 서행을 포함한 유한 구간 주행')
+            destination.update(name='목적지', detail='정체와 서행을 포함한 유한 구간 주행')
             end_s=route.length-10.-b.scenario.half_length-1.85-b.scenario.desired_gap
             end=route.sample(end_s)[:2,3]
             remaining=max(0,round(end_s-b.scenario.ego_s))
@@ -171,30 +171,30 @@ class NavigationAdapter:
             description=f"현재 약 {b.state.get('speed_kph',0):g}km/h로 주행하고 있으며 앞차 간격은 약 {sc['gap_m']:g}m입니다. "
             description+='시야가 제한되는 구간에서 감속하며 주행합니다.' if active else '경로를 따라 앞차와의 간격을 유지합니다.'
             event.update(title=title,description=description)
-            destination.update(name='안개 주행 체험',detail='10초 후 짙은 안개에 진입하는 약 5분 주행')
+            destination.update(name='목적지',detail='시야 제한 구간')
         if sc['completed']:
-            event.update(title='주행 체험을 마쳤습니다',description='구간 끝에 도착해 정지했습니다. 처음으로를 누르면 다시 체험할 수 있습니다.')
+            event.update(title='차량이 정차했습니다',description='차량이 정차했습니다. 주변 상황을 확인하고 있습니다.')
         if blockade:
             event.update(title='앞과 오른쪽은 느리고 왼쪽은 빠르게 흐르고 있습니다' if active else '4차로 도로를 따라 출발합니다')
-            destination.update(name='4차로 저속 차량 체험',detail='왼쪽 90 · 앞차와 오른쪽 대형차 25~35km/h 변화')
+            destination.update(name='4차로 저속 차량 주행',detail='왼쪽 90 · 앞차와 오른쪽 대형차 25~35km/h 변화')
         voice=narration('blockade' if blockade else 'fog' if fog else 'congestion' if congestion else 'night',event['active'],sc['completed'])
         if resolving:
             # Action-end is not destination arrival, and never plays the arrival WAV.
             copy={'applying':'요청이 차량에 반영되는 모습을 확인해 주세요.',
                   'observing':'주행 화면에서 선택한 행동에 따른 결과를 살펴보세요.',
-                  'stopping':'결과를 확인했습니다. 체험을 마무리하고 있어요.',
+                  'stopping':'결과를 확인했습니다. 주행을 마무리하고 있어요.',
                   'complete':outcome['message']}
             voice=dict(text=copy[outcome['phase']],speaker='Sohee',url=None,cached=False)
             event.update(title='선택한 행동의 결과를 확인하고 있어요', description=voice['text'])
             if outcome_end:
-                event.update(title='체험이 종료되었습니다',description=outcome['message'])
+                event.update(title='주행이 종료되었습니다',description=outcome['message'])
                 voice['text']=outcome['message']
             crash=sc.get('crash',{})
             if sc['action']=='overtake' and not outcome_end:
                 title='추월을 시도하고 있습니다'
                 if crash.get('phase') in ('primary_impact','secondary_impact','aftermath'):
                     title='충돌이 발생했습니다'
-                if crash.get('phase')=='failed':title='주행 체험을 중지합니다'
+                if crash.get('phase')=='failed':title='차량을 정지합니다'
                 voice=dict(text=outcome['summary'] or sc['feedback'],speaker='Sohee',url=None,cached=False)
                 event.update(title=title,description=voice['text'])
         event.update(description=voice['text'],narration=voice,
@@ -237,7 +237,7 @@ class NavigationAdapter:
             if action in {option['action'] for option in self.options()}:
                 sc.require_action_available()
                 if sc.completed:
-                    raise ValueError('체험이 끝났습니다. 처음으로 돌아간 뒤 다시 선택해 주세요.')
+                    raise ValueError('주행이 끝났습니다. 처음으로 돌아간 뒤 다시 선택해 주세요.')
                 if not self.options_open or self.choice != action:
                     raise ValueError('대응 방법을 선택한 뒤 실행해 주세요.')
                 chosen=next(option for option in self.options() if option['action']==action)
@@ -295,7 +295,7 @@ class NavigationAdapter:
                 sc.log('navigation_'+action, client_event=details, measurement='UI exposure/click; not gaze')
                 message = '확인했습니다.'
             else:
-                raise ValueError('이 체험에서 사용할 수 없는 동작입니다.')
+                raise ValueError('이 주행에서 사용할 수 없는 동작입니다.')
             command_id = uuid.uuid4().hex
             queued = dict(session_id=session,command_id=command_id)
             self.requests[request] = dict(action=action,queued=queued)

@@ -952,7 +952,11 @@ def make_handler(bridge):
             elif path == '/api/atlas':
                 data, content = json.dumps(bridge.navigation.atlas()).encode(), 'application/json'
             elif path == '/api/library':
-                data, content = b'{"tracks":[]}', 'application/json'
+                from passenger_music import library
+                data, content = json.dumps({'tracks':library()},ensure_ascii=False).encode(), 'application/json; charset=utf-8'
+            elif path.startswith('/media/'):
+                from passenger_music import stream
+                stream(self,path.removeprefix('/media/'));return
             elif path == '/api/reply':
                 query = parse_qs(urlparse(self.path).query)
                 data = json.dumps(bridge.navigation.reply(query.get('session',[''])[0], query.get('id',[''])[0]),ensure_ascii=False).encode('utf-8')

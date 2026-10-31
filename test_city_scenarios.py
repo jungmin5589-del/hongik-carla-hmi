@@ -27,6 +27,28 @@ class ContextTests(unittest.TestCase):
   sc=self.scene('carpool')
   for _ in range(1000):sc.tick_context(.1,False,0,5,3.5)
   self.assertEqual(sc.elapsed,0);self.assertFalse(sc.public()['context']['outside_voice_count'])
+ def test_carpool_requested_options_and_order(self):
+  self.assertEqual([x['scenario_action'] for x in OPTIONS['carpool']],['relocate','external_notice','direct','horn'])
+ def test_direct_conversation_waits_for_explicit_done(self):
+  sc=self.scene('carpool');self.tick(sc,9);sc.interaction('open',sc.session);sc.interaction('direct',sc.session)
+  self.tick(sc,100,actor_clear=True)
+  self.assertTrue(sc.direct_pending);self.assertFalse(sc.actor_retreat);self.assertFalse(sc.completed);self.assertEqual(sc.target()[0],0)
+  with self.assertRaises(ValueError):sc.complete_direct('wrong')
+  sc.complete_direct(sc.session);self.tick(sc,23,actor_clear=True)
+  self.assertTrue(sc.completed);self.assertFalse(sc.direct_pending)
+ def test_closing_direct_response_does_not_claim_a_conversation(self):
+  sc=self.scene('carpool');self.tick(sc,9);sc.interaction('open',sc.session);sc.interaction('direct',sc.session)
+  sc.interaction('close',sc.session);self.assertFalse(sc.direct_pending);self.assertEqual(sc.last_action,'maintain')
+  with self.assertRaises(ValueError):sc.complete_direct(sc.session)
+ def test_carpool_horn_is_executed_only_once(self):
+  sc=self.scene('carpool');self.tick(sc,9);nav=NativeNavigation(SimpleNamespace(profile='carpool',scenario=sc))
+  def cmd(a,**details):return dict(session_id=sc.session,navigation_id=sc.session+'-weaving',request_id=a,action=a,client_event=details)
+  nav.command(cmd('study_open',options_visible=True));nav.command(cmd('study_choice',choice='study_horn'));request=cmd('study_horn')
+  nav.command(request);nav.command(request);self.assertEqual(sc.public()['horn_count'],1)
+ def test_relocation_holds_vehicle_until_person_is_clear(self):
+  sc=self.scene('carpool');self.tick(sc,9);sc.interaction('open',sc.session);sc.interaction('relocate',sc.session)
+  self.tick(sc,3,actor_clear=False);self.assertEqual(sc.target()[0],0)
+  self.tick(sc,1,actor_clear=True);self.assertGreater(sc.target()[0],0)
  def test_relocation_cannot_complete_from_timer_alone(self):
   sc=self.scene('carpool');self.tick(sc,9);sc.interaction('open',sc.session);sc.interaction('relocate',sc.session)
   self.tick(sc,30,actor_clear=True)

@@ -18,7 +18,7 @@ root.innerHTML=`<button id="research-launch" type="button" aria-label="홍익 AI
  <div id="research-confirmation" hidden><p id="research-confirm-copy"></p><div class="research-confirm-actions">
  <button id="research-back" type="button">선택 취소</button><button id="research-execute" type="button" class="research-primary">실행</button></div></div>
  </div></section>
- <section id="research-ending" hidden role="status" aria-live="polite"><small>주행 체험 완료</small><h2>체험이 종료되었습니다</h2><p id="research-ending-message"></p><p id="research-ending-summary"></p><button id="research-ending-home" type="button">시나리오 선택</button></section>`;
+ <section id="research-ending" hidden role="status" aria-live="polite"><small>홍익 AI</small><h2>주변 상황을 확인했어요</h2><p id="research-ending-message"></p><p id="research-ending-summary"></p><button id="research-ending-home" type="button">확인</button></section>`;
 document.body.appendChild(root);
 const $=id=>document.getElementById(id),launch=$('research-launch'),dialog=$('research-dialog');
 let current=null,event=null,session=null,seen=null,unread=false,phase='options',selected=null;
@@ -26,18 +26,20 @@ let busy=false,dialogReady=false,optionsReady=false,opening=false,generation=0,l
 let sendTail=Promise.resolve(),localFeedback='',feedbackBaseline='';
 const previous=window.CockpitUpdate;
 let player=null,speechTurn=0;
-let explanationFinished=false;
+let explanationFinished=false,endingDismissed=false;
 let voiceEnabled=true;try{
- voiceEnabled=localStorage.getItem('nurec-sohee-enabled')!=='false';
+ voiceEnabled=localStorage.getItem('nurec-sohee-enabled')!=='false'&&localStorage.getItem('carla-navigation-voice')!=='off';
  const query=new URLSearchParams(location.search);if(query.has('voice')){
   voiceEnabled=query.get('voice')!=='0';localStorage.setItem('nurec-sohee-enabled',String(voiceEnabled));
  }
 }catch{}
+addEventListener('hongik-voice-enabled',e=>{voiceEnabled=Boolean(e.detail);try{localStorage.setItem('nurec-sohee-enabled',String(voiceEnabled))}catch{}if(!voiceEnabled)stopSpeech()});
 const voiceClient=crypto.randomUUID();
 const voiceChannel=typeof BroadcastChannel==='function'?new BroadcastChannel('nurec-hongik-sohee'):null;
 if(voiceChannel)voiceChannel.onmessage=message=>{if(message.data?.claim!==voiceClient)stopSpeech()};
 function stopSpeech(){
  speechTurn++;if(player){player.pause();player.removeAttribute('src');player.load();player.remove?.();player=null}
+ window.passengerNarration?.setDuck?.(1);
  $('research-read').textContent='설명 다시 듣기';$('research-voice-status').textContent=voiceEnabled?'Sohee':'음성 꺼짐';
 }
 function readExplanation(){
@@ -49,7 +51,7 @@ function readExplanation(){
  const turn=speechTurn;voiceChannel?.postMessage({claim:voiceClient});
  try{
   player=new Audio(voice.url);player.volume=1;player.id='research-sohee-audio';player.hidden=true;root.appendChild(player);
-  player.onplaying=()=>{if(turn===speechTurn){$('research-read').textContent='읽기 멈춤';$('research-voice-status').textContent='Sohee · 읽는 중'}};
+  player.onplaying=()=>{if(turn===speechTurn){window.passengerNarration?.setDuck?.(.16);$('research-read').textContent='읽기 멈춤';$('research-voice-status').textContent='설명 중'}};
   player.onended=()=>{if(turn===speechTurn){stopSpeech();if(event?.staged_options&&phase==='explanation'){explanationFinished=true;revealOptions()}}};
   player.onerror=()=>{if(turn===speechTurn){stopSpeech();$('research-voice-status').textContent='음성을 재생하지 못했어요. 다시 눌러 주세요.'}};
   const playback=player.play();playback?.catch(()=>{if(turn===speechTurn){stopSpeech();$('research-voice-status').textContent='다시 듣기를 눌러 주세요.'}});
@@ -80,15 +82,15 @@ function render(){
  if(!event)return;
  const outcome=event.outcome||{},resolving=outcome.phase&&outcome.phase!=='idle';
  if(resolving){phase='result';selected=null;optionsReady=false}
- $('research-ending').hidden=outcome.phase!=='complete';
+ $('research-ending').hidden=outcome.phase!=='complete'||endingDismissed;
  $('research-ending-message').textContent=outcome.message||'';
  $('research-ending-summary').textContent=outcome.summary||'';
- const stages={applying:'선택한 요청을 실행하고 있어요',observing:'행동에 따른 결과를 살펴보고 있어요',stopping:'결과를 확인했습니다 · 체험을 마무리합니다',complete:'결과 확인 완료'};
+ const stages={applying:'요청한 대응을 진행하고 있어요',observing:'주변의 반응을 확인하고 있어요',stopping:'서서히 정차하고 있어요',complete:'주변 확인 완료'};
  $('research-title').textContent=event.title;
  $('research-description').textContent=event.description;
  $('research-live-detail').textContent=event.live_detail||'';
  $('research-caption').textContent=stages[outcome.phase]||(event.active?'현재 상황과 차량의 판단':'현재 주행');
- $('research-badge').textContent=resolving?(outcome.phase==='complete'?'체험 완료':'행동 결과 확인 중'):unread?'새 상황 · 눌러서 확인':'상황 살펴보기';
+ $('research-badge').textContent=resolving?(outcome.phase==='complete'?'주변 확인 완료':'주변 반응 확인 중'):unread?'새 상황 · 눌러서 확인':'상황 살펴보기';
  $('research-read').parentElement&&( $('research-read').parentElement.hidden=Boolean(resolving));
  $('research-unread').hidden=!unread;
  launch.classList.toggle('has-update',unread&&Boolean(event.active)&&dialog.hidden);
@@ -96,6 +98,7 @@ function render(){
  $('research-options-open').hidden=!event.staged_options||phase!=='explanation'||!event.active||Boolean(event.pending);
  $('research-options-open').disabled=busy;
  $('research-direct-done').hidden=!event.direct_pending;
+ $('research-direct-done').textContent=event.direct_label||'대응 완료';
  $('research-direct-done').disabled=busy;
  $('research-options').hidden=!showOptions;
  $('research-options-label').hidden=!showOptions;
@@ -189,7 +192,7 @@ $('research-close').onclick=close;$('research-back').onclick=cancel;$('research-
 $('research-options-open').onclick=()=>{explanationFinished=true;revealOptions()};
 $('research-direct-done').onclick=async()=>{if(busy||!event?.direct_pending)return;const token=generation;busy=true;render();try{await post('study_direct_done')}catch(error){if(isCurrent(token))showError(error)}finally{if(isCurrent(token)){busy=false;render()}}};
 $('research-read').onclick=()=>player?stopSpeech():readExplanation();
-$('research-ending-home').onclick=()=>document.getElementById('nurec-home')?.click();
+$('research-ending-home').onclick=()=>{endingDismissed=true;dialog.hidden=true;launch.setAttribute('aria-expanded','false');render()};
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dialog.hidden){e.preventDefault();close()}});
 function notify(){
  if(event?.active&&seen!==current.id&&document.visibilityState==='visible'){
@@ -208,6 +211,7 @@ window.CockpitUpdate=data=>{
  root.hidden=!live;document.body.classList.toggle('research-driving',live);
  if(!live){stopSpeech();generation++;dialog.hidden=true;seen=null;session=null;current=null;event=null;busy=false;opening=false;dialogReady=false;optionsReady=false;return}
  if(session?.session_id!==data.session.session_id){
+  endingDismissed=false;
   stopSpeech();
   generation++;seen=null;unread=false;phase='options';selected=null;busy=false;opening=false;dialogReady=false;optionsReady=false;
   dialog.hidden=true;localFeedback='';feedbackBaseline='';signature=null;launch.setAttribute('aria-expanded','false');

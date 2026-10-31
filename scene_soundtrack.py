@@ -6,6 +6,9 @@ knock/step/rattle waveforms. Does not invent dialogue or add engine ambience.
 import json
 import math
 import wave
+import base64
+import subprocess
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -53,6 +56,13 @@ def rattle():
     a=.12*np.sin(t*2*np.pi*48)+noise(len(t),7231)*.4*np.exp(-(t%.23)/.025)
     return np.repeat((lowpass(a,2100)*.14)[:,None],2,axis=1)
 
+@lru_cache(maxsize=1)
+def cover_bank():
+    # Reuse the actual browser contact waveforms, rather than another tone model.
+    code="const m=require('./underbody_sound.js');process.stdout.write(Buffer.concat(Array.from({length:8},(_,i)=>Buffer.from(m.contactWave(48000,i).buffer))).toString('base64'));"
+    data=subprocess.check_output(['node','-e',code],cwd=Path(__file__).resolve().parent,creationflags=0x08000000)
+    return np.frombuffer(base64.b64decode(data),dtype='<f4').reshape(8,-1)
+
 
 def voice(key):
     with wave.open(str(audio_path(key))) as source:
@@ -68,12 +78,31 @@ def render(timeline,duration,output):
     mix=np.zeros((math.ceil(duration*RATE),2),dtype=np.float32)
     events=[];played=[];last_voice=last_knock=0;last_step=-1.;mechanical_start=None
     knock=door();footstep=step();mechanical=None;last_mode=False;busy_until=0.
+    cover=any(item['state']['scenario'].get('context',{}).get('sound_kind')=='loose_underbody_cover' for item in timeline)
     def add(at,clip,kind,key=None):
         start=round(at*RATE);skip=max(0,-start);start=max(0,start);n=min(len(clip)-skip,len(mix)-start)
         if n>0:mix[start:start+n]+=clip[skip:skip+n]
         events.append(dict(at_s=at,kind=kind,key=key,duration_s=len(clip)/RATE))
+    def fill_mechanical(start,end):
+        if cover:
+            seed=9027
+            def random():
+                nonlocal seed
+                seed=(seed*1664525+1013904223)&0xffffffff;return seed/4294967296
+            at=start+.025;index=0;bank=cover_bank()
+            while at<end:
+                while index+1<len(timeline) and timeline[index+1]['recording_s']<=at:index+=1
+                speed=timeline[index]['state'].get('speed_kph',18)
+                if speed<2:at+=.1;continue
+                clip=pan(lowpass(bank[int(random()*8)],3200),.12,(.4+min(35,speed)*.004)*(.42+random()*.48))
+                add(at,clip[:max(0,round((end-at)*RATE))],'underbody_cover')
+                at+=(.32+random()*.75)*math.sqrt(18/max(5,speed))
+        else:
+            clip=rattle();at=start
+            while at<end:
+                add(at,clip[:max(0,min(len(clip),round((end-at)*RATE)))],'mechanical_rattle');at+=4
     for item in timeline:
-        at=item['recording_s'];state=item['state'];sc=state['scenario'];c=sc.get('context',{});ext=c.get('exterior',{})
+        at=item['recording_s'];state=item['state'];sc=state['scenario'];c=sc.get('context',{});ext=c.get('exterior') or {}
         enabled=state['mode']=='auto' and not sc['completed']
         if enabled:
             cue=ext.get('voice_cue') or {};index=cue.get('index',0)
@@ -93,21 +122,14 @@ def render(timeline,duration,output):
             active=c.get('rattle_active',False)
             if active and mechanical_start is None:mechanical_start=at
             if not active and mechanical_start is not None:
-                mechanical=rattle() if mechanical is None else mechanical
-                start=mechanical_start
-                while start<at:
-                    clip=mechanical[:max(0,min(len(mechanical),round((at-start)*RATE)))];add(start,clip,'mechanical_rattle');start+=4
+                fill_mechanical(mechanical_start,at)
                 mechanical_start=None
         elif mechanical_start is not None:
-            mechanical=rattle() if mechanical is None else mechanical;start=mechanical_start
-            while start<at:
-                add(start,mechanical[:max(0,min(len(mechanical),round((at-start)*RATE)))],'mechanical_rattle');start+=4
+            fill_mechanical(mechanical_start,at)
             mechanical_start=None
         last_mode=enabled
     if mechanical_start is not None:
-        mechanical=rattle() if mechanical is None else mechanical;start=mechanical_start
-        while start<duration:
-            add(start,mechanical[:min(len(mechanical),round((duration-start)*RATE))],'mechanical_rattle');start+=4
+        fill_mechanical(mechanical_start,duration)
     if timeline[-1]['state']['profile']=='carpool' and len(played)!=6:raise RuntimeError('Expected all six existing dialogue clips')
     peak=float(np.max(np.abs(mix)));gain=min(1.,.96/max(.96,peak));mix*=gain
     with wave.open(str(output),'wb') as target:
