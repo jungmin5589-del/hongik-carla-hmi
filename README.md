@@ -2,6 +2,8 @@
 
 # Hongik CARLA / NuRec Passenger HMI
 
+[CARLA 화면과 장면 소리만 녹화](docs/CARLA-RECORDING.md): 별도 녹화 UI 없이 전체 장면을 저장하고, 기존 대사·효과음을 실제 사건 시점에 맞춰 합칩니다.
+
 처음 보는 팀원·교수님은 아래 문서부터 읽으면 됩니다.
 
 - [CARLA 자체 렌더링 버전 · 50번 실행](docs/CARLA-NATIVE-KO.md): NuRec 없이 같은 내비·세 시나리오를 실행하는 별도 버전.
