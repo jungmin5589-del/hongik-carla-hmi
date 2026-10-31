@@ -6,6 +6,25 @@ from types import SimpleNamespace
 
 from pedestrian_yield import YieldScenario
 from native_carla import NativeNavigation
+import carla
+import numpy as np
+from pedestrian_gesture import swing_between, carla_rotation
+
+
+class GestureGeometryTests(unittest.TestCase):
+    def test_swing_preserves_lengths_and_aligns_joint_direction(self):
+        source=np.array([.03,.08,-.25]);target=np.array([.18,.10,-.20])
+        rotation=swing_between(source,target)
+        np.testing.assert_allclose(rotation@rotation.T,np.eye(3),atol=1e-8)
+        np.testing.assert_allclose(rotation@source/np.linalg.norm(source),target/np.linalg.norm(target),atol=1e-8)
+        self.assertAlmostEqual(np.linalg.det(rotation),1.)
+        np.testing.assert_allclose(swing_between(source,target,0),np.eye(3),atol=1e-8)
+
+    def test_carla_rotation_roundtrip_preserves_its_axis_convention(self):
+        for pitch,yaw,roll in [(17,45,35),(-60,150,-25),(77,-100,12)]:
+            matrix=np.asarray(carla.Transform(rotation=carla.Rotation(pitch=pitch,yaw=yaw,roll=roll)).get_matrix())[:3,:3]
+            restored=np.asarray(carla.Transform(rotation=carla_rotation(matrix)).get_matrix())[:3,:3]
+            np.testing.assert_allclose(restored,matrix,atol=1e-6)
 
 
 class YieldTests(unittest.TestCase):

@@ -9,6 +9,7 @@ import numpy as np
 from scenario2 import Scenario2
 from native_carla_route import HighwayRoute
 from pedestrian_voice import narration as pedestrian_narration
+from pedestrian_gesture import yielding_arm
 
 
 OPTIONS = [
@@ -194,29 +195,23 @@ class YieldActor:
         xyz,yaw=route.sample(route.cross_s,route.curb_right)
         self.yaw=yaw;self.actor=world.try_spawn_actor(bp,carla.Transform(carla.Location(x=float(xyz[0]),y=float(xyz[1]),z=float(xyz[2]+.3)),carla.Rotation(yaw=math.degrees(yaw)-90)))
         if self.actor is None:raise RuntimeError('Pedestrian curb spawn is blocked.')
-        self.pose=None;self.last_phase=None
+        self.pose=None;self.last_phase=None;self.gesture_weight=0.;self.last_elapsed=0.
 
     def update(self,trial,driving):
-        crossing=trial.phase=='crossing' and driving
+        if self.pose is None:self.pose={b.name:b for b in self.actor.get_bones().bone_transforms}
+        dt=min(.15,max(0.,trial.elapsed-self.last_elapsed));self.last_elapsed=trial.elapsed
+        waving=trial.phase=='mutual_wait'
+        self.gesture_weight=min(1.,self.gesture_weight+dt/.7) if waving else max(0.,self.gesture_weight-dt/.7)
+        crossing=trial.phase=='crossing' and driving and self.gesture_weight<.001
         entering=trial.phase=='approach' and driving and trial.gap<22. and self.offset()>self.route.curb_right-1.6
         self.actor.apply_control(carla.WalkerControl(direction=carla.Vector3D(x=math.sin(self.yaw),y=-math.cos(self.yaw)),speed=1.25 if crossing else .7 if entering else 0.))
-        if not crossing and not entering:
-            # Preserve each bone's translation; animate only rotations.
-            if self.pose is None:self.pose={b.name:b.relative for b in self.actor.get_bones().bone_transforms}
-            waving=trial.phase=='mutual_wait'
+        if self.gesture_weight>0.:
             if waving and self.last_phase!='mutual_wait':
                 transform=self.actor.get_transform()
                 transform.rotation.yaw=math.degrees(self.yaw)+180.
                 self.actor.set_transform(transform)
-            controls=[]
-            for name in ('crl_arm__R','crl_foreArm__R','crl_hand__R'):
-                old=self.pose[name]
-                amount=(65.+15.*math.sin(trial.elapsed*3.2)) if name=='crl_arm__R' else 35.
-                rotation=carla.Rotation(pitch=old.rotation.pitch+(amount if waving else 0.),yaw=old.rotation.yaw,roll=old.rotation.roll)
-                controls.append((name,carla.Transform(old.location,rotation)))
-            self.actor.set_bones(carla.WalkerBoneControlIn(controls))
-            if waving:self.actor.show_pose()
-            else:self.actor.hide_pose()
+            self.actor.set_bones(carla.WalkerBoneControlIn(yielding_arm(self.pose,trial.elapsed,self.gesture_weight)))
+            self.actor.show_pose()
         else:self.actor.hide_pose()
         self.last_phase=trial.phase
 

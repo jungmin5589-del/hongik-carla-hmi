@@ -35,6 +35,7 @@
 ## 구현과 음성
 
 - `pedestrian_yield.py`: 실제 맵 경로, 보행자 생성·관절 동작, 상태 전환, 실제 위치 기반 재출발.
+- `pedestrian_gesture.py`: 상완·전완을 연결한 손짓. 손목은 기본 자세를 유지하고 팔 올림·내림을 부드럽게 연결한다.
 - `pedestrian_ui.js`: 전용 내비 문구와 외부 안내 음성 재생.
 - `pedestrian_voice.py`: 기존 음성 캐시를 건드리지 않는 별도 Sohee 파일 검증.
 - `prepare_pedestrian_voice.py`: 기존 로컬 Qwen 환경으로 안내 두 문장을 한 번 사전 합성한다.
