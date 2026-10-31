@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from city_scenarios import ContextScenario,OPTIONS
 from native_carla import NativeNavigation
 from exterior_actor import exterior_target,knock_count
-from exterior_dialogue import DIALOGUE,dialogue_cue
+from exterior_dialogue import DIALOGUE,dialogue_cue,AttentionGate
 
 
 class ContextTests(unittest.TestCase):
@@ -16,6 +16,7 @@ class ContextTests(unittest.TestCase):
   self.tmp.cleanup()
  def scene(self,profile):
   sc=ContextScenario(profile,Path(self.tmp.name)/(profile+str(len(self.instances))+'.jsonl'),5.,3.5 if profile=='carpool' else 0.)
+  if profile=='carpool':sc.exterior['dialogue_started_s']=8.  # Simulated actor confirmation for command/result tests.
   self.instances.append(sc);return sc
  def tick(self,sc,seconds,**kw):
   for _ in range(round(seconds*10)):sc.tick_context(.1,True,kw.get('speed',0.),kw.get('s',5.),kw.get('offset',sc.base_offset),kw.get('actor_clear',False),kw.get('safe',False))
@@ -62,10 +63,26 @@ class ContextTests(unittest.TestCase):
  def test_taxi_dialogue_is_finite_unique_and_stops_on_departure(self):
   self.assertEqual(len({key for _,key,_ in DIALOGUE}),6)
   self.assertEqual(len({text for _,_,text in DIALOGUE}),6)
-  self.assertIsNone(dialogue_cue(4.99)['key'])
-  self.assertEqual(dialogue_cue(5.)['index'],1)
-  self.assertEqual(dialogue_cue(38.)['key'],'city_taxi_plate')
-  self.assertIsNone(dialogue_cue(100.)['key'])
-  for elapsed in (5,13,24,38,54,72):self.assertIsNone(dialogue_cue(elapsed,True)['key'])
+  self.assertIsNone(dialogue_cue(500.)['key'],'A startup timer cannot make a distant actor speak')
+  self.assertIsNone(dialogue_cue(19.,started_at=20.)['key'])
+  self.assertEqual(dialogue_cue(20.,started_at=20.)['index'],1)
+  self.assertEqual(dialogue_cue(50.,started_at=20.)['key'],'city_taxi_plate')
+  self.assertIsNone(dialogue_cue(100.,started_at=20.)['key'])
+  for elapsed in (20,28,38,50,64,78):self.assertIsNone(dialogue_cue(elapsed,True,20.)['key'])
+ def test_attention_requires_close_stationary_facing_then_a_short_look(self):
+  gate=AttentionGate()
+  for distance,facing,speed in ((2.,0.,0.),(.2,70.,0.),(.2,0.,.7)):
+   for _ in range(100):self.assertIsNone(gate.tick(.1,20.,distance,facing,speed))
+  for _ in range(3):self.assertIsNone(gate.tick(.1,20.,.2,0.,0.))
+  gate.tick(.1,20.,.2,45.,0.)
+  for i in range(6):self.assertIsNone(gate.tick(.1,21.+i*.1,.2,0.,0.))
+  self.assertIsNotNone(gate.tick(.1,21.7,.2,0.,0.))
+ def test_carpool_notification_waits_for_actual_exterior_attention(self):
+  sc=self.scene('carpool');sc.exterior['dialogue_started_s']=None
+  self.tick(sc,40)
+  self.assertFalse(sc.onset)
+  sc.exterior['dialogue_started_s']=sc.elapsed
+  self.tick(sc,.4)
+  self.assertTrue(sc.onset)
 
 if __name__=='__main__':unittest.main()

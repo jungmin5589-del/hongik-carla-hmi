@@ -39,6 +39,7 @@ class ContextScenario(Scenario2):
   self.actor_retreat=False;self.actor_clear=False;self.shoulder_offset=None;self.safe_location=False
   self.inspection_done=False;self.support_done=False;self.relocation_done=False
   self.announcement_count=0;self.highbeam_on=False;self.sound_started=False
+  self.onset_elapsed=None
   self.exterior=dict(phase='waiting',at_window=False,knock_count=0,knock_clock_s=0.,voice_count=0,model=None)
 
  def interaction(self,action,session):
@@ -65,11 +66,14 @@ class ContextScenario(Scenario2):
    self.actual_s=s;self.actual_offset=offset;self.actor_clear=actor_clear;self.safe_location=safe_location
    if not driving or self.completed:return
    dt=min(.15,max(0.,dt));self.elapsed+=dt
-   if not self.onset and self.elapsed>=8.:
+   start=self.exterior.get('dialogue_started_s')
+   ready=(start is not None and self.elapsed>=start+.2) if self.profile=='carpool' else self.elapsed>=8.
+   if not self.onset and ready:
     self.onset=True;self.onset_monotonic=time.monotonic();self.phase='event'
+    self.onset_elapsed=self.elapsed
     self.log('scenario_onset',profile=self.profile,stimulus='scripted audio and actor state')
    if not self.onset:return
-   if self.action_at is None and self.elapsed>=83.:
+   if self.action_at is None and self.elapsed>=self.onset_elapsed+75.:
     self.automatic=True;self.action_at=self.elapsed;self.outcome.begin('automatic')
    if self.action_at is None:return
    age=self.elapsed-self.action_at

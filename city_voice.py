@@ -4,7 +4,7 @@ import json
 from functools import lru_cache
 from pathlib import Path
 import wave
-from exterior_dialogue import DIALOGUE
+from exterior_dialogue import DIALOGUE,VOICE_ENGINE,VOICE_INSTRUCTION
 
 CACHE=Path(__file__).resolve().parents[1]/'cache/city-audio'
 TEXTS={
@@ -22,6 +22,8 @@ def audio_path(key):
  if key not in TEXTS:raise ValueError('Unknown city audio')
  record=json.loads((CACHE/'manifest.json').read_text(encoding='utf-8'))['entries'][key]
  if (record['text'],record['speaker'])!=TEXTS[key]:raise ValueError('City audio metadata mismatch')
+ if key in {item[1] for item in DIALOGUE} and (record.get('engine')!=VOICE_ENGINE or record.get('instruct')!=VOICE_INSTRUCTION):
+  raise ValueError('Exterior acting preset mismatch; prepare_exterior_voice.py is required')
  name=record['filename']
  if Path(name).name!=name or not name.endswith('.wav'):raise ValueError('Invalid city audio path')
  p=CACHE/name

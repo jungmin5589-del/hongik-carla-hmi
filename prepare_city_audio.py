@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 from city_voice import CACHE,TEXTS
+from exterior_dialogue import DIALOGUE
 
 COURSE=Path.home()/'Desktop/홍익대/2026 2학기/휴먼 자율주행 인터렉션 디자인/CARLA-YOLO-실습'
 MODEL=COURSE/'models/qwen3-tts-0.6b-sohee'
@@ -26,6 +27,7 @@ def main():
  entries=json.loads(manifest.read_text(encoding='utf-8'))['entries'] if manifest.exists() else {}
  model=None
  for key,(text,speaker) in TEXTS.items():
+  if key in {item[1] for item in DIALOGUE}:continue  # Styled external acting uses prepare_exterior_voice.py.
   filename=hashlib.sha256((speaker+'\n'+text).encode()).hexdigest()+'.wav';target=CACHE/filename
   if not target.exists():
    if model is None:model=Qwen3TTSModel.from_pretrained(str(MODEL),device_map='cuda:0',dtype=torch.bfloat16,attn_implementation='sdpa')

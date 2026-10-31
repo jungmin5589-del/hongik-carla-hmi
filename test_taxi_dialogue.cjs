@@ -14,18 +14,24 @@ async function main(){
  const folder=path.join(__dirname,'validation','taxi-dialogue-'+Date.now());fs.mkdirSync(folder,{recursive:true});
  try{
   await send('Runtime.enable');await send('Page.enable');
-  await send('Page.addScriptToEvaluateOnNewDocument',{source:"window.__taxiPlays=[];document.addEventListener('play',e=>{if(e.target.id==='city-exterior-audio')window.__taxiPlays.push({url:e.target.src,at:performance.now()})},true);"});
+  await send('Page.addScriptToEvaluateOnNewDocument',{source:"window.__taxiPlays=[];document.addEventListener('play',e=>{if(e.target.id==='city-exterior-audio'){const row={url:e.target.src,at:performance.now()};window.__taxiPlays.push(row);fetch('/state').then(r=>r.json()).then(s=>row.state=s)}},true);"});
   await send('Page.navigate',{url:'http://127.0.0.1:8774/'});
   await until(()=>evaluate("Boolean(document.querySelector('[data-profile=carpool]'))"));
   await evaluate("document.querySelector('[data-profile=carpool]').click()");
   await until(()=>evaluate("location.pathname==='/navigation'&&Boolean(document.getElementById('nurec-start'))&&!document.getElementById('nurec-start').disabled"));
   await evaluate("document.getElementById('nurec-start').click()");
-  let final;
-  await until(async()=>{final=await(await fetch('http://127.0.0.1:8774/state')).json();if(final.error||final.scenario?.collision_count)throw Error(final.error||'Collision');return final.scenario?.elapsed_s>=79});
+  let final,firstFrame=false;
+  await until(async()=>{
+   final=await(await fetch('http://127.0.0.1:8774/state')).json();if(final.error||final.scenario?.collision_count)throw Error(final.error||'Collision');
+   if(!firstFrame&&await evaluate('window.__taxiPlays.length>0')){fs.writeFileSync(path.join(folder,'first-line-camera.jpg'),Buffer.from(await(await fetch('http://127.0.0.1:8774/frame.jpg')).arrayBuffer()));firstFrame=true}
+   return final.scenario?.context?.exterior?.dialogue_elapsed_s>=66;
+  });
   const plays=await evaluate('window.__taxiPlays');
   const keys=plays.map(p=>new URL(p.url).pathname.split('/').at(-1).replace('.wav',''));
   const expected=['city_taxi_call','city_taxi_refusal','city_taxi_complaint','city_taxi_plate','city_taxi_door','city_taxi_answer'];
   if(JSON.stringify(keys)!==JSON.stringify(expected))throw Error('Unexpected or repeated voice sequence: '+JSON.stringify(keys));
+  const first=plays[0]?.state?.scenario?.context?.exterior;
+  if(!first||first.dialogue_started_s===null||first.window_distance_m>.38||!first.facing_vehicle)throw Error('First line started before close-range vehicle-facing attention: '+JSON.stringify(first));
   if(errors.length)throw Error(errors.join('; '));
   fs.writeFileSync(path.join(folder,'result.json'),JSON.stringify({passed:true,plays,final,scope:'Actual CARLA + isolated browser playback events; not acting quality or physical speaker/participant validation'},null,2));
   console.log('PASS six distinct taxi lines, once each in order, no runtime exception/collision: '+folder);
