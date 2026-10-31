@@ -8,16 +8,16 @@ import numpy as np
 
 from scenario2 import Scenario2
 from native_carla_route import HighwayRoute
-from pedestrian_voice import narration as pedestrian_narration
+from city_voice import narration as pedestrian_narration
 from pedestrian_gesture import yielding_arm
 
 
 OPTIONS = [
-    dict(action='study_horn', label='양보 안내 보내기',
-         detail='외부 안내로 차량이 기다리고 있음을 전하고 보행자의 반응을 확인합니다.'),
-    dict(action='study_distance', label='관제 확인 요청',
-         detail='관제에 상황 확인을 요청합니다. 확인 중에도 보행자를 위해 정차합니다.'),
-    dict(action='study_wait', label='그대로 기다리기',
+    dict(action='study_horn', label='클락션', detail='경적을 한 번 울리고 보행자의 반응을 확인합니다.'),
+    dict(action='study_highbeam', label='하이빔', detail='상향등을 두 번 점멸하고 보행자의 반응을 확인합니다.'),
+    dict(action='study_direct', scenario_action='direct', label='직접 대응',
+         detail='승객이 직접 보행자에게 말하고, 대화를 마친 뒤 대응 완료를 누릅니다.'),
+    dict(action='study_wait', label='기다리기',
          detail='추가 안내 없이 보행자가 먼저 건널 때까지 기다립니다.')]
 
 
@@ -104,6 +104,7 @@ class YieldScenario(Scenario2):
         self.phase='approach';self.phase_elapsed=0.;self.wait_elapsed=0.
         self.offset=self.curb_right;self.crossed=False;self.clear_elapsed=0.
         self.support_at=None;self.announcement_count=0;self.signal_until=0.
+        self.action_at=None;self.highbeam_at=None;self.direct_pending=False;self.direct_done_at=None
         self.gap=0.;self.last_ego_s=0.;self.result_elapsed=0.
 
     def interaction(self,action,session):
@@ -114,16 +115,29 @@ class YieldScenario(Scenario2):
                 raise ValueError('현재 보행자 상황 설명을 열어 주세요.')
             if self.phase!='mutual_wait':raise ValueError('보행자가 이미 움직이고 있어요. 현재 대응 결과를 확인해 주세요.')
             self.require_action_available()
-            if action not in ('horn','widen','maintain'):raise ValueError('지원하지 않는 보행자 대응입니다.')
+            if action not in ('horn','highbeam','direct','maintain'):raise ValueError('지원하지 않는 보행자 대응입니다.')
             self.last_action=action;self.outcome.begin(action)
+            self.action_at=self.elapsed
             if action=='horn':
-                self.announcement_count+=1;self.signal_until=self.elapsed+2.5
-                self.feedback='양보 안내를 보냈습니다. 보행자의 반응을 확인하며 정차합니다.'
-            elif action=='widen':
-                self.support_at=self.wait_elapsed
-                self.feedback='관제 확인을 요청했습니다. 이 실험에서는 정해진 관제 응답을 재현합니다.'
+                self.horn_count+=1
+                self.feedback='경적을 한 번 울렸습니다. 보행자의 반응을 확인하며 정차합니다.'
+            elif action=='highbeam':
+                self.highbeam_at=self.elapsed
+                self.feedback='상향등을 두 번 점멸합니다. 차량은 정차를 유지합니다.'
+            elif action=='direct':
+                self.direct_pending=True
+                self.feedback='보행자에게 직접 말씀해 주세요. 대화를 마쳤으면 대응 완료를 눌러 주세요.'
             else:self.feedback='현재 양보 판단을 유지하며 보행자가 먼저 건너기를 기다립니다.'
-            self.log('action_applied',action=action,meaning={'horn':'external_yield_notice','widen':'scripted_remote_support','maintain':'wait'}[action])
+            self.log('action_applied',action=action)
+            return self.public()
+
+    def complete_direct(self,session):
+        with self.lock:
+            if session!=self.session or not self.direct_pending or not self.dialog_open or self.completed:
+                raise ValueError('현재 직접 대응 안내를 확인해 주세요.')
+            self.direct_pending=False;self.direct_done_at=self.elapsed
+            self.feedback='직접 대응을 마쳤습니다. 보행자의 반응을 확인합니다.'
+            self.log('passenger_direct_response_completed',source='explicit_button; speech not transcribed')
             return self.public()
 
     def tick_yield(self,dt,driving,speed,ego_s,actual_offset=None):
@@ -136,12 +150,11 @@ class YieldScenario(Scenario2):
                 self.onset_monotonic=time.monotonic();self.log('scenario_onset',stimulus='pedestrian_waves_vehicle_first')
             if self.phase=='mutual_wait':
                 self.wait_elapsed+=dt
-                signal=self.last_action=='horn' and self.elapsed>=self.signal_until
-                support=self.support_at is not None and self.wait_elapsed-self.support_at>=6.
+                signal=self.action_at is not None and self.elapsed-self.action_at>=8. and not self.direct_pending
                 # Unclicked and closed dialogs must resolve independently too.
-                if signal or support or self.wait_elapsed>=28.:
+                if signal or (self.wait_elapsed>=75. and not self.direct_pending):
                     self.phase='crossing';self.phase_elapsed=0.
-                    self.log('pedestrian_crossing_started',cause='notice' if signal else 'remote_script' if support else 'automatic')
+                    self.log('pedestrian_crossing_started',cause=self.last_action if signal else 'automatic')
             elif self.phase=='crossing':
                 self.offset=max(self.curb_left,self.offset-1.25*dt) if actual_offset is None else actual_offset
                 if self.offset<=self.curb_left+.01:
@@ -164,8 +177,9 @@ class YieldScenario(Scenario2):
             if self.outcome.phase=='observing':self.outcome.observed+=dt
 
     def summary(self):
-        prefix={'horn':'양보 안내 후 보행자가 반응해 횡단했습니다. ',
-                'widen':'모의 관제 확인 후 보행자가 횡단했습니다. ',
+        prefix={'horn':'경적 후 보행자가 반응해 횡단했습니다. ',
+                'highbeam':'상향등 점멸 후 보행자가 반응해 횡단했습니다. ',
+                'direct':'승객의 직접 대응 후 보행자가 반응해 횡단했습니다. ',
                 'maintain':'추가 안내 없이 기다린 뒤 보행자가 횡단했습니다. '}.get(self.last_action,'별도 선택 없이 기다린 뒤 보행자가 횡단했습니다. ')
         return prefix+'횡단 구간을 벗어난 것을 확인하고 차량이 다시 출발했습니다.'
 
@@ -178,11 +192,13 @@ class YieldScenario(Scenario2):
         with self.lock:
             return dict(id=self.TYPE_ID,session=self.session,enabled=True,onset=self.onset,
                         elapsed_s=round(self.elapsed,2),duration_s=120,remaining_s=max(0,120-self.elapsed),
-                        gap_m=round(self.gap,2),target_gap_m=3.5,horn_count=0,high_beam=dict(on=False),
+                        gap_m=round(self.gap,2),target_gap_m=7.5,horn_count=self.horn_count,
+                        high_beam=dict(on=self.highbeam_at is not None and (0<=self.elapsed-self.highbeam_at<.5 or 1.0<=self.elapsed-self.highbeam_at<1.5)),
                         dialog_open=self.dialog_open,action=self.last_action,action_complete=self.crossed,
                         feedback=self.feedback,completed=self.completed,completion_reason=self.completion_reason,
                         outcome=self.outcome.public(),yielding=dict(phase=self.phase,offset_m=self.offset,
-                        wait_s=self.wait_elapsed,crossed=self.crossed,announcement_count=self.announcement_count),
+                        wait_s=self.wait_elapsed,crossed=self.crossed,announcement_count=self.announcement_count),direct_pending=self.direct_pending,
+                        collision_count=getattr(self,'collision_count',0),
                         state_source='Scripted CARLA pedestrian and vehicle; not gesture/intent recognition')
 
 
@@ -245,7 +261,7 @@ def navigation_state(b,options):
     phase=sc['yielding']['phase'];active=phase=='mutual_wait' and not sc['completed']
     descriptions={
         'approach':'횡단보도로 접근하며 보행자의 움직임을 확인하고 있어요.',
-        'mutual_wait':pedestrian_narration('yield')['text'],
+        'mutual_wait':pedestrian_narration('city_yield')['text'],
         'crossing':'보행자가 횡단하고 있어요. 횡단 구간을 벗어날 때까지 정차합니다.',
         'clearance':'보행자가 횡단 구간을 벗어났습니다. 주변을 다시 확인하고 있어요.',
         'resume':'횡단 구간이 비어 있는 것을 확인하고 다시 출발합니다.',
@@ -253,10 +269,11 @@ def navigation_state(b,options):
         'complete':sc['feedback']}
     title='보행자와 차량이 서로 양보하며 기다리고 있어요' if phase=='mutual_wait' else descriptions[phase]
     voice=dict(text=descriptions[phase],speaker='Sohee',url=None,cached=False)
-    if phase=='mutual_wait':voice=pedestrian_narration('yield')
+    if phase=='mutual_wait':voice=pedestrian_narration('city_yield')
     event=dict(active=active,pending=sc['outcome']['phase']!='idle',outcome=sc['outcome'],feedback=sc['feedback'],
-               title=title,description=descriptions[phase],narration=voice,options=options,
-               live_detail=f"현재 속도 {b.state['speed_kph']:.0f} km/h · 횡단보도 앞 약 {sc['gap_m']:.1f} m · 대기 {sc['yielding']['wait_s']:.0f}초")
+               title=title,description=descriptions[phase],narration=voice,options=options,staged_options=True,
+               direct_pending=sc['direct_pending'],hide_eta=True,
+               live_detail=f"현재 속도 {b.state['speed_kph']:.0f} km/h · 횡단보도 앞 약 {sc['gap_m']:.1f} m")
     points=r.points[::2,:2].tolist();sid=sc['session']
     return dict(connected=b.state['phase']=='live',schema=2,map='CARLA Town03',renderer='CARLA RGB',
                 source='Scripted mutual-yielding trial; not gesture recognition or real remote service',

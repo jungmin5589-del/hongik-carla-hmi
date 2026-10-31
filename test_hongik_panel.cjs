@@ -30,9 +30,9 @@ function fixture(){
  const options=[{action:'study_inspect',label:'현재 안전조치 확인',detail:'조회'},
   {action:'study_distance',label:'더 감속하고 거리 확보',detail:'감속'},
   {action:'study_stop_request',label:'안전한 곳에 정차 요청',detail:'요청'}];
- function update({active=true,session='s1',feedback='',connected=true,outcome={phase:'idle'},choices=options}={}){
+ function update({active=true,session='s1',feedback='',connected=true,outcome={phase:'idle'},choices=options,staged=false}={}){
   context.window.CockpitUpdate({connected,session:{session_id:session,stage:'running',navigation:{id:session+'-weaving',
-   research_event:{active,options:choices,title:active?'전방에 안개가 있습니다':'경로를 따라 주행합니다',description:'상황 설명',live_detail:'실제 속도와 앞차 간격 안내',feedback,outcome,pending:outcome.phase!=='idle',
+   research_event:{active,options:choices,staged_options:staged,title:active?'전방에 안개가 있습니다':'경로를 따라 주행합니다',description:'상황 설명',live_detail:'실제 속도와 앞차 간격 안내',feedback,outcome,pending:outcome.phase!=='idle',
     narration:{cached:true,url:'/api/narration/audio/fog.wav',speaker:'Sohee'}}}}});
  }
  return{nodes,sent,audio,document,listeners,update,$:id=>nodes.get(id),
@@ -41,6 +41,11 @@ function fixture(){
 const settle=()=>new Promise(r=>setImmediate(r));
 (async()=>{
  let f=fixture();f.update({active:false});assert(f.$('research-dialog').hidden);assert(!f.$('research-launch').classList.contains('has-update'));
+ const staged=fixture();staged.update({staged:true});await staged.$('research-launch').onclick();
+ assert(staged.$('research-options').hidden);assert(!staged.$('research-options-open').hidden);
+ assert.equal(staged.sent.at(-1).client_event.options_visible,false);
+ staged.audio[0].onended();await settle();await settle();
+ assert(!staged.$('research-options').hidden);assert(staged.sent.some(x=>x.action==='study_options'));
  f.update();await settle();assert(f.$('research-dialog').hidden);assert(f.$('research-launch').classList.contains('has-update'));
  assert.equal(f.sent.filter(x=>x.action==='study_presented').length,1);f.update();await settle();assert.equal(f.sent.filter(x=>x.action==='study_presented').length,1);
  await f.$('research-launch').onclick();assert(!f.$('research-dialog').hidden);assert(!f.$('research-options').hidden);

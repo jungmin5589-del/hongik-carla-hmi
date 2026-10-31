@@ -1,0 +1,8 @@
+body.city-study #route-card .route-details,body.city-study #turn-distance{display:none!important}
+body.city-study #research-options{display:flex;flex-direction:column;gap:9px}
+body.city-study .research-option{width:100%;min-height:74px;padding:15px 18px;gap:6px}
+body.city-study #research-dialog .research-dialog-content{padding:24px 28px}
+body.city-study #research-description{margin-bottom:16px}
+body.city-study #research-options-open,body.city-study #research-direct-done{width:100%;margin:0 0 18px;font-family:inherit}
+body.city-study #research-options-open[hidden],body.city-study #research-direct-done[hidden]{display:none}
+@media(max-height:850px){body.city-study .research-option{min-height:68px;padding:13px 16px;gap:5px}}

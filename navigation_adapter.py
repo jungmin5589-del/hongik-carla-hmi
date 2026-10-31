@@ -243,13 +243,16 @@ class NavigationAdapter:
                 chosen=next(option for option in self.options() if option['action']==action)
                 if chosen.get('disabled'):raise ValueError(chosen['disabled_reason'])
                 sc.log('navigation_execution_confirmed', action=action, client_event=details)
-                value = {'study_horn':'horn','study_distance':'widen','study_wait':'maintain',
+                value = chosen.get('scenario_action') or {'study_horn':'horn','study_distance':'widen','study_wait':'maintain',
                          'study_inspect':'inspect','study_stop_request':'stop_request','study_highbeam':'highbeam',
                          'study_overtake':'overtake'}[action]
                 result = sc.interaction(value, session)
                 message = result['feedback']
                 self.options_open = False
                 self.choice = None
+            elif action=='study_direct_done' and hasattr(sc,'complete_direct'):
+                message=sc.complete_direct(session)['feedback']
+                sc.log('navigation_direct_done',client_event=details)
             elif action == 'emergency_stop':
                 with b.lock:
                     b.command['mode'] = 'paused'

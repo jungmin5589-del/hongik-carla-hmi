@@ -12,6 +12,8 @@ root.innerHTML=`<button id="research-launch" type="button" aria-label="홍익 AI
  <p id="research-description"></p><p id="research-live-detail"></p>
  <div class="research-voice"><button id="research-read" type="button">설명 다시 듣기</button><small id="research-voice-status" role="status">Sohee</small></div>
  <div id="research-feedback" role="status" hidden></div>
+ <button id="research-direct-done" type="button" class="research-primary" hidden>대응 완료</button>
+ <button id="research-options-open" type="button" class="research-primary" hidden>대응 방법 보기</button>
  <p id="research-options-label">어떻게 할까요?</p><div id="research-options" role="group" aria-labelledby="research-options-label"></div>
  <div id="research-confirmation" hidden><p id="research-confirm-copy"></p><div class="research-confirm-actions">
  <button id="research-back" type="button">선택 취소</button><button id="research-execute" type="button" class="research-primary">실행</button></div></div>
@@ -24,6 +26,7 @@ let busy=false,dialogReady=false,optionsReady=false,opening=false,generation=0,l
 let sendTail=Promise.resolve(),localFeedback='',feedbackBaseline='';
 const previous=window.CockpitUpdate;
 let player=null,speechTurn=0;
+let explanationFinished=false;
 let voiceEnabled=true;try{
  voiceEnabled=localStorage.getItem('nurec-sohee-enabled')!=='false';
  const query=new URLSearchParams(location.search);if(query.has('voice')){
@@ -47,7 +50,7 @@ function readExplanation(){
  try{
   player=new Audio(voice.url);player.volume=1;player.id='research-sohee-audio';player.hidden=true;root.appendChild(player);
   player.onplaying=()=>{if(turn===speechTurn){$('research-read').textContent='읽기 멈춤';$('research-voice-status').textContent='Sohee · 읽는 중'}};
-  player.onended=()=>{if(turn===speechTurn)stopSpeech()};
+  player.onended=()=>{if(turn===speechTurn){stopSpeech();if(event?.staged_options&&phase==='explanation'){explanationFinished=true;revealOptions()}}};
   player.onerror=()=>{if(turn===speechTurn){stopSpeech();$('research-voice-status').textContent='음성을 재생하지 못했어요. 다시 눌러 주세요.'}};
   const playback=player.play();playback?.catch(()=>{if(turn===speechTurn){stopSpeech();$('research-voice-status').textContent='다시 듣기를 눌러 주세요.'}});
  }catch{stopSpeech();$('research-voice-status').textContent='음성을 재생하지 못했어요.'}
@@ -90,6 +93,10 @@ function render(){
  $('research-unread').hidden=!unread;
  launch.classList.toggle('has-update',unread&&Boolean(event.active)&&dialog.hidden);
  const showOptions=Boolean(event.active)&&phase==='options';
+ $('research-options-open').hidden=!event.staged_options||phase!=='explanation'||!event.active||Boolean(event.pending);
+ $('research-options-open').disabled=busy;
+ $('research-direct-done').hidden=!event.direct_pending;
+ $('research-direct-done').disabled=busy;
  $('research-options').hidden=!showOptions;
  $('research-options-label').hidden=!showOptions;
  $('research-confirmation').hidden=phase!=='confirm';
@@ -111,7 +118,7 @@ function render(){
  for(const button of $('research-options').children)button.disabled=button.dataset.unavailable==='true'||busy||!optionsReady||Boolean(event.pending)||!event.active;
 }
 async function prepareOptions(){
- if(opening||busy||!dialogReady||optionsReady||dialog.hidden||!event?.active||event.pending)return;
+ if(opening||busy||!dialogReady||optionsReady||dialog.hidden||!event?.active||event.pending||phase==='explanation')return;
  const token=generation;opening=true;busy=true;render();
  try{await post('study_options',{options_visible:true});if(isCurrent(token))optionsReady=true}
  catch(error){if(isCurrent(token))showError(error)}
@@ -119,16 +126,21 @@ async function prepareOptions(){
 }
 async function open(){
  if(!session||!event)return;
- const token=++generation;lastFocus=document.activeElement;phase='options';selected=null;
+ const token=++generation;lastFocus=document.activeElement;phase=event.staged_options?'explanation':'options';selected=null;explanationFinished=false;
  dialogReady=false;optionsReady=false;opening=true;busy=true;localFeedback='';feedbackBaseline=event.feedback||'';
  dialog.hidden=false;unread=false;launch.setAttribute('aria-expanded','true');render();$('research-close').focus();
  if(!event.pending)readExplanation();
  try{
-  const exposed=Boolean(event.active)&&!event.pending;
+  const exposed=Boolean(event.active)&&!event.pending&&!event.staged_options;
   await post('study_open',{options_visible:exposed});
   if(isCurrent(token)){dialogReady=true;optionsReady=exposed}
  }catch(error){if(isCurrent(token))showError(error)}
- finally{if(isCurrent(token)){opening=false;busy=false;render();prepareOptions()}}
+ finally{if(isCurrent(token)){opening=false;busy=false;render();if(explanationFinished)revealOptions();else prepareOptions()}}
+}
+async function revealOptions(){
+ if(!event?.staged_options||phase!=='explanation'||dialog.hidden)return;
+ if(!dialogReady||busy){explanationFinished=true;return}
+ stopSpeech();phase='options';render();await prepareOptions();
 }
 function close(){
  if(dialog.hidden)return;
@@ -174,6 +186,8 @@ async function execute(){
 }
 launch.onclick=()=>dialog.hidden?open():close();
 $('research-close').onclick=close;$('research-back').onclick=cancel;$('research-execute').onclick=execute;
+$('research-options-open').onclick=()=>{explanationFinished=true;revealOptions()};
+$('research-direct-done').onclick=async()=>{if(busy||!event?.direct_pending)return;const token=generation;busy=true;render();try{await post('study_direct_done')}catch(error){if(isCurrent(token))showError(error)}finally{if(isCurrent(token)){busy=false;render()}}};
 $('research-read').onclick=()=>player?stopSpeech():readExplanation();
 $('research-ending-home').onclick=()=>document.getElementById('nurec-home')?.click();
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dialog.hidden){e.preventDefault();close()}});
@@ -199,7 +213,7 @@ window.CockpitUpdate=data=>{
   dialog.hidden=true;localFeedback='';feedbackBaseline='';signature=null;launch.setAttribute('aria-expanded','false');
  }
  session=data.session;current=session.navigation;event=next;launch.disabled=false;
- if(!event.active){unread=false;phase='options';selected=null;optionsReady=false}
+ if(!event.active){unread=false;if(!event.staged_options||dialog.hidden)phase='options';selected=null;optionsReady=false}
  if(event.pending||event.outcome?.phase==='complete'){unread=false;stopSpeech()}
  notify();prepareOptions();
 };

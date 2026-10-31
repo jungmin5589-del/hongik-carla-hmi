@@ -56,13 +56,13 @@ class YieldTests(unittest.TestCase):
         self.command('study_choice',{'choice':'study_horn'})
         first=self.command('study_horn',request='notice-once')
         self.assertEqual(first,self.command('study_horn',request='notice-once'))
-        self.assertEqual(self.sc.announcement_count,1)
-        self.assertEqual(self.sc.horn_count,0)
-        self.tick(3)
+        self.assertEqual(self.sc.announcement_count,0)
+        self.assertEqual(self.sc.horn_count,1)
+        self.tick(8.2)
         self.assertEqual(self.sc.phase,'crossing');self.assertEqual(self.sc.target_speed(),0)
 
     def test_actual_actor_blocks_release_even_after_long_time(self):
-        self.tick(30,offset=3.)
+        self.tick(76,offset=3.)
         self.assertEqual(self.sc.phase,'crossing')
         self.tick(80,offset=2.)
         self.assertFalse(self.sc.crossed);self.assertEqual(self.sc.target_speed(),0)
@@ -72,7 +72,7 @@ class YieldTests(unittest.TestCase):
         self.assertEqual(self.sc.phase,'resume');self.assertGreater(self.sc.target_speed(),0)
 
     def test_no_click_resolves_and_ends_after_actual_resume(self):
-        self.tick(28.5)
+        self.tick(75.5)
         self.tick(8.)
         self.tick(3.)
         self.assertEqual(self.sc.phase,'resume')
@@ -86,16 +86,27 @@ class YieldTests(unittest.TestCase):
     def test_support_waits_and_close_never_executes(self):
         self.tick(1)
         self.command('study_open',{'options_visible':True})
-        self.command('study_choice',{'choice':'study_distance'})
+        self.command('study_choice',{'choice':'study_direct'})
         self.command('study_close')
         self.assertIsNone(self.sc.last_action)
-        with self.assertRaises(ValueError):self.command('study_distance')
+        with self.assertRaises(ValueError):self.command('study_direct')
 
     def test_cannot_request_notice_once_crossing_has_started(self):
-        self.tick(30)
+        self.tick(76)
         self.sc.interaction('open',self.sc.session)
         with self.assertRaises(ValueError):self.sc.interaction('horn',self.sc.session)
         self.assertEqual(self.sc.announcement_count,0)
+
+    def test_direct_response_waits_for_explicit_completion(self):
+        self.tick(1)
+        self.command('study_open',{'options_visible':True})
+        self.command('study_choice',{'choice':'study_direct'})
+        self.command('study_direct')
+        self.tick(80)
+        self.assertTrue(self.sc.direct_pending);self.assertEqual(self.sc.phase,'mutual_wait')
+        self.command('study_direct_done')
+        self.tick(.2)
+        self.assertFalse(self.sc.direct_pending);self.assertEqual(self.sc.phase,'crossing')
 
 
 if __name__=='__main__':unittest.main()
