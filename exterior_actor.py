@@ -4,6 +4,7 @@ import carla
 import numpy as np
 from pedestrian_gesture import swing_between,carla_rotation
 from exterior_dialogue import dialogue_cue,AttentionGate
+from exterior_gait import ExteriorGait,stationary_turn
 
 IMPACTS=(.75,1.12,1.72)
 
@@ -55,6 +56,8 @@ class ExteriorActor:
   self.pose=None;self.last_elapsed=0.;self.knock_clock=0.;self.knocks=0;self.voice_count=0;self.arm_weight=0.
   self.attention=AttentionGate()
   self.knock_started_at=None;self.door_speech_at=None
+  self.gait=ExteriorGait();self.gaze_error=0.;self.last_gaze_sample=-1.
+  self.head_index=self.actor.get_bone_names().index('crl_Head__C')
 
  def update(self,sc,driving):
   if self.pose is None:self.pose={b.name:b for b in self.actor.get_bones().bone_transforms}
@@ -71,13 +74,18 @@ class ExteriorActor:
   look,_=self.route.sample(sc.actual_s+.9,sc.actual_offset)
   look_yaw=math.degrees(math.atan2(float(look[1])-tr.location.y,float(look[0])-tr.location.x))
   facing_error=(look_yaw-tr.rotation.yaw+180.)%360.-180.
+  if self.gait.available and sc.elapsed-self.last_gaze_sample>=.09:
+   head=self.actor.get_bone_world_transforms()[self.head_index]
+   reference=self.gait.idle['comp'][self.gait.names.index('crl_Head__C')]
+   forward=np.asarray(head.get_matrix())[:3,:3]@reference.T@np.array([1.,0.,0.])
+   gaze_yaw=math.degrees(math.atan2(float(forward[1]),float(forward[0])))
+   self.gaze_error=(look_yaw-gaze_yaw+180.)%360.-180.;self.last_gaze_sample=sc.elapsed
   door,_=self.route.sample(sc.actual_s+1.35,sc.actual_offset+1.65)
   door_distance=math.hypot(float(door[0])-tr.location.x,float(door[1])-tr.location.y)
   call,_=self.route.sample(sc.actual_s+2.1,sc.actual_offset+1.85)
   call_distance=math.hypot(float(call[0])-tr.location.x,float(call[1])-tr.location.y)
-  # Preserve native walking translation/animation; keep the body facing the cabin during short side steps.
-  if not sc.actor_retreat and phase!='waiting':
-   tr.rotation.yaw=look_yaw;self.actor.set_transform(tr)
+  # CharacterMovement owns all translating motion. Only turn the body once stopped.
+  stationary_turn(self.actor,tr,look_yaw,dt,moving,speed,sc.actor_retreat or phase=='waiting')
   was_started=self.attention.started_at
   started=self.attention.tick(dt,sc.elapsed,call_distance,facing_error,speed,sc.actor_retreat)
   if was_started is None and started is not None:
@@ -92,12 +100,14 @@ class ExteriorActor:
     self.door_speech_at=sc.elapsed
     sc.log('exterior_door_speech_started',knock_count=self.knocks,window_distance_m=round(door_distance,3),facing_error_deg=round(facing_error,2))
    self.arm_weight=min(1.,self.arm_weight+dt/.55)
+  else:self.arm_weight=0.
+  if self.gait.available and not sc.actor_retreat:
+   bones=dict(self.gait.pose(tr.location,speed,dt,facing_error))
+   if can_knock:bones.update((n,t) for n,t in door_pose(self.pose,self.knock_clock,sc.elapsed,self.arm_weight) if n!='crl_Head__C')
+   self.actor.set_bones(carla.WalkerBoneControlIn(list(bones.items())));self.actor.show_pose()
+  elif not moving and speed<.08 and not sc.actor_retreat:
    self.actor.set_bones(carla.WalkerBoneControlIn(door_pose(self.pose,self.knock_clock,sc.elapsed,self.arm_weight)));self.actor.show_pose()
-  elif speed<.15 and phase!='leaving':
-   self.arm_weight=0.;b=self.pose['crl_Head__C'].relative;r=b.rotation
-   rest_arm=[(name,self.pose[name].relative) for name in ('crl_arm__R','crl_foreArm__R')]
-   self.actor.set_bones(carla.WalkerBoneControlIn(rest_arm+[('crl_Head__C',carla.Transform(b.location,carla.Rotation(pitch=r.pitch+7.,yaw=r.yaw+2.*math.sin(sc.elapsed*.85),roll=r.roll)))]));self.actor.show_pose()
-  else:self.arm_weight=0.;self.actor.hide_pose()
+  else:self.actor.hide_pose()
   cue=dialogue_cue(sc.elapsed,sc.actor_retreat,started,self.door_speech_at)
   self.voice_count=max(self.voice_count,cue['index'])
   origin,road_yaw=self.route.sample(sc.actual_s,sc.actual_offset)
@@ -105,6 +115,8 @@ class ExteriorActor:
   sc.exterior=dict(phase=phase,at_window=near,knock_count=self.knocks,knock_clock_s=round(self.knock_clock,3),
                    walk_speed_mps=round(speed,3),local_forward_m=round(ax*math.cos(road_yaw)+ay*math.sin(road_yaw),3),
                    local_right_m=round(-ax*math.sin(road_yaw)+ay*math.cos(road_yaw),3),
+                   gait_source='cached_native_cycle_with_mesh_gaze' if self.gait.available else 'native_walk_without_moving_gaze',
+                   gaze_error_deg=round(self.gaze_error,2) if self.gait.available else None,gaze_sample_s=self.last_gaze_sample,
                    call_distance_m=round(call_distance,3),knock_started_s=self.knock_started_at,door_speech_started_s=self.door_speech_at,
                    window_distance_m=round(door_distance,3),facing_vehicle=abs(facing_error)<=18.,facing_error_deg=round(facing_error,2),
                    dialogue_started_s=started,dialogue_elapsed_s=round(sc.elapsed-started,3) if started is not None else None,

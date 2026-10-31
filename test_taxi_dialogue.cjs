@@ -38,7 +38,7 @@ async function main(){
   const second=plays[1]?.state?.scenario?.context?.exterior;
   if(!second?.at_window||second.knock_count<1||first.local_forward_m-second.local_forward_m<.4)throw Error('Door line did not follow physical movement and knocking: '+JSON.stringify(second));
   const moving=gaze.filter(s=>s.phase==='pacing'&&s.walk_speed_mps>.08);
-  if(moving.length<3||moving.some(s=>Math.abs(s.facing_error_deg)>30))throw Error('Moving gaze was not maintained: '+JSON.stringify(moving));
+  if(moving.length<3||moving.some(s=>s.gaze_error_deg===null||Math.abs(s.gaze_error_deg)>35))throw Error('Moving visual gaze was not maintained: '+JSON.stringify(moving));
   const near=gaze.filter(s=>s.knock_started_s!==null);
   if(near.some(s=>s.local_forward_m<.8||s.local_forward_m>2.2||s.local_right_m<1.4||s.local_right_m>2.1))throw Error('Actor wandered outside the short door-side strip');
   if(errors.length)throw Error(errors.join('; '));
