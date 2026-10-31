@@ -20,20 +20,29 @@ async function main(){
   await evaluate("document.querySelector('[data-profile=carpool]').click()");
   await until(()=>evaluate("location.pathname==='/navigation'&&Boolean(document.getElementById('nurec-start'))&&!document.getElementById('nurec-start').disabled"));
   await evaluate("document.getElementById('nurec-start').click()");
-  let final,firstFrame=false;
+  let final,firstFrame=false,doorFrame=false;const gaze=[];
   await until(async()=>{
    final=await(await fetch('http://127.0.0.1:8774/state')).json();if(final.error||final.scenario?.collision_count)throw Error(final.error||'Collision');
    if(!firstFrame&&await evaluate('window.__taxiPlays.length>0')){fs.writeFileSync(path.join(folder,'first-line-camera.jpg'),Buffer.from(await(await fetch('http://127.0.0.1:8774/frame.jpg')).arrayBuffer()));firstFrame=true}
-   return final.scenario?.context?.exterior?.dialogue_elapsed_s>=66;
+   if(!doorFrame&&await evaluate('window.__taxiPlays.length>=2')){fs.writeFileSync(path.join(folder,'door-line-camera.jpg'),Buffer.from(await(await fetch('http://127.0.0.1:8774/frame.jpg')).arrayBuffer()));doorFrame=true}
+   const ex=final.scenario?.context?.exterior;
+   if(ex?.dialogue_started_s!==null&&ex?.dialogue_started_s!==undefined)gaze.push({elapsed:final.scenario.elapsed_s,...ex});
+   return ex?.door_speech_started_s!==null&&ex?.door_speech_started_s!==undefined&&final.scenario.elapsed_s-ex.door_speech_started_s>=56;
   });
   const plays=await evaluate('window.__taxiPlays');
   const keys=plays.map(p=>new URL(p.url).pathname.split('/').at(-1).replace('.wav',''));
   const expected=['city_taxi_call','city_taxi_refusal','city_taxi_complaint','city_taxi_plate','city_taxi_door','city_taxi_answer'];
   if(JSON.stringify(keys)!==JSON.stringify(expected))throw Error('Unexpected or repeated voice sequence: '+JSON.stringify(keys));
   const first=plays[0]?.state?.scenario?.context?.exterior;
-  if(!first||first.dialogue_started_s===null||first.window_distance_m>.38||!first.facing_vehicle)throw Error('First line started before close-range vehicle-facing attention: '+JSON.stringify(first));
+  if(!first||first.dialogue_started_s===null||first.call_distance_m>.38||!first.facing_vehicle)throw Error('First line started before close-range vehicle-facing attention: '+JSON.stringify(first));
+  const second=plays[1]?.state?.scenario?.context?.exterior;
+  if(!second?.at_window||second.knock_count<1||first.local_forward_m-second.local_forward_m<.4)throw Error('Door line did not follow physical movement and knocking: '+JSON.stringify(second));
+  const moving=gaze.filter(s=>s.phase==='pacing'&&s.walk_speed_mps>.08);
+  if(moving.length<3||moving.some(s=>Math.abs(s.facing_error_deg)>30))throw Error('Moving gaze was not maintained: '+JSON.stringify(moving));
+  const near=gaze.filter(s=>s.knock_started_s!==null);
+  if(near.some(s=>s.local_forward_m<.8||s.local_forward_m>2.2||s.local_right_m<1.4||s.local_right_m>2.1))throw Error('Actor wandered outside the short door-side strip');
   if(errors.length)throw Error(errors.join('; '));
-  fs.writeFileSync(path.join(folder,'result.json'),JSON.stringify({passed:true,plays,final,scope:'Actual CARLA + isolated browser playback events; not acting quality or physical speaker/participant validation'},null,2));
+  fs.writeFileSync(path.join(folder,'result.json'),JSON.stringify({passed:true,plays,gaze,final,scope:'Actual CARLA + isolated browser playback events; not acting quality or physical speaker/participant validation'},null,2));
   console.log('PASS six distinct taxi lines, once each in order, no runtime exception/collision: '+folder);
  }finally{
   await fetch('http://127.0.0.1:8774/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'paused'})}).catch(()=>{});

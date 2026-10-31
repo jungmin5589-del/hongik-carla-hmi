@@ -66,8 +66,8 @@ class ContextTests(unittest.TestCase):
   self.assertIsNone(dialogue_cue(500.)['key'],'A startup timer cannot make a distant actor speak')
   self.assertIsNone(dialogue_cue(19.,started_at=20.)['key'])
   self.assertEqual(dialogue_cue(20.,started_at=20.)['index'],1)
-  self.assertEqual(dialogue_cue(50.,started_at=20.)['key'],'city_taxi_plate')
-  self.assertIsNone(dialogue_cue(100.,started_at=20.)['key'])
+  self.assertEqual(dialogue_cue(50.,started_at=20.,door_speech_at=28.)['key'],'city_taxi_plate')
+  self.assertIsNone(dialogue_cue(100.,started_at=20.,door_speech_at=28.)['key'])
   for elapsed in (20,28,38,50,64,78):self.assertIsNone(dialogue_cue(elapsed,True,20.)['key'])
  def test_attention_requires_close_stationary_facing_then_a_short_look(self):
   gate=AttentionGate()
@@ -84,5 +84,14 @@ class ContextTests(unittest.TestCase):
   sc.exterior['dialogue_started_s']=sc.elapsed
   self.tick(sc,.4)
   self.assertTrue(sc.onset)
+ def test_door_line_waits_for_actual_first_knock_and_later_lines_follow_it(self):
+  self.assertIsNone(dialogue_cue(80.,started_at=20.)['key'])
+  self.assertEqual(dialogue_cue(40.,started_at=20.,door_speech_at=40.)['key'],'city_taxi_refusal')
+  self.assertEqual(dialogue_cue(50.,started_at=20.,door_speech_at=40.)['key'],'city_taxi_complaint')
+ def test_post_greeting_motion_stays_in_a_short_strip_next_to_the_door(self):
+  for elapsed in (28.+i*.2 for i in range(360)):
+   phase,s,off=exterior_target(float(elapsed),5.,False,20.,28.)
+   self.assertIn(phase,('knocking','pacing'));self.assertGreaterEqual(s,6.35);self.assertLessEqual(s,6.95)
+   self.assertGreaterEqual(off,5.15);self.assertLessEqual(off,5.3)
 
 if __name__=='__main__':unittest.main()

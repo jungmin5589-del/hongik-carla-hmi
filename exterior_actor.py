@@ -7,14 +7,16 @@ from exterior_dialogue import dialogue_cue,AttentionGate
 
 IMPACTS=(.75,1.12,1.72)
 
-def exterior_target(elapsed,start_s,retreat=False):
+def exterior_target(elapsed,start_s,retreat=False,started_at=None,knock_started_at=None):
  if retreat:return 'leaving',start_s+22.,5.8
- if elapsed<4:return 'waiting',start_s+12.,7.
- if elapsed<11:return 'approaching',start_s+4.,5.9
- cycle=(elapsed-11.)%22.
- if cycle<5:return 'peering',start_s+2.6,5.45
- if cycle<15:return 'knocking',start_s+1.35,5.15
- return 'pacing',start_s+4.,5.85
+ if elapsed<4:return 'waiting',start_s+9.,6.4
+ if started_at is None:return 'approaching',start_s+2.1,5.35
+ if elapsed-started_at<4.3:return 'looking',start_s+2.1,5.35
+ if knock_started_at is None:return 'door_approach',start_s+1.35,5.15
+ cycle=(elapsed-knock_started_at)%18.
+ if cycle<7. or cycle>=13.:return 'knocking',start_s+1.35,5.15
+ if cycle<10.:return 'pacing',start_s+1.95,5.3
+ return 'pacing',start_s+1.4,5.25
 
 def knock_count(clock):
  clock=max(0.,clock)
@@ -36,7 +38,7 @@ def door_pose(rest,clock,elapsed,weight=1.):
  # Head search motion is small; no wrist/finger deformation or skeleton scaling.
  if 'crl_Head__C' in rest:
   b=rest['crl_Head__C'].relative;r=b.rotation
-  result.append(('crl_Head__C',carla.Transform(b.location,carla.Rotation(pitch=r.pitch+5.,yaw=r.yaw+10.*math.sin(elapsed*.85),roll=r.roll))))
+  result.append(('crl_Head__C',carla.Transform(b.location,carla.Rotation(pitch=r.pitch+5.,yaw=r.yaw+2.*math.sin(elapsed*.85),roll=r.roll))))
  return result
 
 class ExteriorActor:
@@ -52,43 +54,58 @@ class ExteriorActor:
   if self.actor is None:raise RuntimeError('Exterior person spawn is blocked')
   self.pose=None;self.last_elapsed=0.;self.knock_clock=0.;self.knocks=0;self.voice_count=0;self.arm_weight=0.
   self.attention=AttentionGate()
+  self.knock_started_at=None;self.door_speech_at=None
 
  def update(self,sc,driving):
   if self.pose is None:self.pose={b.name:b for b in self.actor.get_bones().bone_transforms}
   dt=min(.15,max(0.,sc.elapsed-self.last_elapsed));self.last_elapsed=sc.elapsed
   if not driving:
    self.actor.apply_control(carla.WalkerControl(speed=0.));return
-  phase,s,off=exterior_target(sc.elapsed,self.start_s,sc.actor_retreat)
+  phase,s,off=exterior_target(sc.elapsed,self.start_s,sc.actor_retreat,self.attention.started_at,self.knock_started_at)
   xyz,yaw=self.route.sample(s,off);tr=self.actor.get_transform()
   dx,dy=float(xyz[0])-tr.location.x,float(xyz[1])-tr.location.y;distance=math.hypot(dx,dy)
-  moving=distance>.22 and phase!='waiting' and driving
-  self.actor.apply_control(carla.WalkerControl(direction=carla.Vector3D(x=dx/max(.01,distance),y=dy/max(.01,distance)),speed=(1.05 if sc.actor_retreat else .9) if moving else 0.))
-  near=distance<.38 and phase in ('peering','knocking')
+  moving=distance>.13 and phase!='waiting' and driving
+  pace=1.05 if sc.actor_retreat else .85 if self.attention.started_at is None else .32
+  self.actor.apply_control(carla.WalkerControl(direction=carla.Vector3D(x=dx/max(.01,distance),y=dy/max(.01,distance)),speed=pace if moving else 0.))
+  speed=self.actor.get_velocity().length()
   look,_=self.route.sample(sc.actual_s+.9,sc.actual_offset)
   look_yaw=math.degrees(math.atan2(float(look[1])-tr.location.y,float(look[0])-tr.location.x))
   facing_error=(look_yaw-tr.rotation.yaw+180.)%360.-180.
   door,_=self.route.sample(sc.actual_s+1.35,sc.actual_offset+1.65)
   door_distance=math.hypot(float(door[0])-tr.location.x,float(door[1])-tr.location.y)
-  if near and driving:
-   desired=look_yaw
-   delta=(desired-tr.rotation.yaw+180.)%360.-180.
-   tr.rotation.yaw+=max(-dt*100.,min(dt*100.,delta));self.actor.set_transform(tr)
+  call,_=self.route.sample(sc.actual_s+2.1,sc.actual_offset+1.85)
+  call_distance=math.hypot(float(call[0])-tr.location.x,float(call[1])-tr.location.y)
+  # Preserve native walking translation/animation; keep the body facing the cabin during short side steps.
+  if not sc.actor_retreat and phase!='waiting':
+   tr.rotation.yaw=look_yaw;self.actor.set_transform(tr)
   was_started=self.attention.started_at
-  started=self.attention.tick(dt,sc.elapsed,door_distance,facing_error,self.actor.get_velocity().length(),sc.actor_retreat)
+  started=self.attention.tick(dt,sc.elapsed,call_distance,facing_error,speed,sc.actor_retreat)
   if was_started is None and started is not None:
-   sc.log('exterior_dialogue_started',window_distance_m=round(door_distance,3),facing_error_deg=round(facing_error,2),source='actual actor position and orientation')
-  can_knock=started is not None and sc.elapsed-started>=3.
-  if near and phase=='knocking' and driving and can_knock:
+   sc.log('exterior_dialogue_started',call_distance_m=round(call_distance,3),facing_error_deg=round(facing_error,2),source='actual actor position and orientation')
+  near=door_distance<.38 and speed<.15
+  door_arrived=near and started is not None and sc.elapsed-started>=4.3 and not sc.actor_retreat
+  if door_arrived and self.knock_started_at is None:self.knock_started_at=sc.elapsed
+  can_knock=door_arrived and phase in ('door_approach','knocking')
+  if can_knock:
    before=knock_count(self.knock_clock);self.knock_clock+=dt;self.knocks+=knock_count(self.knock_clock)-before
+   if self.knocks and self.door_speech_at is None:
+    self.door_speech_at=sc.elapsed
+    sc.log('exterior_door_speech_started',knock_count=self.knocks,window_distance_m=round(door_distance,3),facing_error_deg=round(facing_error,2))
    self.arm_weight=min(1.,self.arm_weight+dt/.55)
    self.actor.set_bones(carla.WalkerBoneControlIn(door_pose(self.pose,self.knock_clock,sc.elapsed,self.arm_weight)));self.actor.show_pose()
-  elif near:
+  elif speed<.15 and phase!='leaving':
    self.arm_weight=0.;b=self.pose['crl_Head__C'].relative;r=b.rotation
-   self.actor.set_bones(carla.WalkerBoneControlIn([('crl_Head__C',carla.Transform(b.location,carla.Rotation(pitch=r.pitch+7.,yaw=r.yaw+16.*math.sin(sc.elapsed*.85),roll=r.roll)))]));self.actor.show_pose()
+   rest_arm=[(name,self.pose[name].relative) for name in ('crl_arm__R','crl_foreArm__R')]
+   self.actor.set_bones(carla.WalkerBoneControlIn(rest_arm+[('crl_Head__C',carla.Transform(b.location,carla.Rotation(pitch=r.pitch+7.,yaw=r.yaw+2.*math.sin(sc.elapsed*.85),roll=r.roll)))]));self.actor.show_pose()
   else:self.arm_weight=0.;self.actor.hide_pose()
-  cue=dialogue_cue(sc.elapsed,sc.actor_retreat,started)
+  cue=dialogue_cue(sc.elapsed,sc.actor_retreat,started,self.door_speech_at)
   self.voice_count=max(self.voice_count,cue['index'])
-  sc.exterior=dict(phase='looking' if near and not can_knock else phase,at_window=near,knock_count=self.knocks,knock_clock_s=round(self.knock_clock,3),
+  origin,road_yaw=self.route.sample(sc.actual_s,sc.actual_offset)
+  ax,ay=tr.location.x-float(origin[0]),tr.location.y-float(origin[1])
+  sc.exterior=dict(phase=phase,at_window=near,knock_count=self.knocks,knock_clock_s=round(self.knock_clock,3),
+                   walk_speed_mps=round(speed,3),local_forward_m=round(ax*math.cos(road_yaw)+ay*math.sin(road_yaw),3),
+                   local_right_m=round(-ax*math.sin(road_yaw)+ay*math.cos(road_yaw),3),
+                   call_distance_m=round(call_distance,3),knock_started_s=self.knock_started_at,door_speech_started_s=self.door_speech_at,
                    window_distance_m=round(door_distance,3),facing_vehicle=abs(facing_error)<=18.,facing_error_deg=round(facing_error,2),
                    dialogue_started_s=started,dialogue_elapsed_s=round(sc.elapsed-started,3) if started is not None else None,
                    voice_count=self.voice_count,voice_cue=cue,model=self.actor.type_id)

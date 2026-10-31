@@ -177,7 +177,7 @@ def navigation_state(b,options):
  event=dict(active=sc['onset'] and sc['outcome']['phase']=='idle' and not sc['completed'],pending=sc['outcome']['phase']!='idle',
             outcome=sc['outcome'],title=title,description=voice['text'] if sc['outcome']['phase']=='idle' else sc['feedback'],
             narration=voice,feedback=sc['feedback'],options=options,staged_options=True,hide_eta=True,
-            live_detail=({'waiting':'동승자 대기 중','approaching':'차량 쪽으로 접근 중','peering':'차량 안쪽을 들여다보는 중','knocking':'조수석 문 가까이에서 움직이는 중','pacing':'차량 옆을 오가는 중','leaving':'차량에서 물러나는 중'}.get(sc['context']['exterior']['phase'],'주변 확인 중')+' · 문 닫힘 유지') if b.profile=='carpool' else f"현재 속도 {b.state['speed_kph']:.0f} km/h")
+            live_detail=({'waiting':'동승자 대기 중','approaching':'차량 쪽으로 접근 중','looking':'차량 안쪽을 바라보는 중','door_approach':'조수석 문 쪽으로 이동 중','peering':'차량 안쪽을 들여다보는 중','knocking':'조수석 문 가까이에서 움직이는 중','pacing':'차량 옆을 오가는 중','leaving':'차량에서 물러나는 중'}.get(sc['context']['exterior']['phase'],'주변 확인 중')+' · 문 닫힘 유지') if b.profile=='carpool' else f"현재 속도 {b.state['speed_kph']:.0f} km/h")
  points=route.points[::3,:2].tolist();sid=sc['session'];map_name='CARLA Town03' if b.profile=='carpool' else 'CARLA Town04'
  return dict(connected=b.state['phase']=='live',schema=2,renderer='CARLA RGB',map=map_name,frame=b.state['frame'],timestamp=time.time(),
              source='Scripted passenger interaction and audio, not automated diagnosis',road=dict(id=30,lanes=lanes),lane_width_m=route.width,actors=actors,destinations=[],

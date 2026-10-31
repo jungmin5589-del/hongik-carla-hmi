@@ -351,7 +351,7 @@ class NativeBridge:
         w,h=SIZES[quality];bp=self.world.get_blueprint_library().find('sensor.camera.rgb')
         for key,value in {'image_size_x':w,'image_size_y':h,'fov':100 if self.profile=='carpool' else 85,'sensor_tick':1/30,'motion_blur_intensity':0.}.items():
             if bp.has_attribute(key):bp.set_attribute(key,str(value))
-        self.camera=self.world.spawn_actor(bp,carla.Transform(carla.Location(x=.9,z=1.6),carla.Rotation(pitch=-2,yaw=25 if self.profile=='carpool' else 0)),attach_to=self.ego)
+        self.camera=self.world.spawn_actor(bp,carla.Transform(carla.Location(x=.9,z=1.6),carla.Rotation(pitch=-2,yaw=35 if self.profile=='carpool' else 0)),attach_to=self.ego)
         generation=self.camera_generation
         def receive(img):
             if generation!=self.camera_generation:return
