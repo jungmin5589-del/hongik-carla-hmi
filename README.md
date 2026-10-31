@@ -72,3 +72,8 @@ Building/road map data is © OpenStreetMap contributors, available under ODbL:
 https://www.openstreetmap.org/copyright. Geographic caches remain local, outside
 Git. These footprints are map context, not buildings detected from the camera;
 an unmapped/forest segment may have no buildings.
+
+
+## 보행자와 서로 양보
+
+50번 시작 화면에 네 번째 독립 조건을 추가했습니다. 사람과 차량이 서로 기다리다가 양보 안내·모의 관제·대기 선택에 따라 횡단과 재출발이 이어집니다. [실행·동작·검증 범위](docs/PEDESTRIAN-YIELD-KO.md).

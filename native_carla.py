@@ -25,10 +25,12 @@ from navigation_adapter import NavigationAdapter, navigation_html, static_asset
 from native_carla_route import HighwayRoute, steering, fog_density
 from scenario2 import Scenario2
 from voice_bank import narration, audio_path
+from pedestrian_yield import CrossingRoute, YieldScenario, YieldActor, OPTIONS as YIELD_OPTIONS, navigation_state as yield_navigation_state
+from pedestrian_voice import audio_path as pedestrian_audio_path
 
 ROOT = Path(__file__).resolve().parent
 PORT, RPC = 8774, 2026
-PROFILES = {'congestion': '4차로 정체', 'night': '야간 졸음운전 차량', 'fog': '짙은 안개'}
+PROFILES = {'congestion': '4차로 정체', 'night': '야간 졸음운전 차량', 'fog': '짙은 안개', 'yield': '보행자와 서로 양보'}
 SIZES = {'smooth': (640, 360), 'balanced': (960, 540), 'high': (1280, 720), 'fullhd': (1920, 1080)}
 
 
@@ -120,10 +122,14 @@ class NativeScenario(Scenario2):
 class NativeNavigation(NavigationAdapter):
     def options(self):
         from navigation_adapter import BLOCKADE_OPTIONS, OPTIONS, FOG_OPTIONS
+        if self.bridge.profile == 'yield':return YIELD_OPTIONS
         return BLOCKADE_OPTIONS if self.bridge.profile == 'congestion' else FOG_OPTIONS if self.bridge.profile == 'fog' else OPTIONS
 
     def atlas(self):
         r = self.bridge.route
+        if r is None:return dict(map='CARLA',roads=[],destinations=[],buildings=[])
+        if self.bridge.profile=='yield':
+            return dict(map='CARLA Town03',roads=[dict(points=r.points[:,:2].tolist(),width=r.width)],destinations=[],buildings=[])
         centre=[r.sample(float(s),r.width*.5)[0][:2].tolist() for s in r.arc[::3]]
         return dict(map='CARLA Town04', roads=[dict(points=centre, width=r.width*4)],
                     destinations=[], buildings=[], context_source=None)
@@ -132,6 +138,7 @@ class NativeNavigation(NavigationAdapter):
         b = self.bridge
         if b.ego is None or b.scenario is None:
             return dict(connected=False, reason=b.state.get('error') or 'CARLA 도로와 차량을 준비하고 있어요.')
+        if b.profile=='yield':return yield_navigation_state(b,self.options())
         tr, sc = b.ego.get_transform(), b.scenario.public()
         yaw = math.radians(tr.rotation.yaw)
         def local(x,y,angle=0):
@@ -198,7 +205,7 @@ class NativeBridge:
                         mode='paused',quality=quality,width=SIZES[quality][0],height=SIZES[quality][1],
                         speed_kph=0,frames=0,frame=0,target_fps=30,measured_fps=0)
         self.command={'mode':'paused'};self.profile=None;self.scenario=None;self.ego=None
-        self.vehicles=[];self.camera=None;self.collision=None;self.world=None;self.route=None;self.ego_s=100.
+        self.vehicles=[];self.pedestrian=None;self.camera=None;self.collision=None;self.world=None;self.route=None;self.ego_s=100.
         self.pending=queue.Queue();self.navigation=NativeNavigation(self);self.camera_generation=0
         self.run_dir=ROOT/'native-runs'/time.strftime('%Y%m%d-%H%M%S')
         self.run_dir.mkdir(parents=True,exist_ok=True)
@@ -222,7 +229,7 @@ class NativeBridge:
                                   measured_fps=round((len(times)-1)/max(.01,now-times[0]),1))
                 self.frame_event.notify_all()
 
-    def connect(self):
+    def connect(self,profile=None):
         from launch_native_carla import OWNED, CARLA, process_command
         owned=json.loads(OWNED.read_text(encoding='utf-8-sig')) if OWNED.is_file() else {}
         command=process_command(owned.get('carla'))
@@ -230,17 +237,20 @@ class NativeBridge:
             raise RuntimeError('이 앱이 시작한 CARLA를 확인하지 못했습니다. 50번 실행 파일을 사용해 주세요.')
         client=carla.Client('127.0.0.1',RPC);client.set_timeout(90.)
         world=client.get_world()
-        if not world.get_map().name.endswith('/Town04'):
-            world=client.load_world('Town04')
+        target='Town03' if profile=='yield' else 'Town04'
+        if not world.get_map().name.endswith('/'+target):
+            world=client.load_world(target)
         settings=world.get_settings()
         if settings.synchronous_mode:
             raise RuntimeError('The native CARLA world is owned by a synchronous client.')
         if settings.no_rendering_mode:
             settings.no_rendering_mode=False;world.apply_settings(settings)
-        self.client=client;self.world=world;self.route=HighwayRoute.build(world.get_map())
+        self.client=client;self.world=world
+        self.route=CrossingRoute.build(world.get_map()) if profile=='yield' else HighwayRoute.build(world.get_map())
 
     def clear_actors(self):
         self.camera_generation+=1
+        if self.pedestrian:self.pedestrian.destroy();self.pedestrian=None
         owned=[self.camera,self.collision,*[v['actor'] for v in self.vehicles]]
         known_ids={actor.id for actor in owned if actor is not None}
         for actor in owned:
@@ -254,6 +264,8 @@ class NativeBridge:
             for actor in self.world.get_actors().filter('vehicle.*'):
                 if actor.id not in known_ids and actor.attributes.get('role_name','').startswith('hongik_native_'):
                     actor.destroy()
+            for actor in self.world.get_actors().filter('walker.*'):
+                if actor.attributes.get('role_name','')=='hongik_native_pedestrian':actor.destroy()
         if self.scenario:self.scenario.events.close()
         self.scenario=None
 
@@ -273,14 +285,24 @@ class NativeBridge:
     def setup(self, profile):
         with self.lock:
             self.state.update(phase='preparing',error=None,mode='paused');self.command['mode']='paused'
-            if self.world is None:self.connect()
-            self.clear_actors();self.profile=profile;self.ego_s=100.
+            self.clear_actors()
+            target='Town03' if profile=='yield' else 'Town04'
+            if self.world is None or not self.world.get_map().name.endswith('/'+target):self.connect(profile)
+            self.clear_actors()  # Also recover tagged actors after an app-only restart.
+            self.profile=profile;self.ego_s=100.
             with self.frame_event:
                 self.jpeg=None;self.frame_id=0;self.state['frames']=0
-            self.scenario=NativeScenario(profile,self.run_dir/(uuid.uuid4().hex[:8]+'-events.jsonl'))
-            self.spawn('vehicle.tesla.model3',100.,0.,'ego',color='35,85,190')
+            event_path=self.run_dir/(uuid.uuid4().hex[:8]+'-events.jsonl')
+            self.scenario=YieldScenario(event_path,self.route) if profile=='yield' else NativeScenario(profile,event_path)
+            self.ego_s=max(2.,self.route.cross_s-36.) if profile=='yield' else 100.
+            self.spawn('vehicle.tesla.model3',self.ego_s,0.,'ego',color='35,85,190')
             self.ego=self.vehicles[0]['actor']
-            lead=self.spawn('vehicle.nissan.micra',100+self.scenario.BASE_GAP+4.2,0.,'lead',color='220,223,226')
+            if profile=='yield':
+                self.pedestrian=YieldActor(self.world,self.route)
+                # This owned experiment uses an unsignalized crossing.
+                for light in self.world.get_actors().filter('traffic.traffic_light*'):
+                    light.set_state(carla.TrafficLightState.Off);light.freeze(True)
+            else:self.spawn('vehicle.nissan.micra',100+self.scenario.BASE_GAP+4.2,0.,'lead',color='220,223,226')
             if profile=='congestion':
                 for s,offset in [(102.,self.route.width),(120.,2*self.route.width),(86.,2*self.route.width)]:
                     self.spawn('vehicle.carlamotors.european_hgv',s,offset,'truck',30)
@@ -297,8 +319,9 @@ class NativeBridge:
             sensor=self.world.get_blueprint_library().find('sensor.other.collision')
             self.collision=self.world.spawn_actor(sensor,carla.Transform(),attach_to=self.ego)
             self.collision.listen(self.on_collision)
-            self.state.update(phase='live',profile=profile,scene_id='native-town04',route_length_m=round(self.route.length),
-                              lane_count=4,error=None,mode='paused',speed_kph=0)
+            self.state.update(phase='live',profile=profile,scene_id='native-'+target.lower(),route_length_m=round(self.route.length),
+                              lane_count=len(self.route.lane_offsets) if profile=='yield' else 4,
+                              physical_pedestrians=1 if profile=='yield' else 0,error=None,mode='paused',speed_kph=0)
             self.navigation=NativeNavigation(self)
             from launch_native_carla import ensure_native_display
             ensure_native_display()
@@ -360,6 +383,9 @@ class NativeBridge:
                     self.state['mode']='auto' if driving else 'paused'
                     ego=self.vehicles[0];et=ego['actor'].get_transform()
                     ego['s'],error=self.route.project([et.location.x,et.location.y],ego['s']);self.ego_s=ego['s']
+                    if self.profile=='yield':
+                        self.update_yield(dt,driving,snapshot,error)
+                        continue
                     for item in self.vehicles[1:]:
                         tr=item['actor'].get_transform()
                         item['s'],_=self.route.project([tr.location.x,tr.location.y],item['s'])
@@ -421,8 +447,32 @@ class NativeBridge:
                 for v in self.vehicles:
                     try:v['actor'].apply_control(carla.VehicleControl(brake=1,hand_brake=True))
                     except RuntimeError:pass
+                if self.pedestrian:
+                    try:self.pedestrian.actor.apply_control(carla.WalkerControl(speed=0.))
+                    except RuntimeError:pass
                 time.sleep(.5)
         self.clear_actors();self.trace.close()
+
+    def update_yield(self,dt,driving,snapshot,error):
+        sc=self.scenario;item=self.vehicles[0];actor=self.ego
+        velocity=actor.get_velocity().length();speed=velocity*3.6
+        sc.tick_yield(dt,driving,speed,self.ego_s,self.pedestrian.offset())
+        self.pedestrian.update(sc,driving)
+        # Actual actor position gates release, independently of animation time.
+        safe=self.pedestrian.cleared()
+        target=sc.target_speed()
+        if sc.phase in ('resume','finishing','complete') and not safe:target=0.
+        steer=steering(self.route,self.ego_s,0.,actor.get_transform(),velocity)
+        item['steer']+=max(-dt*1.5,min(dt*1.5,steer-item['steer']))
+        difference=target/3.6-velocity
+        throttle=max(0,min(.45,.2+.28*difference)) if difference>0 else 0.
+        brake=max(0,min(.8,-difference*.5)) if difference<0 else 0.
+        if target<.1 or not driving:throttle,brake=0.,1.
+        actor.apply_control(carla.VehicleControl(throttle=throttle,brake=brake,steer=item['steer'],hand_brake=velocity<.15 and (not driving or target<.1)))
+        self.state.update(frame=snapshot.frame,speed_kph=round(speed,2),lane_error_m=round(error,3),
+                          profile='yield',physical_vehicles=1,physical_pedestrians=1,
+                          pedestrian_clear=safe,vehicle_target_kph=target)
+        if snapshot.frame%15==0:self.trace.write(json.dumps(dict(self.state,scenario=sc.public()),ensure_ascii=False)+'\n')
 
 
 def nav_js():
@@ -445,6 +495,7 @@ def native_navigation_html():
     html=html.replace('Math.min(devicePixelRatio,2)','Math.min(devicePixelRatio,1)')
     html=html.replace('function animate(now){requestAnimationFrame(animate);',
                       'function animate(now){requestAnimationFrame(animate);if(now-last<1000/24)return;')
+    html=html.replace('</head>','<script defer src="/pedestrian-ui.js"></script></head>')
     return html.encode('utf-8')
 
 
@@ -468,10 +519,11 @@ def handler(bridge):
                     q=parse_qs(urlparse(self.path).query);self.send(bridge.navigation.reply(q.get('session',[''])[0],q.get('id',[''])[0]))
                 elif path.startswith('/api/narration/audio/'):
                     key=path.removeprefix('/api/narration/audio/').removesuffix('.wav')
-                    self.send(audio_path(key).read_bytes(),'audio/wav')
+                    self.send((pedestrian_audio_path(key) if key in ('yield','yield_notice') else audio_path(key)).read_bytes(),'audio/wav')
                 elif path=='/nurec-nav.js':self.send(nav_js(),'application/javascript; charset=utf-8')
+                elif path=='/pedestrian-ui.js':self.send((ROOT/'pedestrian_ui.js').read_bytes(),'application/javascript; charset=utf-8')
                 elif path=='/research-events.js':
-                    self.send((ROOT/'hongik_panel.js').read_bytes().replace(b'http://127.0.0.1:8775/',b'/'),'application/javascript; charset=utf-8')
+                    self.send((ROOT/'hongik_panel.js').read_bytes().replace(b'http://127.0.0.1:8775/',b'/').replace(b'|normal|complete)',b'|normal|complete|yield)'),'application/javascript; charset=utf-8')
                 elif path=='/drive':
                     self.send((ROOT/'drive.html').read_bytes().replace('NuRec'.encode(),b'CARLA RGB'),'text/html; charset=utf-8')
                 elif path=='/frame.jpg':
