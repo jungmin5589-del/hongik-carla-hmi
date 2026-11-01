@@ -24,15 +24,21 @@
     "duration_s": 300,
     "onset_s": 10.0,
     "buildup_s": 5.0,
-    "base_gap_m": 8.0,
-    "lead": "31001",
-    "native_context": [
-      "7",
-      "36"
-    ],
-    "lead_asset": "white_sedan",
-    "appearance": "fixed source-time asset; no retraining",
-    "source_time": "continuous route projection",
+    "appearance_mode": "source",
+    "inserted_lead": false,
+    "appearance": "original source tracks and bounded recorded-rig camera stabilization",
+    "source_time": "continuous route projection; traffic pauses with ego",
+    "max_collision_proxies": 10,
+    "safe_pull_over_verified": false,
+    "legacy_comparison": {
+      "base_gap_m": 8.0,
+      "lead": "31001",
+      "native_context": [
+        "7",
+        "36"
+      ],
+      "lead_asset": "white_sedan"
+    },
     "extinction_keys_s": [
       10.0,
       15.0,
@@ -43,7 +49,18 @@
       0.2,
       0.2
     ],
-    "compositor": "same-frame native distance/opacity; camera-relative ground completion",
+    "compositor": "same-frame native distance/opacity when supported; cached geometry fallback otherwise",
     "physical_weather_engine": false
+  },
+  "rattle": {
+    "duration_s": 300,
+    "onset_s": 8,
+    "appearance_mode": "source",
+    "inserted_lead": false,
+    "max_collision_proxies": 10,
+    "sound": "irregular underbody cover contacts",
+    "tts": "pre-rendered Qwen Sohee",
+    "safe_pull_over_verified": false,
+    "source_time": "continuous route projection; traffic pauses with ego"
   }
 }

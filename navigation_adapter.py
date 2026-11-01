@@ -30,7 +30,7 @@ FOG_OPTIONS = [
     dict(action='study_stop_request',label='안전한 곳에 정차 요청',detail='정차 공간이 확인되지 않으면 우선 감속하며 주행합니다.')]
 
 
-def navigation_html():
+def navigation_html(city_audio=False):
     html = (WEB / 'index.html').read_text(encoding='utf-8-sig')
     # Same HTML, Three.js, cockpit and research UI as 36; this route alone omits
     # providers which would start another session or claim unsupported inputs.
@@ -38,11 +38,16 @@ def navigation_html():
     html = html.replace('<script src="/cockpit.js', '<script src="/nurec-nav-boot.js"></script><script src="/nurec-map-context.js"></script><script src="/cockpit.js', 1)
     html = html.replace('<script type="module">', '<script src="/nurec-nav.js"></script><script type="module">', 1)
     html = html.replace('</head>', '<link rel="stylesheet" href="/nurec-nav.css"></head>')
+    if city_audio:
+        html=html.replace('Math.min(devicePixelRatio,2)','Math.min(devicePixelRatio,1)')
+        html=html.replace('function animate(now){requestAnimationFrame(animate);','function animate(now){requestAnimationFrame(animate);if(now-last<1000/24)return;')
+        html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/underbody-sound.js"></script><script defer src="/city-study.js"></script><link rel="stylesheet" href="/city-study.css"></head>')
     return html.encode('utf-8')
 
 
 def static_asset(path):
     local = {'/nurec-nav.js': 'navigation.js', '/nurec-nav.css': 'navigation.css',
+             '/exterior-sound.js':'exterior_sound.js','/underbody-sound.js':'underbody_sound.js','/city-study.js':'city_study.js','/city-study.css':'city_study.css',
              '/research-events.js': 'hongik_panel.js',
              '/nurec-map-context.js': 'map_context.js',
              '/nurec-nav-boot.js': 'navigation_boot.js', '/drive': 'drive.html'}
@@ -77,6 +82,9 @@ class NavigationAdapter:
 
     def options(self):
         sc=self.bridge.scenario
+        if getattr(sc,'SOURCE_FAITHFUL',False):
+            from city_scenarios import OPTIONS as CITY_OPTIONS
+            return FOG_OPTIONS if sc.profile=='fog' else [dict(option,scenario_action='stop_request',detail='확인된 정차 공간이 없으면 경로를 유지하며 우선 감속합니다.') if option['action']=='study_stop_request' else option for option in CITY_OPTIONS['rattle']]
         if getattr(sc, 'OVERTAKE_TRIAL', False):
             reason=sc.overtake_unavailable_reason()
             return [*OPTIONS,dict(OVERTAKE_OPTION,disabled=bool(reason),disabled_reason=reason)]
@@ -95,6 +103,9 @@ class NavigationAdapter:
 
     def state(self):
         b = self.bridge
+        if getattr(b.scenario,'SOURCE_FAITHFUL',False):
+            from natural_drive import navigation_state
+            return navigation_state(b,self.options())
         tr = b.ego.get_transform()
         yaw = math.radians(tr.rotation.yaw)
         cos, sin = math.cos(yaw), math.sin(yaw)

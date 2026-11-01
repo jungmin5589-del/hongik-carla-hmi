@@ -16,7 +16,7 @@ from performance_presets import PRESETS
 ROOT=Path(__file__).resolve().parent
 PYTHON=Path('C:/CARLA_0.9.16/diagnostics/nurec-env/Scripts/python.exe')
 PORT=8775
-PROFILES={'congestion':'정체·서행','night':'야간 불안정한 앞차','fog':'짙은 안개'}
+PROFILES={'congestion':'정체·서행','night':'야간 불안정한 앞차','fog':'짙은 안개','rattle':'차량 하부 이상음'}
 NO_WINDOW=0x08000000
 
 def read_drive():
@@ -42,7 +42,7 @@ class Coordinator:
         performance=body.get('performance','standard')
         if not isinstance(performance,str) or performance not in PRESETS:raise ValueError('영상 설정을 다시 선택해 주세요.')
         if profile not in PROFILES:raise ValueError('시나리오를 먼저 선택해 주세요.')
-        if type(duration) is not int or duration not in (300,450,600):raise ValueError('체험 시간을 다시 선택해 주세요.')
+        if type(duration) is not int or duration not in (300,450,600):raise ValueError('주행 시간을 다시 선택해 주세요.')
         if profile!='congestion' and duration!=300:raise ValueError('이 시나리오는 고정된 길이를 사용합니다.')
         if not isinstance(request,str) or not 1<=len(request)<=128:raise ValueError('요청 ID가 필요합니다.')
         with self.lock:
@@ -52,7 +52,7 @@ class Coordinator:
                 if prior['signature']!=signature:raise ValueError('같은 요청을 다른 시나리오로 바꿀 수 없습니다.')
                 return dict(prior['result'])
             if self.status['phase'] not in ('choose','ready','failed'):
-                raise ValueError('선택한 체험을 준비하고 있어요. 잠시 기다려 주세요.')
+                raise ValueError('선택한 주행을 준비하고 있어요. 잠시 기다려 주세요.')
             launch_id=uuid.uuid4().hex
             self.status=dict(kind='nurec-scenario-hub',phase='starting',profile=profile,error=None,launch_id=launch_id,performance=performance)
             result=dict(launch_id=launch_id,profile=profile)
@@ -88,9 +88,10 @@ class Coordinator:
                 details=log_path.read_text(encoding='utf-8',errors='replace')
                 if '16 GiB' in details or 'headroom' in details:
                     raise RuntimeError('시작에 필요한 메모리가 부족해요. 사용하지 않는 앱을 닫고 다시 시도해 주세요.')
-                raise RuntimeError('체험을 시작하지 못했어요. 외장 SSD와 실행 환경을 확인해 주세요.')
+                raise RuntimeError('주행을 시작하지 못했어요. 외장 SSD와 실행 환경을 확인해 주세요.')
             drive=read_drive()
             if (drive and drive.get('profile')==profile and drive.get('scene_id')==source_id(profile)
+                    and (profile not in ('fog','rattle') or drive.get('appearance_mode')=='source')
                     and drive.get('traffic_load','standard')==preset['traffic_load']
                     and (profile!='night' or drive.get('night_mode')=='straight')):
                 phase=drive.get('phase')

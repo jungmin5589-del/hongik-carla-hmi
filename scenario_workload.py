@@ -2,6 +2,7 @@
 
 
 def required_proxy_ids(scenario, workload='essential', include_all=False):
+    if getattr(scenario,'SOURCE_FAITHFUL',False):return set(scenario.source_proxy_ids)
     config=getattr(scenario,'config',None)
     if isinstance(config,dict) and 'vehicles' in config:
         return set(config['vehicles'])

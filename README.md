@@ -4,6 +4,8 @@
 
 [음악 내비 · 새 카풀 선택지 · 하부 커버 소리](docs/PASSENGER-NAVIGATION.md): 기존 음악 플레이어에 홍익 AI를 연결하고 참가자 화면의 실험 표기를 정리했습니다.
 
+[NuRec 원본 교통 안개·하부 이상음](docs/NATURAL-NUREC-KO.md): 안개·이상음은 원본 차량 위치와 촬영 시점을 보존하고 가까운 앞차를 추가하지 않는 별도 경로를 사용합니다.
+
 [CARLA 화면과 장면 소리만 녹화](docs/CARLA-RECORDING.md): 별도 녹화 UI 없이 전체 장면을 저장하고, 기존 대사·효과음을 실제 사건 시점에 맞춰 합칩니다.
 
 처음 보는 팀원·교수님은 아래 문서부터 읽으면 됩니다.
@@ -19,15 +21,18 @@ Public source and configuration history for the local passenger-interaction prot
 원본 저장소에 직접 변경사항을 반영할 수 없습니다.
 모델 원본·음성·실험 영상·인증정보는 포함하지 않습니다.
 
-Three independent scenes: four-lane blocked traffic, a weaving vehicle at night,
-and sudden dense fog. Passengers open the Hongik AI
+Four selectable NuRec conditions: four-lane blocked traffic, a weaving vehicle at night,
+sudden dense fog, and underbody noise. Fog and noise share the source road. Passengers open the Hongik AI
 notification, inspect an explanation, choose an action, then receive the observed
 result and an end message. Scenario explanations use scripted simulator state;
 they are not YOLO or LLM perception claims.
 
 The five-minute fog trial stays clear for ten driving seconds, then builds dense
 fog over five seconds, reaching the existing dense level at 15 seconds.
-It requests an 8m bumper-to-bumper following gap; the
+The current default fog/rattle path preserves original recorded traffic without
+an inserted or relocated close lead. It follows the original camera corridor,
+with bounded stabilization near the recorded rig pose. The older fog comparison
+path (`--appearance-mode legacy`) requests an 8m bumper-to-bumper following gap; the
 actual gap follows CARLA vehicle dynamics. A distance-increase choice still
 widens the gap explicitly. A fixed-appearance sedan from the already-authorized
 traffic assets replaces the distant-source hatchback for a clearer rear outline.
@@ -44,6 +49,7 @@ increase distance still slows the actual CARLA vehicle toward a 28m gap.
 ```powershell
 python open_app.py
 python launch_live.py --profile fog --quality high --traffic-load standard
+python launch_live.py --profile rattle --quality high
 ```
 
 The selector is at `http://127.0.0.1:8775/`; navigation at

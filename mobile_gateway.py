@@ -37,7 +37,7 @@ ASSETS=ROOT/'mobile'
 HTTP_PORT,HTTPS_PORT=8776,8777
 COOKIE='hongik_mobile'
 OBSERVATIONS={'study_presented','study_open','study_close','study_options','study_choice','study_cancel'}
-AUDIO_NAMES={'blockade','congestion','night','fog','normal','complete','yield','city_yield','city_carpool','city_rattle'}
+AUDIO_NAMES={'blockade','congestion','night','fog','normal','complete','yield','city_yield','city_carpool','city_rattle','city_fog'}
 # Reserved example URI for this local prototype; never transmit the user's email.
 # A public deployment should configure its own operator contact URI.
 VAPID_SUBJECT='https://example.com'

@@ -26,10 +26,15 @@ def snapshot():
     scenarios=dict(congestion=dict(lanes=4,ego_lane=2,lead_speed_range_kph=[25,35],large_vehicles=3,
         fast_speed_kph=90,fast_spacing_m=20,standard_fast_count=12,compact_fast_count=8),
         night=dict(ego_straight=True,native_lead='108',base_gap_m=BoundaryWeaving.BASE_GAP,widen_gap_m=BoundaryWeaving.WIDE_GAP,weaving_boundary_m=-1.8,weaving_amplitude_m=.65),
-        fog=dict(duration_s=300,onset_s=ONSET_SECONDS,buildup_s=FOG_BUILDUP_SECONDS,base_gap_m=BASE_GAP_M,lead=LEAD_TRACK_ID,native_context=list(CONTEXT_TRACK_IDS),
-            lead_asset=LEAD_ASSET_NAME,appearance='fixed source-time asset; no retraining',source_time='continuous route projection',
+        fog=dict(duration_s=300,onset_s=ONSET_SECONDS,buildup_s=FOG_BUILDUP_SECONDS,appearance_mode='source',inserted_lead=False,
+            appearance='original source tracks and bounded recorded-rig camera stabilization',source_time='continuous route projection; traffic pauses with ego',
+            max_collision_proxies=10,safe_pull_over_verified=False,
+            legacy_comparison=dict(base_gap_m=BASE_GAP_M,lead=LEAD_TRACK_ID,native_context=list(CONTEXT_TRACK_IDS),lead_asset=LEAD_ASSET_NAME),
             extinction_keys_s=list(EXTINCTION_TIMES),extinction_beta=list(EXTINCTION_BETAS),
-            compositor='same-frame native distance/opacity; camera-relative ground completion',physical_weather_engine=False))
+            compositor='same-frame native distance/opacity when supported; cached geometry fallback otherwise',physical_weather_engine=False),
+        rattle=dict(duration_s=300,onset_s=8,appearance_mode='source',inserted_lead=False,max_collision_proxies=10,
+            sound='irregular underbody cover contacts',tts='pre-rendered Qwen Sohee',safe_pull_over_verified=False,
+            source_time='continuous route projection; traffic pauses with ego'))
     (folder/'scenarios.json').write_text(json.dumps(scenarios,indent=2),encoding='utf-8')
     return result
 

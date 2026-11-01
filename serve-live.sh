@@ -58,7 +58,7 @@ if [[ "$backend" == gsplat-native ]]; then
 fi
 case "$profile" in
   night) ;;
-  fog) artifact=/data/sample_set/26.04_release/8ba55c12-2cd3-4dce-aadd-c17dbb19642f/8ba55c12-2cd3-4dce-aadd-c17dbb19642f.usdz ;;
+  fog|rattle) artifact=/data/sample_set/26.04_release/8ba55c12-2cd3-4dce-aadd-c17dbb19642f/8ba55c12-2cd3-4dce-aadd-c17dbb19642f.usdz ;;
   congestion) artifact=/data/sample_set/26.04_release/200c6367-6372-437d-949b-620851624628/200c6367-6372-437d-949b-620851624628.usdz ;;
   *) printf 'Unknown profile\n' >&2; exit 2 ;;
 esac

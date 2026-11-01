@@ -15,7 +15,7 @@ function fixture(){
  }
  const document={body:new Element('body'),visibilityState:'visible',activeElement:null,
   createElement:t=>new Element(t),getElementById:id=>nodes.get(id),addEventListener:(n,f)=>listeners[n]=f};
- const context={document,window:{},crypto,Audio:AudioStub,localStorage:{getItem:()=>null},performance:{now:()=>123},setTimeout,clearTimeout,AbortController,encodeURIComponent,
+ const context={document,window:{},addEventListener:(n,f)=>listeners[n]=f,crypto,Audio:AudioStub,localStorage:{getItem:()=>null},performance:{now:()=>123},setTimeout,clearTimeout,AbortController,encodeURIComponent,
   fetch:async(url,options={})=>{
    if(url==='/api/command'){
     const body=JSON.parse(options.body);sent.push(body);

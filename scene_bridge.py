@@ -52,6 +52,7 @@ from frame_validation import validate_jpeg
 from range_transport import decode_range_hint
 from performance_presets import traffic_config
 from fog_scene import LEAD_TRACK_ID as FOG_LEAD_TRACK_ID
+from natural_drive import NaturalDrive,RecordedCamera,RecordedTraffic
 
 MIRROR = np.diag([1., -1., 1., 1.])
 QUALITY_PRESETS = {"smooth": (640, 360), "balanced": (960, 540), "high": (1280, 720), "fullhd": (1920, 1080)}
@@ -113,6 +114,8 @@ class Scene:
         self.scene_id = self.info["sequence_id"]
         self.start_us = self.info["pose-range"]["start-timestamp_us"]
         self.end_us = self.info["pose-range"]["end-timestamp_us"]
+        self.recorded_camera=RecordedCamera(self.poses,self.timestamps)
+        self.recorded_traffic=RecordedTraffic(self.tracks['tracks_data'],self.alignment)
 
     def raw_corridor_road(self):
         """Retain source geometry near the recorded route, pruning dangling links."""
@@ -248,7 +251,10 @@ class Scene:
         # CARLA actor API is left handed. NuRec expects the original right handed
         # scene frame, before the server's own world_to_nre conversion.
         ego = carla_matrix(np.array(transform.get_matrix()))
-        return self.inverse_alignment @ ego @ self.camera_mount
+        source=self.inverse_alignment@ego
+        if getattr(self,'source_faithful',False):
+            source,self.camera_diagnostics=self.recorded_camera.stabilize(source,self.source_timestamp(transform))
+        return source @ self.camera_mount
 
 
 class Bridge:
@@ -278,13 +284,19 @@ class Bridge:
         self.state['proxy_update_mode'] = getattr(args, 'proxy_update_mode', 'batch')
         self.state['scenario_load'] = getattr(args, 'scenario_load', 'full')
         self.state['traffic_load'] = getattr(args,'traffic_load','standard')
+        self.scene.source_faithful=getattr(args,'appearance_mode','legacy')=='source' and args.profile in ('fog','rattle')
+        self.state['appearance_mode']='source' if self.scene.source_faithful else 'legacy'
         if args.profile == 'night':
             self.state['night_mode'] = getattr(args, 'night_mode', 'straight')
         self.command = {"mode": "paused", "keys": {}, "last_input": 0., "reset": False}
         self.run_dir = ROOT / "runs" / time.strftime("%Y%m%d-%H%M%S")
         self.run_dir.mkdir(parents=True, exist_ok=False)
         self.trace = (self.run_dir / "frames.jsonl").open("w", encoding="utf-8", buffering=1)
-        if args.profile=='congestion':
+        if self.scene.source_faithful:
+            ids=self.scene.recorded_traffic.proxy_ids(self.scene.poses,self.scene.timestamps,limit=10)
+            self.scenario=NaturalDrive(args.profile,self.scene.route,self.run_dir/'interactions.jsonl',ids)
+            self.source_actor_state=[]
+        elif args.profile=='congestion':
             config=json.loads((TRIAL/'reports/wide-highway-v2-config.json').read_text(encoding='utf-8-sig'))
             config=traffic_config(config,getattr(args,'traffic_load','standard'))
             if config['scene_id']!=self.scene.scene_id:raise RuntimeError('Four-lane source/config mismatch')
@@ -472,9 +484,41 @@ class Bridge:
         self.state['collision_proxy_count']=len(self.track_actors)
         self.state['collision_proxy_scope']='full' if required is None else 'scenario'
 
-    def update_tracks(self, timestamp):
+    def update_tracks(self, timestamp, ego_transform=None):
         with self.track_lock:
+            if getattr(self.scenario,'SOURCE_FAITHFUL',False):return self.update_source_tracks(timestamp,ego_transform)
             return self._update_tracks(timestamp)
+
+    def update_source_tracks(self,timestamp,ego_transform=None):
+        originals=self.scene.recorded_traffic.sample(timestamp);dynamic=[];states=[];transforms=[]
+        for key,matrix in originals.items():
+            if key not in self.editable_ids:continue
+            pose=grpc_pose(matrix);dynamic.append(proto.DynamicObject(track_id=key,pose_pair=proto.PosePair(start_pose=pose,end_pose=pose)))
+            states.append(dict(id=key,aligned=self.scene.alignment@matrix))
+        # A bounded set of native proxies, but every original visible track is rendered.
+        for key,actor,_,_ in self.track_actors:
+            active=key in originals
+            changed=active!=self.track_active[key]
+            if changed:actor.set_collisions(active);self.track_active[key]=active
+            if not active:
+                if changed:actor.set_transform(carla.Transform(carla.Location(z=-1000)))
+                continue
+            aligned=self.scene.alignment@originals[key];left=carla_matrix(aligned)
+            left[:3,3]-=left[:3,:3]@self.track_bbox_offsets[key]
+            transforms.append(carla.command.ApplyTransform(actor.id,to_transform(carla_matrix(left))))
+        if transforms:self.client.apply_batch(transforms,False)
+        self.source_actor_state=states
+        tr=ego_transform or self.ego.get_transform();yaw=math.radians(tr.rotation.yaw);gaps=[]
+        for row in states:
+            matrix=row['aligned'];dx=matrix[0,3]-tr.location.x;dy=-matrix[1,3]-tr.location.y
+            forward=dx*math.cos(yaw)+dy*math.sin(yaw);right=-dx*math.sin(yaw)+dy*math.cos(yaw)
+            dims=self.track_dimensions.get(row['id'],[4.5,1.8,1.6])
+            if forward>0 and abs(right)<(dims[1]+1.9)*.5:
+                gaps.append(max(0.,forward-dims[0]*.5-2.4))
+        with self.scenario.lock:
+            self.scenario.nearest_gap=min(gaps) if gaps else None
+            public=self.scenario.public()
+        return dynamic,None,public
 
     def _update_tracks(self, timestamp):
         dynamic_objects = []
@@ -593,6 +637,16 @@ class Bridge:
                 if actor.id in wanted:
                     d=actor.object_size
                     self.scenario.config['vehicles'][actor.id]['size']=[d.size_x,d.size_y,d.size_z]
+        if getattr(self.scenario,'SOURCE_FAITHFUL',False):
+            missing=self.scenario.source_proxy_ids-{row[0] for row in self.track_actors}
+            if missing:raise RuntimeError('Missing source traffic collision proxies: '+str(sorted(missing)))
+            ver=self.stub.get_version(common.Empty(),timeout=20)
+            self.state['traffic_rendering']='original tracks; no inserted or relocated lead'
+            self.state['collision_proxy_count']=len(self.track_actors)
+            self.state['collision_proxy_scope']='nearest recorded tracks, capped at ten; forward cuboid gap guard'
+            (self.run_dir/'renderer-version.txt').write_text(str(ver),encoding='utf-8')
+            print('Source-faithful NuRec connected:',len(self.editable_ids),'editable original tracks',flush=True)
+            return
         lead = next(a for a in catalog.dynamic_objects if a.id == self.scenario.TRACK_ID)
         if self.fog_effect:
             self.fog_effect.configure_lead(self.track_dimensions[self.scenario.TRACK_ID])
@@ -717,6 +771,8 @@ class Bridge:
                     while j < len(points) - 1 and np.linalg.norm(points[j, :2] - points[index, :2]) < lookahead:
                         j += 1
                     target = points[j]
+                    if getattr(self.scenario,'SOURCE_FAITHFUL',False):
+                        target=self.scenario.route.sample(self.scenario.ego_s+lookahead,height=0.)[:3,3]
                     if crash_active:target=self.scenario.steering_target(lookahead)
                     dx, dy = target[0] - tr.location.x, -target[1] - tr.location.y
                     angle = math.atan2(dy, dx) - math.radians(tr.rotation.yaw)
@@ -729,7 +785,7 @@ class Bridge:
                     ctl.brake = float(np.clip(-error * .12, 0., .8))
                     if self.scenario.enabled:
                         ctl.brake = min(ctl.brake, .30)
-                    if isinstance(self.scenario,(HighwayBlockade,BoundaryWeaving)):
+                    if isinstance(self.scenario,(HighwayBlockade,BoundaryWeaving,NaturalDrive)):
                         # Low-speed feed-forward/integral control avoids a
                         # persistent following-distance error from driveline drag.
                         speed_integral=float(np.clip(speed_integral+error*min(dt,.2),-6.,6.))
@@ -774,7 +830,7 @@ class Bridge:
         tr = ego_snapshot.get_transform() if ego_snapshot is not None else self.ego.get_transform()
         index, distance = self.scene.nearest(tr)
         timestamp = self.scene.source_timestamp(tr)
-        dynamic_objects, scenario_pose, render_scenario = self.update_tracks(timestamp)
+        dynamic_objects, scenario_pose, render_scenario = self.update_tracks(timestamp,tr)
         tracks_done = time.perf_counter()
         cam_matrix = self.scene.camera_pose(tr)
         pose = grpc_pose(cam_matrix)
@@ -866,6 +922,7 @@ class Bridge:
             "scenario": render_scenario,
             "timings": timings,
             "scenario_cuboid_pose": scenario_pose.tolist() if scenario_pose is not None else None}
+        if getattr(self.scenario,'SOURCE_FAITHFUL',False):record['camera_stabilization']=getattr(self.scene,'camera_diagnostics',{})
         if fog_record is not None:record['fog_effect']=fog_record
         if beam_record is not None:record['high_beam_effect']=beam_record
         self.trace.write(json.dumps(record) + "\n")
@@ -891,10 +948,26 @@ class Bridge:
         self.state['frame_timings_ms'] = {key: round(value, 2) for key, value in timings.items()}
         return record
 
+    def warm_fog_compositor(self):
+        """Compile the fog/range path before exposing frames or advancing the trial."""
+        tr=self.ego.get_transform();timestamp=self.scene.source_timestamp(tr)
+        objects,_,_=self.update_tracks(timestamp,tr);eye=grpc_pose(self.scene.camera_pose(tr))
+        width,height=self.render_size
+        request=proto.RGBRenderRequest(scene_id=self.scene.scene_id,resolution_w=width,resolution_h=height,
+            camera_intrinsics=self.intrinsics,frame_start_us=timestamp,frame_end_us=timestamp+1,
+            sensor_pose=proto.PosePair(start_pose=eye,end_pose=eye),dynamic_objects=objects,
+            image_format=proto.ImageFormat.JPEG,image_quality=95)
+        started=time.monotonic()
+        response,_=self.stub.render_rgb.with_call(request,timeout=300,metadata=(("x-nurec-range","1"),("x-nurec-fog","[0.01,11.5]")))
+        validate_jpeg(response.image_bytes,(width,height),full_decode=True)
+        (self.run_dir/'fog-initialization.json').write_text(json.dumps(dict(initialization_only=True,
+            published_frame=False,trial_elapsed_unchanged=True,wall_s=time.monotonic()-started)),encoding='utf-8')
+
     def render_loop(self):
         try:
             self.connect_renderer()
             self.state.update(phase="warming_renderer")
+            if self.fog_effect and getattr(self.scenario,'SOURCE_FAITHFUL',False):self.warm_fog_compositor()
             self.render_once("first-live-frame")
             self.ready_for_driving.set()
             while not self.stop.is_set():
@@ -939,12 +1012,16 @@ def make_handler(bridge):
         def do_GET(self):
             path = urlparse(self.path).path
             if path == '/navigation':
-                data, content = navigation_html(), 'text/html; charset=utf-8'
+                data, content = navigation_html(city_audio=getattr(bridge.scenario,'SOURCE_FAITHFUL',False)), 'text/html; charset=utf-8'
             elif path.startswith('/api/narration/audio/'):
                 name=path.removeprefix('/api/narration/audio/')
                 try:
                     if not name.endswith('.wav'):raise ValueError('Invalid audio')
-                    data=narration_audio_path(name[:-4]).read_bytes();content='audio/wav'
+                    if name[:-4] in ('city_fog','city_rattle'):
+                        from city_voice import audio_path as city_audio_path
+                        data=city_audio_path(name[:-4]).read_bytes()
+                    else:data=narration_audio_path(name[:-4]).read_bytes()
+                    content='audio/wav'
                 except (OSError,ValueError,KeyError,AssertionError):
                     self.send_error(503,'Sohee recording is not ready');return
             elif path == '/api/state':
@@ -962,7 +1039,7 @@ def make_handler(bridge):
                 data = json.dumps(bridge.navigation.reply(query.get('session',[''])[0], query.get('id',[''])[0]),ensure_ascii=False).encode('utf-8')
                 content = 'application/json; charset=utf-8'
             elif path == "/":
-                data = navigation_html() if bridge.args.profile=='fog' else (ROOT / "viewer.html").read_bytes()
+                data = navigation_html(city_audio=getattr(bridge.scenario,'SOURCE_FAITHFUL',False)) if bridge.args.profile in ('fog','rattle') else (ROOT / "viewer.html").read_bytes()
                 content = "text/html; charset=utf-8"
             elif path == "/state":
                 public_state = dict(bridge.state)
@@ -1073,7 +1150,8 @@ def make_handler(bridge):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--profile', choices=['night', 'congestion','fog'], default='night')
+    parser.add_argument('--profile', choices=['night', 'congestion','fog','rattle'], default='night')
+    parser.add_argument('--appearance-mode',choices=['legacy','source'],default=None)
     parser.add_argument('--night-mode', choices=['straight','overtake-crash'], default='straight')
     parser.add_argument("--carla-port", type=int, default=2016)
     parser.add_argument("--web-port", type=int, default=8774)
@@ -1088,6 +1166,8 @@ def main():
                         help='Skip unused CARLA drawing; keep separate NuRec RGB, DX12 and async physics')
     parser.add_argument('--renderer-backend', choices=['trained','nrend','gsplat','gsplat-native'], default='trained')
     args = parser.parse_args()
+    args.appearance_mode=args.appearance_mode or ('source' if args.profile in ('fog','rattle') else 'legacy')
+    if args.profile=='rattle' and args.appearance_mode!='source':parser.error('Rattle requires original source traffic')
     bridge = Bridge(args)
     server = ThreadingHTTPServer(("127.0.0.1", args.web_port), make_handler(bridge))
     threading.Thread(target=bridge.control_loop, daemon=True).start()

@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent
 PYTHON = Path(r"C:\CARLA_0.9.16\diagnostics\nurec-env\Scripts\python.exe")
 CARLA = Path(r"C:\CARLA_0.9.16")
 NO_WINDOW = 0x08000000
-RENDER_BACKENDS = {'congestion': 'trained', 'night': 'trained', 'fog': 'trained'}
+RENDER_BACKENDS = {'congestion': 'trained', 'night': 'trained', 'fog': 'trained','rattle':'trained'}
 
 
 def open_port(port):
@@ -25,9 +25,11 @@ def open_port(port):
         return sock.connect_ex(("127.0.0.1", port)) == 0
 
 
-def can_reuse_drive(state,profile,renderer='trained',night_mode='straight'):
+def can_reuse_drive(state,profile,renderer='trained',night_mode='straight',appearance_mode=None):
+    appearance_mode=appearance_mode or ('source' if profile in ('fog','rattle') else 'legacy')
     return (state.get('profile','night')==profile and state.get('scene_id')==source_id(profile)
             and state.get('renderer_backend','trained')==renderer
+            and state.get('appearance_mode','legacy')==appearance_mode
             and (profile!='night' or state.get('night_mode')==night_mode)
             and state.get('phase')!='error' and not state.get('error'))
 
@@ -82,7 +84,8 @@ def open_displays(owned):
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('--profile',choices=['night','congestion','fog'],default='night')
+    parser.add_argument('--profile',choices=['night','congestion','fog','rattle'],default='night')
+    parser.add_argument('--appearance-mode',choices=['source','legacy'],default=None)
     parser.add_argument('--night-mode',choices=['straight','overtake-crash'],default='straight')
     parser.add_argument('--no-ui',action='store_true')
     parser.add_argument('--no-browser',action='store_true')
@@ -93,6 +96,8 @@ def main():
     parser.add_argument('--quality',choices=['high','balanced'],default='high')
     parser.add_argument('--traffic-load',choices=['standard','compact'],default='standard')
     args=parser.parse_args()
+    args.appearance_mode=args.appearance_mode or ('source' if args.profile in ('fog','rattle') else 'legacy')
+    if args.profile=='rattle' and args.appearance_mode!='source':raise ValueError('Rattle requires original source traffic')
     args.renderer = args.renderer or RENDER_BACKENDS[args.profile]
     if not ROOT.parent.is_dir() or not PYTHON.is_file():
         raise RuntimeError("Connect D drive and restore the existing NuRec environment")
@@ -102,7 +107,7 @@ def main():
     if open_port(8774):
         with urllib.request.urlopen('http://127.0.0.1:8774/state',timeout=5) as response:
             state=json.load(response)
-        if (can_reuse_drive(state,args.profile,args.renderer,args.night_mode)
+        if (can_reuse_drive(state,args.profile,args.renderer,args.night_mode,args.appearance_mode)
                 and state.get('target_fps') == args.fps
                 and state.get('scenario_load','full') == args.scenario_load
                 and state.get('traffic_load','standard') == args.traffic_load
@@ -121,7 +126,8 @@ def main():
         same_source=state.get('scene_id')==source_id(args.profile)
         same_renderer=state.get('renderer_backend','trained')==args.renderer
         same_workload=state.get('scenario_load','full')==args.scenario_load
-        stop_for_switch(keep_renderer=same_source and same_renderer and same_workload and state.get('phase')!='error' and not state.get('error'))
+        same_appearance=state.get('appearance_mode','legacy')==args.appearance_mode
+        stop_for_switch(keep_renderer=same_source and same_renderer and same_workload and same_appearance and state.get('phase')!='error' and not state.get('error'))
     stamp = time.strftime("%Y%m%d-%H%M%S")
     launch = ROOT / "launches" / stamp
     launch.mkdir(parents=True, exist_ok=False)
@@ -169,7 +175,7 @@ def main():
     bridge = subprocess.Popen([str(PYTHON), str(ROOT / "scene_bridge.py"), '--profile', args.profile,
                                '--physics-only', '--renderer-backend', args.renderer, '--night-mode', args.night_mode,
                                '--fps', str(args.fps), '--proxy-update-mode', args.proxy_update_mode,
-                               '--scenario-load',args.scenario_load,'--traffic-load',args.traffic_load,
+                               '--scenario-load',args.scenario_load,'--traffic-load',args.traffic_load,'--appearance-mode',args.appearance_mode,
                                '--width',str(render_size[0]),'--height',str(render_size[1])], cwd=ROOT,
         stdout=out, stderr=subprocess.STDOUT, creationflags=NO_WINDOW, env=bridge_env)
     owned["bridge"] = bridge.pid
