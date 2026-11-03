@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from fallen_cargo import CargoScenario
+from fallen_cargo import CargoScenario, cargo_stage, following_speed
 from native_carla import NativeNavigation
 
 
@@ -23,6 +23,20 @@ class CargoTests(unittest.TestCase):
     def open(self):
         self.sc.release(123)
         self.sc.interaction('open',self.sc.session)
+
+    def test_load_slide_is_continuous_and_starts_before_release(self):
+        samples=[cargo_stage(8.8+i*.01) for i in range(121)]
+        self.assertEqual(cargo_stage(0),cargo_stage(8.8))
+        self.assertGreater(samples[0][0],samples[-1][0])
+        self.assertLess(max(abs(b[0]-a[0]) for a,b in zip(samples,samples[1:])),.025)
+        self.assertAlmostEqual(cargo_stage(10)[0],cargo_stage(10.001)[0])
+        self.assertLessEqual(samples[-1][1],16.)
+
+    def test_closer_following_slowly_matches_truck_and_brakes_when_close(self):
+        self.assertEqual(following_speed(25,12),25)
+        self.assertLess(following_speed(15,8),15)
+        self.assertEqual(following_speed(0,6),0)
+        self.assertLessEqual(following_speed(25,40),25)
 
     def test_notification_and_choice_do_not_execute(self):
         self.open();sid=self.sc.session

@@ -30,7 +30,7 @@ from pedestrian_voice import audio_path as pedestrian_audio_path
 from city_voice import audio_path as city_audio_path
 from city_scenarios import ContextScenario, ExteriorActor, OPTIONS as CONTEXT_OPTIONS, navigation_state as context_navigation_state, find_shoulder
 from passenger_music import library as music_library, stream as stream_music
-from fallen_cargo import CargoScenario, CargoActor, OPTIONS as CARGO_OPTIONS, navigation_state as cargo_navigation_state, left_lane_clear
+from fallen_cargo import CargoScenario, CargoActor, OPTIONS as CARGO_OPTIONS, navigation_state as cargo_navigation_state, left_lane_clear, following_speed
 
 ROOT = Path(__file__).resolve().parent
 PORT, RPC = 8774, 2026
@@ -319,8 +319,11 @@ class NativeBridge:
                     light.set_state(carla.TrafficLightState.Off);light.freeze(True)
             elif profile=='carpool':self.pedestrian=ExteriorActor(self.world,self.route,self.ego_s)
             elif profile=='cargo':
-                self.spawn('vehicle.carlamotors.european_hgv',self.ego_s+33.,0.,'cargo_truck',25.)
+                self.spawn('vehicle.carlamotors.european_hgv',self.ego_s+22.,0.,'cargo_truck',25.)
                 self.cargo=CargoActor(self.world,self.route)
+                self.cargo.prepare(self.vehicles[1]['actor'],self.vehicles[1]['s'])
+                self.scenario.actor_id=self.cargo.actor.id
+                self.scenario.log('cargo_loaded',actor_id=self.cargo.actor.id)
             elif profile=='rattle':self.scenario.shoulder_offset=find_shoulder(self.route,self.world.get_map(),self.ego_s+35.)
             else:self.spawn('vehicle.nissan.micra',100+self.scenario.BASE_GAP+4.2,0.,'lead',color='220,223,226')
             if profile=='congestion':
@@ -491,6 +494,8 @@ class NativeBridge:
         truck['s'],_=self.route.project([tt.location.x,tt.location.y],truck['s'])
         centre,yaw=self.route.sample(self.ego_s)
         offset=(tr.location.x-centre[0])*-math.sin(yaw)+(tr.location.y-centre[1])*math.cos(yaw)
+        self.cargo.stage(truck['actor'],sc.elapsed)
+        sc.truck_gap=truck['s']-self.ego_s-truck['actor'].bounding_box.extent.x-self.ego.bounding_box.extent.x
         if driving and not sc.onset and sc.elapsed>=sc.ONSET_SECONDS:
             self.cargo.release(truck['actor'],truck['s'],sc)
         distance,right,height=self.cargo.observation(self.ego_s)
@@ -500,6 +505,7 @@ class NativeBridge:
             self.make_camera(self.state['quality']);sc.zoom_applied=True
             sc.log('cargo_camera_zoom_applied',fov_deg=55)
         target,lateral=sc.target()
+        if not sc.onset:target=following_speed(truck['actor'].get_velocity().length()*3.6,sc.truck_gap)
         controls=[]
         for item,kph,off in ((ego,target,lateral),(truck,25.,0.)):
             actor=item['actor'];at=actor.get_transform();v=actor.get_velocity().length()
@@ -516,7 +522,7 @@ class NativeBridge:
             # Physics pauses too; elapsed/event clocks never advance while paused.
             self.cargo.set_running(driving)
         self.state.update(frame=snapshot.frame,speed_kph=round(velocity*3.6,2),lane_error_m=round(error,3),
-                          profile='cargo',physical_vehicles=2,physical_props=1 if self.cargo.actor else 0,
+                          profile='cargo',physical_vehicles=2,physical_props=len(self.cargo.supports)+(1 if self.cargo.actor else 0),
                           physical_pedestrians=0,lateral_offset_m=round(offset,3),vehicle_target_kph=target)
         if snapshot.frame%15==0:self.trace.write(json.dumps(dict(self.state,scenario=sc.public()),ensure_ascii=False)+'\n')
 

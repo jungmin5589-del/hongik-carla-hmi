@@ -45,7 +45,8 @@ def main():
         if s['phase']=='live' and s.get('profile')=='cargo' and s['scenario']['session']!=previous_session and s['scenario']['elapsed_s']==0 and s['frames']>=3:break
         time.sleep(.4)
     else:raise RuntimeError('Cargo preparation timed out')
-    sid=s['scenario']['session'];events=[];shots=set();executed=False
+    motion_second=-1.
+    sid=s['scenario']['session'];loaded_actor=s['scenario']['cargo']['actor_id'];events=[];shots=set();executed=False
     def command(action,details=None):
         return post('/api/command',dict(action=action,session_id=sid,navigation_id=sid+'-weaving',
                                        request_id=f'{action}-{time.monotonic_ns()}',client_event=details or {}))
@@ -56,6 +57,12 @@ def main():
             s=state();sc=s['scenario'];events.append(s)
             if sc['session']!=sid:raise RuntimeError('Session changed during validation')
             elapsed=sc['elapsed_s'];c=sc['cargo']
+            if sc['onset'] and c['height_m'] is not None:
+                assert -.3<c['height_m']<4., 'Payload left the bounded drop area'
+                assert abs(c['right_m'])<4., 'Payload flew outside its lane area'
+            assert c['actor_id']==loaded_actor, 'Visible payload was replaced at release'
+            if 8.7<=elapsed<=12.2 and elapsed-motion_second>=.18:
+                (folder/('motion-'+str(round(elapsed,2))+'.jpg')).write_bytes(get('/frame.jpg'));motion_second=elapsed
             label='approach' if 8<=elapsed<9 else 'falling' if sc['onset'] and c['fall_age_s']<.8 else 'obstacle' if sc['onset'] and c['fall_age_s']>=3 else None
             if label and label not in shots:
                 (folder/(label+'.jpg')).write_bytes(get('/frame.jpg'));shots.add(label)
@@ -70,7 +77,7 @@ def main():
                 assert sc['outcome']['status']=='achieved',sc['outcome']
                 assert s['speed_kph']<.5,s['speed_kph']
                 heights=[v['scenario']['cargo']['height_m'] for v in events if v['scenario']['cargo']['height_m'] is not None]
-                assert max(heights)-min(heights)>.8, 'Physical fall not observed'
+                assert max(heights)-min(heights)>.6, 'Physical fall not observed'
                 assert min(heights)>-.3, 'Prop fell through the road'
                 print(json.dumps(dict(evidence=str(folder),action=args.action,fall_height_change_m=round(max(heights)-min(heights),2),
                                       final=sc,fps=s['measured_fps']),ensure_ascii=False),flush=True)

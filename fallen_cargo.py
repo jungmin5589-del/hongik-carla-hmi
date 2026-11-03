@@ -19,6 +19,20 @@ OPTIONS = [
          detail='감속과 정지 후 주변 공간이 확보되면 차량이 회피를 진행합니다.')]
 
 
+def cargo_stage(elapsed, rear_extent=3.97):
+    """Continuous truck-local slide; no position reset at physical release."""
+    u=min(1.,max(0.,(elapsed-8.8)/1.2))
+    progress=u**1.35
+    start=-2.7
+    end=-rear_extent-.85
+    pitch=16.*max(0.,(u-.68)/.32)**2
+    return start+(end-start)*progress,pitch
+
+
+def following_speed(truck_speed_kph, bumper_gap_m):
+    return max(0.,min(25.,truck_speed_kph+(bumper_gap_m-12.)*1.15))
+
+
 class CargoScenario(Scenario2):
     TYPE_ID = 'fallen_cargo'
     ONSET_SECONDS = 10.
@@ -36,6 +50,7 @@ class CargoScenario(Scenario2):
         self.distance = None
         self.cargo_right = 0.
         self.cargo_height = None
+        self.truck_gap = None
         self.fall_age = 0.
         self.action_at = None
         self.target_offset = 0.
@@ -151,7 +166,7 @@ class CargoScenario(Scenario2):
             # Stop longitudinal advance until fully in the empty neighbouring lane.
             return (10. if abs(self.actual_offset+3.5) < .75 or (self.distance or 0.) > 13. else 3.), self.target_offset
         distance = self.distance
-        return (max(0., min(16., ((distance or 0.)-10.)*1.1)) if distance is not None else 0.), (self.actual_offset if self.target_offset < -1. else 0.)
+        return (max(0., min(16., ((distance or 0.)-8.)*1.1)) if distance is not None else 0.), (self.actual_offset if self.target_offset < -1. else 0.)
 
     def summary(self):
         if self.impact_count:
@@ -167,12 +182,12 @@ class CargoScenario(Scenario2):
         with self.lock:
             return dict(id=self.TYPE_ID, session=self.session, enabled=True, onset=self.onset,
                         elapsed_s=round(self.elapsed, 2), duration_s=180, remaining_s=max(0,180-self.elapsed),
-                        gap_m=round(self.distance or 0.,2), target_gap_m=10., horn_count=0,
+                        gap_m=round(self.distance or 0.,2), target_gap_m=8., horn_count=0,
                         high_beam=dict(on=False), dialog_open=self.dialog_open, action=self.last_action,
                         action_complete=self.action_complete, feedback=self.feedback, completed=self.completed,
                         completion_reason=self.completion_reason, outcome=self.outcome.public(), collision_count=self.collision_count,
-                        cargo=dict(phase=self.phase, actor_id=self.actor_id, distance_m=self.distance,
-                                   fall_age_s=round(self.fall_age,2), offset_m=self.actual_offset,
+                        cargo=dict(phase=self.phase, actor_id=self.actor_id, load_stage='falling' if self.onset and self.fall_age<2.5 else 'road' if self.onset else 'sliding' if self.elapsed>8.8 else 'loaded', distance_m=self.distance,
+                                   fall_age_s=round(self.fall_age,2), offset_m=self.actual_offset, truck_gap_m=self.truck_gap,
                                    right_m=self.cargo_right, height_m=self.cargo_height, left_clear=self.left_clear,
                                    passed=self.verified_pass, impact_count=self.impact_count,
                                    impact_impulse_ns=self.impact_impulse, zoom=self.zoom_applied),
@@ -180,55 +195,89 @@ class CargoScenario(Scenario2):
 
 
 class CargoActor:
+    DECK_Z=1.34
+    BOX='static.prop.box01'
+
     def __init__(self, world, route):
         self.world, self.route = world, route
         self.actor = None
+        self.supports = []
         self.last_s = None
-        self.running = True
+        self.running = False
+        self.released = False
         self.saved_velocity = self.saved_angular = None
 
+    def prepare(self, truck, s):
+        # Two small rigid plates give the bare truck chassis a visible load support.
+        # Supports remain rigidly attached; only the one carton is simulated.
+        try:
+            bp=self.world.get_blueprint_library().find('static.prop.ironplank')
+            for x in (-2.20,-3.50):
+                support=self.world.spawn_actor(bp,carla.Transform(carla.Location(z=15.)),
+                                               attach_to=truck,attachment_type=carla.AttachmentType.Rigid)
+                self.supports.append(support);support.set_collisions(False);support.set_simulate_physics(False)
+                tr=truck.get_transform();support.set_transform(carla.Transform(tr.transform(carla.Location(x=x,z=self.DECK_Z-.025)),tr.rotation))
+            bp=self.world.get_blueprint_library().find(self.BOX)
+            pose=self.staged_pose(truck,0.)
+            safe=carla.Transform(carla.Location(x=pose.location.x,y=pose.location.y,z=pose.location.z+15.))
+            self.actor=self.world.try_spawn_actor(bp,safe)
+            if self.actor is None:raise RuntimeError('트럭 적재 위치에 물체를 준비하지 못했습니다.')
+            self.actor.set_collisions(False);self.actor.set_simulate_physics(False)
+            self.actor.set_transform(pose)
+            self.last_s=s-2.7
+        except Exception:
+            self.destroy();raise
+
+    def staged_pose(self, truck, elapsed):
+        tr=truck.get_transform()
+        x,pitch=cargo_stage(elapsed,truck.bounding_box.extent.x)
+        p=tr.transform(carla.Location(x=x,y=-.10,z=self.DECK_Z))
+        return carla.Transform(p,carla.Rotation(yaw=tr.rotation.yaw,pitch=tr.rotation.pitch+pitch,roll=tr.rotation.roll))
+
+    def stage(self, truck, elapsed):
+        if self.actor and not self.released:
+            self.actor.set_transform(self.staged_pose(truck,elapsed))
+
     def release(self, truck, s, sc):
-        tr = truck.get_transform()
-        # Behind the truck, outside its collision box. Never teleport a live falling prop.
-        self.last_s = s-truck.bounding_box.extent.x-1.5
-        p, yaw = self.route.sample(self.last_s)
-        bp = self.world.get_blueprint_library().find('static.prop.creasedbox02')
-        self.actor = self.world.try_spawn_actor(bp, carla.Transform(
-            carla.Location(x=float(p[0]),y=float(p[1]),z=float(p[2]+2.1)),
-            carla.Rotation(yaw=tr.rotation.yaw+22., pitch=12., roll=8.)))
-        if self.actor is None:
-            raise RuntimeError('낙하물 생성 공간을 확보하지 못했습니다.')
+        if not self.actor or self.released:raise RuntimeError('낙하물 적재 상태를 확인하지 못했습니다.')
+        # The same visible carton reaches the edge before physics takes over.
+        self.stage(truck,sc.ONSET_SECONDS)
+        self.released=True;self.running=True
+        self.actor.set_collisions(True)
         self.actor.set_simulate_physics(True)
         self.actor.set_enable_gravity(True)
-        velocity = truck.get_velocity()
-        self.actor.set_target_velocity(carla.Vector3D(x=velocity.x*.65,y=velocity.y*.65,z=-.4))
-        self.actor.set_target_angular_velocity(carla.Vector3D(x=12.,y=18.,z=15.))
+        tr=truck.get_transform();velocity=truck.get_velocity();yaw=math.radians(tr.rotation.yaw)
+        slide_speed=1.35*(truck.bounding_box.extent.x+.85-2.7)/1.2
+        self.actor.set_target_velocity(carla.Vector3D(x=velocity.x-slide_speed*math.cos(yaw),
+                                                     y=velocity.y-slide_speed*math.sin(yaw),z=velocity.z))
+        # Mild edge tipping, not a large arbitrary spin.
+        self.actor.set_target_angular_velocity(carla.Vector3D(x=-math.sin(yaw)*28.,y=math.cos(yaw)*28.,z=2.))
         sc.release(self.actor.id)
 
     def observation(self, ego_s):
-        if not self.actor:
+        if not self.actor or not self.released:
             return None,0.,None
-        loc = self.actor.get_location()
-        self.last_s,_ = self.route.project([loc.x,loc.y],self.last_s)
-        p,yaw = self.route.sample(self.last_s)
-        right = (loc.x-p[0])*-math.sin(yaw)+(loc.y-p[1])*math.cos(yaw)
-        return self.last_s-ego_s-2.4, float(right), float(loc.z-p[2])
+        loc=self.actor.get_location()
+        self.last_s,_=self.route.project([loc.x,loc.y],self.last_s)
+        p,yaw=self.route.sample(self.last_s)
+        right=(loc.x-p[0])*-math.sin(yaw)+(loc.y-p[1])*math.cos(yaw)
+        return self.last_s-ego_s-2.4,float(right),float(loc.z-p[2])
 
     def set_running(self, driving):
-        if not self.actor or self.running == driving:return
+        if not self.actor or not self.released or self.running==driving:return
         if not driving:
             self.saved_velocity=self.actor.get_velocity();self.saved_angular=self.actor.get_angular_velocity()
         self.actor.set_simulate_physics(driving)
         if driving and self.saved_velocity is not None:
-            self.actor.set_target_velocity(self.saved_velocity)
-            self.actor.set_target_angular_velocity(self.saved_angular)
+            self.actor.set_target_velocity(self.saved_velocity);self.actor.set_target_angular_velocity(self.saved_angular)
         self.running=driving
 
     def destroy(self):
-        if self.actor:
-            try:self.actor.destroy()
-            except RuntimeError:pass
-            self.actor = None
+        for actor in [self.actor,*self.supports]:
+            if actor:
+                try:actor.destroy()
+                except RuntimeError:pass
+        self.actor=None;self.supports=[]
 
 
 def left_lane_clear(bridge):
