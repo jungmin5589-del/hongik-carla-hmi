@@ -8,6 +8,7 @@ from exterior_dialogue import DIALOGUE,VOICE_ENGINE,VOICE_INSTRUCTION
 
 CACHE=Path(__file__).resolve().parents[1]/'cache/city-audio'
 TEXTS={
+ 'city_cargo':('앞 트럭에서 물체가 떨어져 감속하고 있어요. 물체의 종류와 통과 가능 여부는 아직 확인되지 않았습니다. 어떻게 대응할까요?','Sohee'),
  'city_yield':('보행자가 먼저 가라는 손짓을 하고 있어요. 차량은 횡단 여부를 확인하며 정차하고 있습니다.','Sohee'),
  'city_carpool':('차량 밖에서 고성이 들리고 한 사람이 접근하고 있어요. 문은 잠금 상태이며 예약된 동승자인지는 확인되지 않았습니다.','Sohee'),
  'city_rattle':('차량 하부에서 반복적인 소리가 들리고 있어요. 원인은 아직 확인되지 않았습니다. 현재 차량 상태를 살피고 있습니다.','Sohee'),

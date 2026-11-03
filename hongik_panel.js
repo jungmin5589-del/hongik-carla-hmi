@@ -45,7 +45,7 @@ function stopSpeech(){
 function readExplanation(){
  stopSpeech();if(!voiceEnabled)return;
  const voice=event?.narration;
- if(!voice?.cached||!/^\/api\/narration\/audio\/(blockade|congestion|night|fog|normal|complete|yield|city_yield|city_carpool|city_rattle|city_fog)\.wav$/.test(voice.url||'')){
+ if(!voice?.cached||!/^\/api\/narration\/audio\/(blockade|congestion|night|fog|normal|complete|yield|city_yield|city_carpool|city_rattle|city_fog|city_cargo)\.wav$/.test(voice.url||'')){
   $('research-voice-status').textContent='Sohee 음성을 준비하지 못했어요.';return;
  }
  const turn=speechTurn;voiceChannel?.postMessage({claim:voiceClient});

@@ -6,3 +6,4 @@ body.city-study #research-description{margin-bottom:16px}
 body.city-study #research-options-open,body.city-study #research-direct-done{width:100%;margin:0 0 18px;font-family:inherit}
 body.city-study #research-options-open[hidden],body.city-study #research-direct-done[hidden]{display:none}
 @media(max-height:850px){body.city-study .research-option{min-height:68px;padding:13px 16px;gap:5px}}
+body.city-study #passenger-depart{bottom:112px}

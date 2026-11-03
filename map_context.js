@@ -18,7 +18,7 @@
  function drawActors(ctx,state,at,scale,w,h){
   if(!state?.world_pose)return;ctx.save();
   for(const actor of state.actors||[]){
-   if(actor.kind!=='vehicle')continue;
+   if(!['vehicle','obstacle'].includes(actor.kind))continue;
    const pose=actorPose(actor,state.world_pose),[x,y]=at([pose.x,pose.y]);
    if(x < -30||y < -30||x>w+30||y>h+30)continue;
    const width=Math.max(5,Math.min(22,(actor.width_m||1.85)*scale));
@@ -26,6 +26,7 @@
    ctx.save();ctx.translate(x,y);ctx.rotate((pose.yaw+90)*Math.PI/180);
    ctx.shadowColor='#0002';ctx.shadowBlur=3;ctx.fillStyle=actor.role==='lead'?'#667485':'#89939d';
    ctx.beginPath();ctx.roundRect(-width/2,-length/2,width,length,Math.min(3,width/3));ctx.fill();
+   if(actor.kind==='obstacle'){ctx.shadowBlur=0;ctx.fillStyle='#ba874a';ctx.fillRect(-width/2,-width/2,width,width);ctx.restore();continue;}
    ctx.shadowBlur=0;ctx.fillStyle='#d8e2e8';ctx.fillRect(-width*.31,-length*.32,width*.62,Math.min(4,length*.18));
    ctx.fillStyle='#c84747';ctx.fillRect(-width*.35,length*.35,width*.25,1.5);ctx.fillRect(width*.1,length*.35,width*.25,1.5);
    ctx.restore();
