@@ -47,6 +47,11 @@ def navigation_html(city_audio=False):
 
 
 def static_asset(path):
+    if path in ('/api/mechanical-audio','/api/mechanical-audio/scrape.wav'):
+        from mechanical_recording import audio,metadata
+        if path=='/api/mechanical-audio':return json.dumps(metadata()).encode(),'application/json'
+        try:return audio(),'audio/wav'
+        except (OSError,ValueError,KeyError):return None
     local = {'/nurec-nav.js': 'navigation.js', '/nurec-nav.css': 'navigation.css',
              '/recorded-cabin.js':'recorded_cabin.js',
              '/driving-sound.js':'driving_sound.js','/driving-sound.css':'driving_sound.css',

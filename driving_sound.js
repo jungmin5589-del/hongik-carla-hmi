@@ -84,7 +84,7 @@
    if(player.failed){status('주행 녹음을 재생할 수 없어요','unavailable');return}
    status(talking?'설명 중 · 소리를 낮췄습니다':recorded?((n.speed_kph||0)<.4?'정차 중 · 주행음 줄임':'실제 실내 주행 녹음 재생 중'):'주행 상태에 맞춰 재생 중','playing');
   }
-  function unlock(){if(!enabled)return;const C=window.AudioContext||window.webkitAudioContext;if(!ctx&&C)ctx=new C();ctx?.resume().then(update).catch(()=>{})}
+  function unlock(){if(!enabled)return;const C=window.AudioContext||window.webkitAudioContext;if(!ctx&&C)ctx=new C();if(document.visibilityState==='visible')try{localStorage.setItem('hongik-driving-sound-owner',JSON.stringify({id,until:Date.now()+1400}))}catch{}ctx?.resume().then(update).catch(()=>{})}
   document.addEventListener('pointerdown',unlock);document.addEventListener('keydown',unlock);
   const sheet=document.getElementById('settings-sheet');
   if(sheet){

@@ -16,34 +16,36 @@
   }
   return a;
  }
- function nextDelay(speed,random){return (.32+random()*.75)*Math.sqrt(18/Math.max(5,speed))}
+ // Retain contactWave for decoding old recordings; live playback uses real audio below.
+ const prepared=new WeakMap();
+ function prepare(ctx){
+  if(!prepared.has(ctx))prepared.set(ctx,fetch('/api/mechanical-audio/scrape.wav').then(r=>{if(!r.ok)throw Error('Mechanical recording unavailable');return r.arrayBuffer()}).then(b=>ctx.decodeAudioData(b)));
+  return prepared.get(ctx);
+ }
+ function nextDelay(speed,random){return 4.5+random()*3+Math.max(0,20-Math.max(2,speed))*.05}
  class Player{
-  constructor(ctx){
-   this.ctx=ctx;this.random=rng(9027);this.next=0;this.active=new Set();
-   this.gain=ctx.createGain();this.gain.gain.value=.48;
-   const filter=ctx.createBiquadFilter(),pan=ctx.createStereoPanner();filter.type='lowpass';filter.frequency.value=3200;pan.pan.value=.12;
-   this.filter=filter;this.pan=pan;
-   this.gain.connect(filter).connect(pan).connect(ctx.destination);
-   this.buffers=Array.from({length:8},(_,i)=>{const a=contactWave(ctx.sampleRate,i),b=ctx.createBuffer(1,a.length,ctx.sampleRate);b.copyToChannel(a,0);return b});
+  constructor(ctx,options={}){
+   this.ctx=ctx;this.random=rng(9027);this.next=0;this.active=new Set();this.dead=false;this.status='loading';
+   this.gain=ctx.createGain();this.gain.gain.value=0;
+   this.pan=ctx.createStereoPanner();this.pan.pan.value=.08;this.gain.connect(this.pan).connect(ctx.destination);
+   this.ready=(options.buffer?Promise.resolve(options.buffer):prepare(ctx)).then(b=>{if(!this.dead){this.buffer=b;this.status='ready'}}).catch(()=>{this.status='unavailable'});
   }
-  hit(at,level){
-   const source=this.ctx.createBufferSource(),gain=this.ctx.createGain();source.buffer=this.buffers[Math.floor(this.random()*this.buffers.length)];
-   source.playbackRate.value=.87+this.random()*.25;gain.gain.value=level;
-   source.connect(gain).connect(this.gain);this.active.add(source);
-   source.onended=()=>{this.active.delete(source);source.disconnect();gain.disconnect()};source.start(at);
+  hit(at){
+   const source=this.ctx.createBufferSource(),level=this.ctx.createGain();source.buffer=this.buffer;
+   level.gain.value=.75+this.random()*.15;source.connect(level).connect(this.gain);this.active.add(source);
+   source.onended=()=>{this.active.delete(source);if(!this.active.size&&!this.dead)this.status='ready';source.disconnect();level.disconnect()};source.start(at);this.status='playing';
+   return this.buffer.duration;
   }
   update(speed,duck=false){
+   if(this.dead)return;
    if(speed<2){this.stop();return}
-   this.gain.gain.setTargetAtTime(duck?.09:.40+Math.min(35,speed)*.004,this.ctx.currentTime,.12);
-   if(this.next<this.ctx.currentTime)this.next=this.ctx.currentTime+.025;
-   if(this.next<this.ctx.currentTime+.14){
-    const at=this.next;this.hit(at,.42+this.random()*.48);
-    if(this.random()<.58)this.hit(at+.038+this.random()*.055,.22+this.random()*.25);
-    this.next=at+nextDelay(speed,this.random);
-   }
+   this.gain.gain.setTargetAtTime(duck?.25:1,this.ctx.currentTime,.2);
+   if(!this.buffer)return;
+   if(this.next<this.ctx.currentTime)this.next=this.ctx.currentTime+.04;
+   if(this.next<this.ctx.currentTime+.14){const at=this.next;const duration=this.hit(at);this.next=at+duration+nextDelay(speed,this.random)}
   }
-  stop(){for(const source of this.active){try{source.stop()}catch{}}this.active.clear();this.next=0}
-  dispose(){this.stop();this.gain.disconnect();this.filter.disconnect();this.pan.disconnect()}
+  stop(){for(const s of this.active){try{s.stop()}catch{}}this.active.clear();this.next=0;if(this.buffer)this.status='ready'}
+  dispose(){if(this.dead)return;this.dead=true;this.stop();this.gain.disconnect();this.pan.disconnect()}
  }
- const api={contactWave,nextDelay,Player};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.UnderbodySound=api;
+ const api={contactWave,nextDelay,prepare,Player};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.UnderbodySound=api;
 })(globalThis);

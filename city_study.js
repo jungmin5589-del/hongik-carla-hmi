@@ -1,4 +1,4 @@
-/* Native city cases: staged choices, no ETA, synthetic exterior/mechanical audio. */
+/* Native city cases: staged choices, no ETA, exterior voices/effects and softened recorded metal friction. */
 addEventListener('DOMContentLoaded',()=>{
  let session=null,lastNotice=0,lastKnock=0,ctx=null,mechanical=null,outside=null,lastStep=0,lastVoiceEnd=-1000;
  const speechGate=new CityExteriorSound.SpeechGate();
@@ -6,7 +6,7 @@ addEventListener('DOMContentLoaded',()=>{
  const client=crypto.randomUUID();
  const channel=typeof BroadcastChannel==='function'?new BroadcastChannel('nurec-hongik-sohee'):null;
  if(channel)channel.onmessage=()=>{outside?.pause()};
- function unlock(){const C=window.AudioContext||window.webkitAudioContext;if(C&&!ctx)ctx=new C();ctx?.resume().catch(()=>{})}
+ function unlock(){const C=window.AudioContext||window.webkitAudioContext;if(C&&!ctx)ctx=new C();ctx?.resume().catch(()=>{});if(document.visibilityState==='visible')try{localStorage.setItem('city-audio-owner',JSON.stringify({id:client,until:Date.now()+1600}))}catch{}if(ctx)UnderbodySound.prepare(ctx).catch(()=>{})}
  document.addEventListener('pointerdown',unlock);document.addEventListener('click',unlock);document.addEventListener('keydown',unlock);
  function stop(){outside?.pause();outside?.remove();outside=null;for(const hit of impacts){try{hit.stop()}catch{}}impacts.clear();if(mechanical){mechanical.dispose();mechanical=null}window.passengerNarration?.setDuck?.(document.getElementById('research-sohee-audio')?.paused===false?.16:1)}
  function ownsSound(){
@@ -31,11 +31,14 @@ addEventListener('DOMContentLoaded',()=>{
   if(mechanical)return;
   mechanical=new UnderbodySound.Player(ctx);
  }
+ const credit=document.createElement('div');credit.className='setting';credit.style.display='none';
+ credit.innerHTML='<small id="mechanical-audio-status">상황 효과음 · 금속 마찰 <span id="mechanical-playback-status" role="status"></span><br><a href="https://freesound.org/people/Doctor_Jekyll/sounds/254064/" target="_blank" rel="noopener">Metal Scraping.wav · Doctor_Jekyll</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a><br>발췌 · 고음과 음량 조절</small>';
+ document.getElementById('settings-sheet')?.appendChild(credit);
  const poll=setInterval(()=>{
   if(!window.CockpitUpdate)return;clearInterval(poll);const update=window.CockpitUpdate;
   window.CockpitUpdate=data=>{
    update(data);const s=data.nurec?.scenario,city=['pedestrian_yield','city_carpool','city_rattle'].includes(s?.id);
-   document.body.classList.toggle('city-study',city);
+   document.body.classList.toggle('city-study',city);credit.style.display=s?.id==='city_rattle'?'block':'none';
    if(!city){stop();session=null;return}
    const $=id=>document.getElementById(id);
    if(session!==s.session){stop();session=s.session;speechGate.reset();lastNotice=0;lastKnock=0;lastVoiceEnd=-1000}
@@ -59,7 +62,7 @@ addEventListener('DOMContentLoaded',()=>{
    if(count>lastKnock){lastKnock=count;if(c.exterior.at_window&&window.CityExteriorSound){const hit=CityExteriorSound.knock(ctx,speaking);impacts.add(hit);hit.onended=()=>impacts.delete(hit)}}
    if(c?.announcement_count>lastNotice){lastNotice=c.announcement_count;speechGate.offer(c?.exterior?.voice_cue,s.elapsed_s,false);outside?.pause();channel?.postMessage({claim:'city-exterior-notice'});voice(s.id==='city_carpool'?'city_taxi_warning':'city_notice')}
    if(s.id==='city_carpool'&&data.actors.some(a=>a.kind==='pedestrian'&&a.speed_kmh>.3))footsteps();
-   if(c?.rattle_active){startMechanical();mechanical.update(data.nurec.speed_kph,speaking)}
+   if(c?.rattle_active){startMechanical();mechanical.update(data.nurec.speed_kph,speaking);document.body.dataset.mechanicalSound=mechanical.status;$('mechanical-playback-status').textContent=({loading:'불러오는 중',ready:'준비됨',playing:'재생 중',unavailable:'파일 확인 필요'})[mechanical.status]||''}
    else if(mechanical){mechanical.dispose();mechanical=null}
    window.passengerNarration?.setDuck?.(speaking?.16:outside&&!outside.paused?.30:c?.rattle_active?.60:1);
   };
