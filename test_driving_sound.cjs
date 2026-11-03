@@ -26,7 +26,7 @@ const ctx=context(),p=new Player(ctx);assert.equal(ctx.starts.length,5);p.update
   localStorage:{getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v)},addEventListener:(k,v)=>events[k]=v,
   setInterval:f=>(tick=f,1),clearInterval(){}};
  vm.runInNewContext(fs.readFileSync(__dirname+'/driving_sound.js','utf8'),sandbox);
- events.DOMContentLoaded();tick();const data={connected:true,actors:[],nurec:{phase:'live',mode:'auto',speed_kph:20,scenario:{completed:false}}};
+ events.DOMContentLoaded();tick();const data={renderer:'CARLA RGB',connected:true,actors:[],nurec:{phase:'live',mode:'auto',speed_kph:20,scenario:{completed:false}}};
  window.CockpitUpdate(data);assert.equal(contexts.length,0,'No audio before real input');
  documentEvents.pointerdown();await Promise.resolve();assert.equal(contexts[0].starts.length,5);
  window.CockpitUpdate({...data,nurec:{...data.nurec,mode:'paused'}});assert.equal(contexts[0].stops.length,5);

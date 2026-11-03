@@ -1,4 +1,4 @@
-/* Cabin sound design from live speed/traffic. Synthesized audio, not source recordings. */
+/* Native sound design; NuRec uses a separate real interior field recording. */
 (function(root){
  'use strict';
  function cabinNoise(rate=48000,seconds=6,seed=473){
@@ -54,10 +54,10 @@
  const api={cabinNoise,levels,Player};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.DrivingSound=api;
  if(typeof document==='undefined')return;
  addEventListener('DOMContentLoaded',()=>{
-  let ctx=null,player=null,latest=null,enabled=true,volume=.65;const id=crypto.randomUUID();
+  let ctx=null,player=null,latest=null,enabled=true,volume=.65,recording=null,loading=false,failed=false,kind=null;const id=crypto.randomUUID();
   try{enabled=localStorage.getItem('hongik-driving-sound-enabled')!=='false';volume=Number(localStorage.getItem('hongik-driving-sound-volume')??.65)}catch{}
   volume=Number.isFinite(volume)?Math.max(0,Math.min(1,volume)):.65;
-  function stop(){player?.dispose();player=null}
+  function stop(){player?.dispose();player=null;kind=null}
   function status(text,state){const s=document.getElementById('driving-audio-status');if(s)s.textContent=text;const r=document.getElementById('driving-audio-setting');if(r)r.dataset.soundState=state}
   function owns(){
    if(document.visibilityState!=='visible')return false;
@@ -69,10 +69,20 @@
    if(!enabled||ctx?.state!=='running'||!latest?.connected||n.phase!=='live'||n.mode!=='auto'||s?.completed||!owns()){
     stop();status(!enabled?'꺼짐':ctx?.state!=='running'?'출발 버튼을 누르면 켜집니다':'정차·일시정지 중',!enabled?'disabled':ctx?.state!=='running'?'locked':'paused');return;
    }
-   if(!player)player=new Player(ctx);
+   const recorded=latest.renderer!=='CARLA RGB'&&n.renderer_backend!=='carla';
+   if(player&&kind!==recorded)stop();
+   if(recorded&&!recording){
+    if(!loading&&!failed){loading=true;fetch('/api/cabin-audio').then(r=>{if(!r.ok)throw new Error('recording unavailable');return r.json()}).then(r=>{if(!r.available)throw new Error('recording missing');recording=r;loading=false;update()}).catch(()=>{loading=false;failed=true;status('실제 주행 녹음 파일을 준비해 주세요','unavailable')})}
+    status(failed?'실제 주행 녹음 파일을 준비해 주세요':'주행 녹음을 불러오고 있어요',failed?'unavailable':'loading');return;
+   }
+   if(!player){
+    kind=recorded;
+    player=recorded?new root.RecordedCabin.Player(ctx,recording,()=>status('주행 녹음을 재생할 수 없어요','unavailable')):new Player(ctx);
+   }
    const talking=['research-sohee-audio','city-exterior-audio'].some(key=>{const a=document.getElementById(key);return a&&!a.paused&&!a.ended});
    player.update(n.speed_kph||0,latest.actors,talking,volume);
-   status(talking?'설명 중 · 소리를 낮췄습니다':'주행 상태에 맞춰 재생 중','playing');
+   if(player.failed){status('주행 녹음을 재생할 수 없어요','unavailable');return}
+   status(talking?'설명 중 · 소리를 낮췄습니다':recorded?((n.speed_kph||0)<.4?'정차 중 · 주행음 줄임':'실제 실내 주행 녹음 재생 중'):'주행 상태에 맞춰 재생 중','playing');
   }
   function unlock(){if(!enabled)return;const C=window.AudioContext||window.webkitAudioContext;if(!ctx&&C)ctx=new C();ctx?.resume().then(update).catch(()=>{})}
   document.addEventListener('pointerdown',unlock);document.addEventListener('keydown',unlock);

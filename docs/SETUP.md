@@ -75,3 +75,11 @@ are different evidence categories.
 
 
 For the optional nighttime hybrid pedestrian condition, see [the setup and limits](NUREC-NIGHT-PEDESTRIAN-KO.md). It requires `opencv-python-headless==4.11.0.86` and native camera rendering; the other NuRec profiles keep their physics-only default.
+
+NuRec now uses a real interior field recording for its moving cabin ambience.
+Run `python prepare_cabin_recording.py` once to restore the verified CC0 source
+into the external cache. The first departure click enables browser audio;
+standing still fades the road recording to silence. Missing files are reported
+in sound settings, without a synthetic fallback. This is a separately recorded
+car, not the original audio of the NVIDIA scene. See [source, playback and
+limitations](RECORDED-CABIN-AUDIO-KO.md). CARLA native sound design is unchanged.

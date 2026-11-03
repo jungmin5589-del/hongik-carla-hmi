@@ -1069,6 +1069,12 @@ def make_handler(bridge):
             path = urlparse(self.path).path
             if path == '/navigation':
                 data, content = navigation_html(city_audio=getattr(bridge.scenario,'SOURCE_FAITHFUL',False)), 'text/html; charset=utf-8'
+            elif path == '/api/cabin-audio':
+                from cabin_recording import catalog
+                data,content=json.dumps(catalog(),ensure_ascii=False).encode('utf-8'),'application/json; charset=utf-8'
+            elif path == '/api/cabin-audio/drive.mp3':
+                from cabin_recording import stream
+                stream(self);return
             elif path.startswith('/api/narration/audio/'):
                 name=path.removeprefix('/api/narration/audio/')
                 try:
@@ -1137,6 +1143,12 @@ def make_handler(bridge):
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(data)
+
+        def do_HEAD(self):
+            if urlparse(self.path).path=='/api/cabin-audio/drive.mp3':
+                from cabin_recording import stream
+                stream(self,head=True)
+            else:self.send_error(404)
 
         def do_POST(self):
             if self.path not in ("/control", '/api/command'):
