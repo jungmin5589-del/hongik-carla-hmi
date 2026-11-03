@@ -1030,7 +1030,7 @@ class Bridge:
                 start = time.monotonic()
                 self.render_once()
                 with self.lock:
-                    idle = self.command['mode'] == 'paused' and self.frame_id >= 15
+                    idle = (self.command['mode'] == 'paused' or self.scenario.completed) and self.frame_id >= 15
                 self.state['render_cadence'] = 'idle' if idle else 'live'
                 period = 1. if idle else 1 / self.args.fps
                 self.render_wake.wait(max(0, period - (time.monotonic() - start)))

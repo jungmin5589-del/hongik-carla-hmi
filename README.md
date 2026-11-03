@@ -1,3 +1,5 @@
+[중간발표 준비용 개발 현황](docs/MIDTERM-PROGRESS-KO.md): 구현한 기능·방식·검증·한계와 발표 순서를 정리했습니다.
+
 [최신: 설명 후 선택하는 세 상황](docs/CITY-CASES-KO.md) · 50번에서 보행자/카풀 대기/이상음을 고를 수 있습니다. 네 버튼을 세로로 제시하고 도착 예정시간을 숨깁니다.
 
 # Hongik CARLA / NuRec Passenger HMI
