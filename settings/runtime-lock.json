@@ -7,6 +7,9 @@
     "graphics": "DX12",
     "asynchronous": true,
     "physics_only": true,
+    "rendering_enabled_profiles": [
+      "night_pedestrian"
+    ],
     "rpc_port": 2016
   },
   "nurec": {
@@ -52,7 +55,8 @@
     "scipy": "1.18.1",
     "Pillow": "12.3.0",
     "pygame": "2.6.1",
-    "grpcio": "1.84.0"
+    "grpcio": "1.84.0",
+    "opencv-python-headless": "4.11.0.86"
   },
   "memory": {
     "startup_commit_floor_gib": 16,

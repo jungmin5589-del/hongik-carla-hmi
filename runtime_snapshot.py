@@ -8,11 +8,11 @@ ROOT=Path(__file__).resolve().parent
 
 def snapshot():
     packages={}
-    for name in ['carla','numpy','scipy','Pillow','pygame','grpcio','requests','cryptography']:
+    for name in ['carla','numpy','scipy','Pillow','pygame','grpcio','requests','cryptography','opencv-python-headless']:
         try:packages[name]=importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:pass
     result=dict(schema_version=1,python=platform.python_version(),platform=platform.system(),
-        carla=dict(version='0.9.16',graphics='DX12',asynchronous=True,physics_only=True,rpc_port=2016),
+        carla=dict(version='0.9.16',graphics='DX12',asynchronous=True,physics_only=True,rendering_enabled_profiles=['night_pedestrian'],rpc_port=2016),
         nurec=dict(release='26.4',renderer='trained',cache_size=1,grpc_port=46435,
             image='nvcr.io/nvidia/nre/nre-ga@sha256:97f43e7130c5636ce3e80ea3184d97f56a87fdd989b05cce42230881dbdea284',wsl='Ubuntu-22.04'),
         application=dict(drive_port=8774,chooser_port=8775,mobile_http_port=8776,mobile_https_port=8777,
@@ -23,7 +23,7 @@ def snapshot():
     folder=ROOT/'settings';folder.mkdir(exist_ok=True)
     (folder/'runtime-lock.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     (folder/'requirements.lock.txt').write_text('\n'.join(f'{k}=={v}' for k,v in packages.items())+'\n',encoding='utf-8')
-    scenarios=dict(congestion=dict(lanes=4,ego_lane=2,lead_speed_range_kph=[25,35],large_vehicles=3,
+    scenarios=dict(night_pedestrian=dict(source_profile='night',hybrid=True,cross_s_m=42.,cruise_cap_kph=15.,stop_gap_m=7.5,curb_offsets_m=[5.,-4.5],walker='walker.pedestrian.0001',native_camera_size=[960,540],native_camera_fov_deg=100.,native_sensor_hz=20,added_crossing=True,source_time='route projection; original traffic pauses with ego',narration='cached Qwen Sohee',options=['horn','highbeam','direct','maintain']),congestion=dict(lanes=4,ego_lane=2,lead_speed_range_kph=[25,35],large_vehicles=3,
         fast_speed_kph=90,fast_spacing_m=20,standard_fast_count=12,compact_fast_count=8),
         night=dict(ego_straight=True,native_lead='108',base_gap_m=BoundaryWeaving.BASE_GAP,widen_gap_m=BoundaryWeaving.WIDE_GAP,weaving_boundary_m=-1.8,weaving_amplitude_m=.65),
         fog=dict(duration_s=300,onset_s=ONSET_SECONDS,buildup_s=FOG_BUILDUP_SECONDS,appearance_mode='source',inserted_lead=False,

@@ -2,7 +2,7 @@
 from pathlib import Path
 import json
 ROOT=Path(__file__).resolve().parents[1]
-MANIFESTS={'night':'scene-download.json','fog':'long-scene-download.json','rattle':'long-scene-download.json','congestion':'wide-long-scene-download.json'}
+MANIFESTS={'night_pedestrian':'scene-download.json','night':'scene-download.json','fog':'long-scene-download.json','rattle':'long-scene-download.json','congestion':'wide-long-scene-download.json'}
 
 def manifest_name(profile):return MANIFESTS[profile]
 

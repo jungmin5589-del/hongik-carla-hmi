@@ -16,7 +16,7 @@ from performance_presets import PRESETS
 ROOT=Path(__file__).resolve().parent
 PYTHON=Path('C:/CARLA_0.9.16/diagnostics/nurec-env/Scripts/python.exe')
 PORT=8775
-PROFILES={'congestion':'정체·서행','night':'야간 불안정한 앞차','fog':'짙은 안개','rattle':'차량 하부 이상음'}
+PROFILES={'night_pedestrian':'야간 보행자 양보','congestion':'정체·서행','night':'야간 불안정한 앞차','fog':'짙은 안개','rattle':'차량 하부 이상음'}
 NO_WINDOW=0x08000000
 
 def read_drive():

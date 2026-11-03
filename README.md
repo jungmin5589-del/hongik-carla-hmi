@@ -6,6 +6,8 @@
 
 [NuRec 원본 교통 안개·하부 이상음](docs/NATURAL-NUREC-KO.md): 안개·이상음은 원본 차량 위치와 촬영 시점을 보존하고 가까운 앞차를 추가하지 않는 별도 경로를 사용합니다.
 
+[NuRec 야간 보행자 양보](docs/NUREC-NIGHT-PEDESTRIAN-KO.md): 실제 야간 배경에 제어 가능한 CARLA 보행자와 횡단 구간을 추가한 별도 하이브리드 조건입니다.
+
 [주행·환경음과 망설이는 보행자](docs/AMBIENCE-PEDESTRIAN-KO.md): 속도에 따라 변하는 소리를 내비에 추가하고, 횡단보도 보행자가 반 걸음 내딛었다 물러서도록 조정했습니다.
 
 [CARLA 화면과 장면 소리만 녹화](docs/CARLA-RECORDING.md): 별도 녹화 UI 없이 전체 장면을 저장하고, 기존 대사·효과음을 실제 사건 시점에 맞춰 합칩니다.
@@ -23,8 +25,8 @@ Public source and configuration history for the local passenger-interaction prot
 원본 저장소에 직접 변경사항을 반영할 수 없습니다.
 모델 원본·음성·실험 영상·인증정보는 포함하지 않습니다.
 
-Four selectable NuRec conditions: four-lane blocked traffic, a weaving vehicle at night,
-sudden dense fog, and underbody noise. Fog and noise share the source road. Passengers open the Hongik AI
+Five selectable NuRec conditions: four-lane blocked traffic, a weaving vehicle at night,
+sudden dense fog, underbody noise, and a hybrid nighttime pedestrian crossing. Fog and noise share the source road. Passengers open the Hongik AI
 notification, inspect an explanation, choose an action, then receive the observed
 result and an end message. Scenario explanations use scripted simulator state;
 they are not YOLO or LLM perception claims.

@@ -284,7 +284,7 @@ class Bridge:
         self.state['proxy_update_mode'] = getattr(args, 'proxy_update_mode', 'batch')
         self.state['scenario_load'] = getattr(args, 'scenario_load', 'full')
         self.state['traffic_load'] = getattr(args,'traffic_load','standard')
-        self.scene.source_faithful=getattr(args,'appearance_mode','legacy')=='source' and args.profile in ('fog','rattle')
+        self.scene.source_faithful=getattr(args,'appearance_mode','legacy')=='source' and args.profile in ('fog','rattle','night_pedestrian')
         self.state['appearance_mode']='source' if self.scene.source_faithful else 'legacy'
         if args.profile == 'night':
             self.state['night_mode'] = getattr(args, 'night_mode', 'straight')
@@ -294,7 +294,10 @@ class Bridge:
         self.trace = (self.run_dir / "frames.jsonl").open("w", encoding="utf-8", buffering=1)
         if self.scene.source_faithful:
             ids=self.scene.recorded_traffic.proxy_ids(self.scene.poses,self.scene.timestamps,limit=10)
-            self.scenario=NaturalDrive(args.profile,self.scene.route,self.run_dir/'interactions.jsonl',ids)
+            if args.profile=='night_pedestrian':
+                from nurec_pedestrian import NightPedestrian
+                self.scenario=NightPedestrian(self.scene.route,self.run_dir/'interactions.jsonl',ids)
+            else:self.scenario=NaturalDrive(args.profile,self.scene.route,self.run_dir/'interactions.jsonl',ids)
             self.source_actor_state=[]
         elif args.profile=='congestion':
             config=json.loads((TRIAL/'reports/wide-highway-v2-config.json').read_text(encoding='utf-8-sig'))
@@ -348,12 +351,15 @@ class Bridge:
         (self.run_dir / "corridor.xodr").write_text(corridor, encoding="utf-8")
         print(f"Loading source corridor: {road_count} roads", flush=True)
         current = self.client.get_world()
-        ours = [a for a in current.get_actors() if a.attributes.get("role_name", "").startswith("nurec_")]
+        ours = [a for a in current.get_actors() if a.attributes.get("role_name", "").startswith("nurec_")
+                or a.attributes.get('role_name')=='hongik_native_pedestrian']
         old_ids = {r.get("id") for r in ET.fromstring(current.get_map().to_opendrive()).findall("road")}
         new_ids = {r.get("id") for r in ET.fromstring(corridor).findall("road")}
         if (ours and any(a.attributes.get('role_name')==source_role for a in ours)
                 and old_ids == new_ids and current.get_map().name.endswith("OpenDriveMap")):
-            for actor in ours:
+            owned_ids={a.id for a in ours}
+            children=[a for a in current.get_actors().filter('sensor.*') if a.parent and a.parent.id in owned_ids and a.id not in owned_ids]
+            for actor in children+list(reversed(ours)):
                 actor.destroy()
             self.world = current
             print("Reusing this trial's matched corridor", flush=True)
@@ -364,9 +370,12 @@ class Bridge:
                     enable_mesh_visibility=True))
         if self.world.get_settings().synchronous_mode:
             raise RuntimeError("Expected independent asynchronous CARLA test server")
-        if getattr(self.args, 'physics_only', False):
+        if getattr(self.args, 'physics_only', False) and not getattr(self.scenario,'HYBRID_PEDESTRIAN',False):
             self.restore_no_rendering = enable_physics_only(self.world)
             self.state['carla_background_rendering'] = False
+        if getattr(self.scenario,'HYBRID_PEDESTRIAN',False):
+            settings=self.world.get_settings();settings.no_rendering_mode=False;self.world.apply_settings(settings)
+            self.state['carla_background_rendering']=True
         self.map = self.world.get_map()
         bp = self.world.get_blueprint_library().find("vehicle.audi.a2")
         bp.set_attribute("role_name", source_role)
@@ -399,6 +408,14 @@ class Bridge:
             sensor=self.world.spawn_actor(sensor_bp,carla.Transform(),attach_to=self.ego)
             self.actors.append(sensor)
             sensor.listen(self.on_ego_collision)
+        self.hybrid=None
+        if getattr(self.scenario,'HYBRID_PEDESTRIAN',False):
+            from hybrid_pedestrian import HybridPedestrian
+            self.hybrid=HybridPedestrian(self)
+            sensor_bp=self.world.get_blueprint_library().find('sensor.other.collision')
+            sensor=self.world.spawn_actor(sensor_bp,carla.Transform(),attach_to=self.ego);self.actors.append(sensor)
+            sensor.listen(self.on_hybrid_collision)
+            self.state['hybrid']='NuRec original night background + native CARLA pedestrian/added crossing'
         details = {"client_version": self.client.get_client_version(),
             "server_version": self.client.get_server_version(), "port": self.args.carla_port,
             "map": self.map.name, "synchronous_mode": self.world.get_settings().synchronous_mode,
@@ -573,6 +590,12 @@ class Bridge:
             self.client.apply_batch(transforms, False)
         return dynamic_objects, scenario_pose, render_scenario
 
+    def on_hybrid_collision(self,event):
+        if self.hybrid and event.other_actor.id==self.hybrid.walker.actor.id:
+            with self.scenario.lock:
+                self.scenario.collision_count+=1
+                self.scenario.log('pedestrian_contact',other_actor=event.other_actor.id)
+
     def on_ego_collision(self, event):
         roles={track:role for role,track in self.scenario.crash_roles.items()}
         roles[self.scenario.TRACK_ID]='lead'
@@ -733,6 +756,12 @@ class Bridge:
                     self.ego.set_target_velocity(carla.Vector3D())
                     self.ego.set_target_angular_velocity(carla.Vector3D())
                     self.ego.set_transform(self.initial_transform)
+                    if self.hybrid:
+                        from pedestrian_yield import YieldActor
+                        old=self.hybrid.walker;old.destroy()
+                        self.actors=[a for a in self.actors if a.id!=old.actor.id]
+                        self.hybrid.walker=YieldActor(self.world,self.scenario.crossing_route)
+                        self.scenario.pedestrian=self.hybrid.walker;self.actors.append(self.hybrid.walker.actor)
                 tr = self.ego.get_transform()
                 if self.settle_after_verified_contact(tr):
                     tr = self.ego.get_transform()
@@ -750,6 +779,7 @@ class Bridge:
                 if crash_active and mode=='manual':mode='auto'
                 following_speed = self.scenario.advance(dt, mode in ('auto', 'manual'),
                     [tr.location.x, -tr.location.y], speed)
+                if self.hybrid:self.hybrid.walker.update(self.scenario,mode in ('auto','manual'))
                 high_beam=getattr(self.scenario,'high_beam',None)
                 if high_beam is not None:
                     on=high_beam.public()['on']
@@ -805,9 +835,13 @@ class Bridge:
                 # Manual input cannot drive through the controlled lead car.
                 if self.scenario.outcome.phase in ('stopping', 'complete'):
                     ctl.throttle, ctl.brake = 0., .30
-                if self.scenario.enabled and self.scenario.gap < 5 and not crash_active:
+                if self.scenario.enabled and self.scenario.gap < 5 and not crash_active and not self.hybrid:
                     ctl.throttle, ctl.brake = 0., 1.
                 if crash_active and self.scenario.crash_brake:
+                    ctl.throttle,ctl.brake=0.,1.
+                if self.hybrid and self.scenario.phase in ('mutual_wait','crossing','clearance'):
+                    ctl.throttle,ctl.brake=0.,1.
+                if self.hybrid and self.scenario.nearest_gap is not None and self.scenario.nearest_gap<5:
                     ctl.throttle,ctl.brake=0.,1.
                 self.ego.apply_control(ctl)
                 self.state.update(speed_kph=round(speed, 1), mode=mode, route_index=index,
@@ -828,11 +862,14 @@ class Bridge:
         snapshot = self.world.get_snapshot()
         ego_snapshot = snapshot.find(self.ego.id)
         tr = ego_snapshot.get_transform() if ego_snapshot is not None else self.ego.get_transform()
+        capture=None
+        if self.hybrid:
+            native_frame,capture,hybrid_camera,tr,capture_age=self.hybrid.capture()
         index, distance = self.scene.nearest(tr)
         timestamp = self.scene.source_timestamp(tr)
         dynamic_objects, scenario_pose, render_scenario = self.update_tracks(timestamp,tr)
         tracks_done = time.perf_counter()
-        cam_matrix = self.scene.camera_pose(tr)
+        cam_matrix = hybrid_camera if self.hybrid else self.scene.camera_pose(tr)
         pose = grpc_pose(cam_matrix)
         render_objects=dynamic_objects
         if self.args.scenario_load=='essential' and isinstance(self.scenario,HighwayBlockade) and self.scenario.enabled:
@@ -855,11 +892,29 @@ class Bridge:
             hint=next((m.value for m in rpc_call.trailing_metadata() if m.key=="nurec-range-bin"),None)
             native_ranges=decode_range_hint(hint,timestamp)
             native_fog_applied=any(m.key=="nurec-fog" and m.value=="1" for m in rpc_call.trailing_metadata())
+        elif self.hybrid:
+            from hybrid_pedestrian import same_background
+            reused=(self.hybrid.cached_size==(width,height) and same_background(self.hybrid.cached_pose,self.hybrid.cached_stamp,cam_matrix,timestamp))
+            if reused:
+                native_ranges=self.hybrid.cached_range
+            else:
+                response,rpc_call=self.stub.render_rgb.with_call(req,timeout=300,metadata=(("x-nurec-range","1"),))
+                hint=next((m.value for m in rpc_call.trailing_metadata() if m.key=="nurec-range-bin"),None)
+                native_ranges=decode_range_hint(hint,timestamp)
+                if native_ranges is None:raise RuntimeError('Hybrid requires same-request native range')
+                self.hybrid.cached_pose=cam_matrix.copy();self.hybrid.cached_stamp=timestamp
+                self.hybrid.cached_jpeg=response.image_bytes;self.hybrid.cached_range=native_ranges
+                self.hybrid.cached_size=(width,height)
         else:
             response = self.stub.render_rgb(req, timeout=300)
         elapsed = time.perf_counter() - started
         rpc_done = time.perf_counter()
-        jpeg = response.image_bytes
+        jpeg = self.hybrid.cached_jpeg if self.hybrid else response.image_bytes
+        if self.hybrid:
+            jpeg=self.hybrid.compose(jpeg,capture,cam_matrix,(width,height),native_ranges,render_scenario)
+            self.hybrid.last_record.update(background_reused=reused,capture_age_s=round(capture_age,3),native_frame=native_frame)
+            signal=render_scenario['high_beam']
+            self.scenario.high_beam.acknowledge(signal['sequence'],signal['stage'])
         beam_record=None
         if self.high_beam_effect:
             signal=render_scenario['high_beam'];unlit=jpeg
@@ -910,7 +965,7 @@ class Bridge:
             postprocess_ms=(validation_done-rpc_done)*1000)
         record = {"id": self.frame_id + 1, "monotonic": time.monotonic(),
             "post_collision_hold": self.crash_held,
-            "carla_frame": snapshot.frame,
+            "carla_frame": native_frame if self.hybrid else snapshot.frame,
             "carla_frame_on_response": self.world.get_snapshot().frame,
             "carla_transform": np.array(tr.get_matrix()).tolist(),
             "camera_pose": cam_matrix.tolist(), "scene_timestamp_us": timestamp,
@@ -923,6 +978,7 @@ class Bridge:
             "timings": timings,
             "scenario_cuboid_pose": scenario_pose.tolist() if scenario_pose is not None else None}
         if getattr(self.scenario,'SOURCE_FAITHFUL',False):record['camera_stabilization']=getattr(self.scene,'camera_diagnostics',{})
+        if self.hybrid:record['hybrid']=self.hybrid.last_record.copy()
         if fog_record is not None:record['fog_effect']=fog_record
         if beam_record is not None:record['high_beam_effect']=beam_record
         self.trace.write(json.dumps(record) + "\n")
@@ -1017,7 +1073,7 @@ def make_handler(bridge):
                 name=path.removeprefix('/api/narration/audio/')
                 try:
                     if not name.endswith('.wav'):raise ValueError('Invalid audio')
-                    if name[:-4] in ('city_fog','city_rattle'):
+                    if name[:-4] in ('city_fog','city_rattle','city_yield'):
                         from city_voice import audio_path as city_audio_path
                         data=city_audio_path(name[:-4]).read_bytes()
                     else:data=narration_audio_path(name[:-4]).read_bytes()
@@ -1150,7 +1206,7 @@ def make_handler(bridge):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--profile', choices=['night', 'congestion','fog','rattle'], default='night')
+    parser.add_argument('--profile', choices=['night', 'congestion','fog','rattle','night_pedestrian'], default='night')
     parser.add_argument('--appearance-mode',choices=['legacy','source'],default=None)
     parser.add_argument('--night-mode', choices=['straight','overtake-crash'], default='straight')
     parser.add_argument("--carla-port", type=int, default=2016)
@@ -1166,7 +1222,7 @@ def main():
                         help='Skip unused CARLA drawing; keep separate NuRec RGB, DX12 and async physics')
     parser.add_argument('--renderer-backend', choices=['trained','nrend','gsplat','gsplat-native'], default='trained')
     args = parser.parse_args()
-    args.appearance_mode=args.appearance_mode or ('source' if args.profile in ('fog','rattle') else 'legacy')
+    args.appearance_mode=args.appearance_mode or ('source' if args.profile in ('fog','rattle','night_pedestrian') else 'legacy')
     if args.profile=='rattle' and args.appearance_mode!='source':parser.error('Rattle requires original source traffic')
     bridge = Bridge(args)
     server = ThreadingHTTPServer(("127.0.0.1", args.web_port), make_handler(bridge))

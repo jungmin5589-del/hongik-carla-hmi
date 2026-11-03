@@ -84,6 +84,9 @@ class NavigationAdapter:
 
     def options(self):
         sc=self.bridge.scenario
+        if getattr(sc,'HYBRID_PEDESTRIAN',False):
+            from pedestrian_yield import OPTIONS as YIELD_OPTIONS
+            return YIELD_OPTIONS
         if getattr(sc,'SOURCE_FAITHFUL',False):
             from city_scenarios import OPTIONS as CITY_OPTIONS
             return FOG_OPTIONS if sc.profile=='fog' else [dict(option,scenario_action='stop_request',detail='확인된 정차 공간이 없으면 경로를 유지하며 우선 감속합니다.') if option['action']=='study_stop_request' else option for option in CITY_OPTIONS['rattle']]
@@ -105,6 +108,9 @@ class NavigationAdapter:
 
     def state(self):
         b = self.bridge
+        if getattr(b.scenario,'HYBRID_PEDESTRIAN',False):
+            from nurec_pedestrian import navigation_state
+            return navigation_state(b)
         if getattr(b.scenario,'SOURCE_FAITHFUL',False):
             from natural_drive import navigation_state
             return navigation_state(b,self.options())

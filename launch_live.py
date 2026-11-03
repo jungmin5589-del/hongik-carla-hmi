@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent
 PYTHON = Path(r"C:\CARLA_0.9.16\diagnostics\nurec-env\Scripts\python.exe")
 CARLA = Path(r"C:\CARLA_0.9.16")
 NO_WINDOW = 0x08000000
-RENDER_BACKENDS = {'congestion': 'trained', 'night': 'trained', 'fog': 'trained','rattle':'trained'}
+RENDER_BACKENDS = {'night_pedestrian':'trained','congestion': 'trained', 'night': 'trained', 'fog': 'trained','rattle':'trained'}
 
 
 def open_port(port):
@@ -26,7 +26,7 @@ def open_port(port):
 
 
 def can_reuse_drive(state,profile,renderer='trained',night_mode='straight',appearance_mode=None):
-    appearance_mode=appearance_mode or ('source' if profile in ('fog','rattle') else 'legacy')
+    appearance_mode=appearance_mode or ('source' if profile in ('fog','rattle','night_pedestrian') else 'legacy')
     return (state.get('profile','night')==profile and state.get('scene_id')==source_id(profile)
             and state.get('renderer_backend','trained')==renderer
             and state.get('appearance_mode','legacy')==appearance_mode
@@ -84,7 +84,7 @@ def open_displays(owned):
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('--profile',choices=['night','congestion','fog','rattle'],default='night')
+    parser.add_argument('--profile',choices=['night','congestion','fog','rattle','night_pedestrian'],default='night')
     parser.add_argument('--appearance-mode',choices=['source','legacy'],default=None)
     parser.add_argument('--night-mode',choices=['straight','overtake-crash'],default='straight')
     parser.add_argument('--no-ui',action='store_true')
@@ -96,7 +96,7 @@ def main():
     parser.add_argument('--quality',choices=['high','balanced'],default='high')
     parser.add_argument('--traffic-load',choices=['standard','compact'],default='standard')
     args=parser.parse_args()
-    args.appearance_mode=args.appearance_mode or ('source' if args.profile in ('fog','rattle') else 'legacy')
+    args.appearance_mode=args.appearance_mode or ('source' if args.profile in ('fog','rattle','night_pedestrian') else 'legacy')
     if args.profile=='rattle' and args.appearance_mode!='source':raise ValueError('Rattle requires original source traffic')
     args.renderer = args.renderer or RENDER_BACKENDS[args.profile]
     if not ROOT.parent.is_dir() or not PYTHON.is_file():
@@ -169,6 +169,9 @@ def main():
             if p.poll() is not None or time.monotonic() > deadline:
                 raise RuntimeError("CARLA startup failed; see launch log")
             time.sleep(1)
+    # Persist ownership before constructing a bridge, which can fail during
+    # sensor initialization. A retry must still recognize our CARLA process.
+    (ROOT / "owned-processes.json").write_text(json.dumps(owned, indent=2), encoding="utf-8")
     out = (launch / "bridge.log").open("w", encoding="utf-8")
     bridge_env = dict(os.environ, OPENBLAS_NUM_THREADS='1', OMP_NUM_THREADS='2', MKL_NUM_THREADS='1')
     render_size={'high':(1280,720),'balanced':(960,540)}[args.quality]

@@ -72,3 +72,6 @@ Keep DX12, asynchronous CARLA, and the existing memory guards. The `30` FPS valu
 is a requested cap, not a measured performance guarantee. Simulation behavior,
 perception results, fixed-frame image reviews and actual live-drive validation
 are different evidence categories.
+
+
+For the optional nighttime hybrid pedestrian condition, see [the setup and limits](NUREC-NIGHT-PEDESTRIAN-KO.md). It requires `opencv-python-headless==4.11.0.86` and native camera rendering; the other NuRec profiles keep their physics-only default.

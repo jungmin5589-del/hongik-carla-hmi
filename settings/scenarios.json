@@ -1,4 +1,31 @@
 {
+  "night_pedestrian": {
+    "source_profile": "night",
+    "hybrid": true,
+    "cross_s_m": 42.0,
+    "cruise_cap_kph": 15.0,
+    "stop_gap_m": 7.5,
+    "curb_offsets_m": [
+      5.0,
+      -4.5
+    ],
+    "walker": "walker.pedestrian.0001",
+    "native_camera_size": [
+      960,
+      540
+    ],
+    "native_camera_fov_deg": 100.0,
+    "native_sensor_hz": 20,
+    "added_crossing": true,
+    "source_time": "route projection; original traffic pauses with ego",
+    "narration": "cached Qwen Sohee",
+    "options": [
+      "horn",
+      "highbeam",
+      "direct",
+      "maintain"
+    ]
+  },
   "congestion": {
     "lanes": 4,
     "ego_lane": 2,
