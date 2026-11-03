@@ -36,11 +36,12 @@ def stationary_turn(actor,transform,desired,dt,moving,speed,retreat=False):
  transform.rotation.yaw+=max(-dt*85.,min(dt*85.,delta));actor.set_transform(transform)
 
 class ExteriorGait:
- def __init__(self):
+ def __init__(self,model='walker.pedestrian.0034',cache=None):
   self.available=False;self.phase=0.;self.weight=0.;self.previous=None;self.direction=1.
-  if not CACHE.is_file():return
-  d=json.loads(CACHE.read_text(encoding='utf-8'))
-  if d.get('model')!='walker.pedestrian.0034':raise ValueError('Exterior gait model mismatch')
+  path=Path(cache) if cache is not None else CACHE
+  if not path.is_file():return
+  d=json.loads(path.read_text(encoding='utf-8'))
+  if d.get('model')!=model:raise ValueError('Exterior gait model mismatch')
   self.names=d['names'];self.loc=np.asarray([f['loc'] for f in d['frames']]);self.rot=np.asarray([f['rot'] for f in d['frames']]);self.comp=np.asarray([f['comp'] for f in d['frames']])
   self.idle={k:np.asarray(d['idle'][k]) for k in ('loc','rot','comp')}
   self.stride=max(.1,float(d['period_s'])*float(d['reference_speed_mps']))

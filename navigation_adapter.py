@@ -38,6 +38,7 @@ def navigation_html(city_audio=False):
     html = html.replace('<script src="/cockpit.js', '<script src="/nurec-nav-boot.js"></script><script src="/nurec-map-context.js"></script><script src="/cockpit.js', 1)
     html = html.replace('<script type="module">', '<script src="/nurec-nav.js"></script><script type="module">', 1)
     html = html.replace('</head>', '<link rel="stylesheet" href="/nurec-nav.css"></head>')
+    html = html.replace('</head>', '<script defer src="/driving-sound.js"></script><link rel="stylesheet" href="/driving-sound.css"></head>')
     if city_audio:
         html=html.replace('Math.min(devicePixelRatio,2)','Math.min(devicePixelRatio,1)')
         html=html.replace('function animate(now){requestAnimationFrame(animate);','function animate(now){requestAnimationFrame(animate);if(now-last<1000/24)return;')
@@ -47,6 +48,7 @@ def navigation_html(city_audio=False):
 
 def static_asset(path):
     local = {'/nurec-nav.js': 'navigation.js', '/nurec-nav.css': 'navigation.css',
+             '/driving-sound.js':'driving_sound.js','/driving-sound.css':'driving_sound.css',
              '/exterior-sound.js':'exterior_sound.js','/underbody-sound.js':'underbody_sound.js','/city-study.js':'city_study.js','/city-study.css':'city_study.css',
              '/research-events.js': 'hongik_panel.js',
              '/nurec-map-context.js': 'map_context.js',

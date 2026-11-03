@@ -1,5 +1,5 @@
-"""Capture one built-in 0034 walking cycle locally; generated pose data never enters Git."""
-import json
+"""Capture a selected built-in walking cycle locally; generated poses never enter Git."""
+import json,argparse
 from pathlib import Path
 import carla
 import numpy as np
@@ -14,12 +14,17 @@ def frame(actor,names):
              comp=[np.asarray(bones[n].component.get_matrix())[:3,:3].tolist() for n in names])
 
 def main():
+ parser=argparse.ArgumentParser();parser.add_argument('--model',choices=['walker.pedestrian.0034','walker.pedestrian.0001'],default='walker.pedestrian.0034');args=parser.parse_args()
+ cache=CACHE if args.model.endswith('0034') else CACHE.with_name('walker0001.json')
  if memory_state()<2:raise RuntimeError('Gait preparation needs 2 GiB commit headroom')
+ import urllib.request
+ with urllib.request.urlopen('http://127.0.0.1:8774/state',timeout=5) as response:state=json.load(response)
+ if state.get('kind')!='hongik-native-carla' or state.get('mode')!='paused':raise RuntimeError('Pause the owned CARLA-native app before gait capture')
  world=carla.Client('127.0.0.1',2026).get_world()
  ego=next((a for a in world.get_actors().filter('vehicle.*') if a.attributes.get('role_name')=='hongik_native_ego'),None)
- if ego is None:raise RuntimeError('Choose the CARLA-native carpool case and pause it first')
+ if ego is None:raise RuntimeError('Choose a CARLA-native pedestrian or carpool case and pause it first')
  t=ego.get_transform();f=t.get_forward_vector();r=t.get_right_vector();p=t.location+f*14-r*5
- bp=world.get_blueprint_library().find('walker.pedestrian.0034');bp.set_attribute('is_invincible','true');bp.set_attribute('role_name','exterior_gait_capture')
+ bp=world.get_blueprint_library().find(args.model);bp.set_attribute('is_invincible','true');bp.set_attribute('role_name','exterior_gait_capture')
  actor=world.spawn_actor(bp,carla.Transform(p+carla.Location(z=.4),carla.Rotation(yaw=t.rotation.yaw)))
  camera=None
  try:
@@ -42,14 +47,14 @@ def main():
   lags=list(range(max(2,int(.45/dt)),min(len(samples)//2,int(2.2/dt))))
   scores=[float(np.mean((features[:-lag]-features[lag:])**2)) for lag in lags]
   best=min(scores);lag=next(lag for lag,score in zip(lags,scores) if score<=best*1.15+1e-6)
-  data=dict(model='walker.pedestrian.0034',source='local built-in CARLA walking cycle',names=names,idle=idle,
+  data=dict(model=args.model,source='local built-in CARLA walking cycle',names=names,idle=idle,
             frames=samples[:lag],period_s=lag*dt,reference_speed_mps=float(np.mean(speeds)),cycle_error=best)
-  CACHE.parent.mkdir(parents=True,exist_ok=True)
-  if CACHE.exists():
+  cache.parent.mkdir(parents=True,exist_ok=True)
+  if cache.exists():
    import shutil,uuid
-   shutil.copy2(CACHE,CACHE.with_suffix('.before-'+uuid.uuid4().hex+'.json'))
-  temp=CACHE.with_suffix('.tmp.json');temp.write_text(json.dumps(data,separators=(',',':')),encoding='utf-8');temp.replace(CACHE)
-  print(json.dumps({'cache':str(CACHE),'bones':len(names),'frames':lag,'period_s':data['period_s'],'speed':data['reference_speed_mps'],'cycle_error':best}),flush=True)
+   shutil.copy2(cache,cache.with_suffix('.before-'+uuid.uuid4().hex+'.json'))
+  temp=cache.with_suffix('.tmp.json');temp.write_text(json.dumps(data,separators=(',',':')),encoding='utf-8');temp.replace(cache)
+  print(json.dumps({'cache':str(cache),'bones':len(names),'frames':lag,'period_s':data['period_s'],'speed':data['reference_speed_mps'],'cycle_error':best}),flush=True)
  finally:
   if camera:
    camera.stop();camera.destroy()

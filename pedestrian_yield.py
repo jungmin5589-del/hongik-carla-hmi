@@ -10,6 +10,8 @@ from scenario2 import Scenario2
 from native_carla_route import HighwayRoute
 from city_voice import narration as pedestrian_narration
 from pedestrian_gesture import yielding_arm
+from pedestrian_hesitation import hesitation_target
+from exterior_gait import ExteriorGait,CACHE as GAIT_CACHE,stationary_turn
 
 
 OPTIONS = [
@@ -106,6 +108,7 @@ class YieldScenario(Scenario2):
         self.support_at=None;self.announcement_count=0;self.signal_until=0.
         self.action_at=None;self.highbeam_at=None;self.direct_pending=False;self.direct_done_at=None
         self.gap=0.;self.last_ego_s=0.;self.result_elapsed=0.
+        self.hesitation={}
 
     def interaction(self,action,session):
         if action in ('notification_exposed','open','close'):
@@ -143,6 +146,7 @@ class YieldScenario(Scenario2):
     def tick_yield(self,dt,driving,speed,ego_s,actual_offset=None):
         with self.lock:
             self.last_ego_s=ego_s;self.gap=max(0.,self.cross_s-ego_s-2.4)
+            if actual_offset is not None:self.offset=actual_offset
             if not driving or self.completed:return
             dt=min(.15,max(0.,dt));self.elapsed+=dt;self.phase_elapsed+=dt
             if self.phase=='approach' and self.gap<=9. and speed<.5:
@@ -197,7 +201,7 @@ class YieldScenario(Scenario2):
                         dialog_open=self.dialog_open,action=self.last_action,action_complete=self.crossed,
                         feedback=self.feedback,completed=self.completed,completion_reason=self.completion_reason,
                         outcome=self.outcome.public(),yielding=dict(phase=self.phase,offset_m=self.offset,
-                        wait_s=self.wait_elapsed,crossed=self.crossed,announcement_count=self.announcement_count),direct_pending=self.direct_pending,
+                        wait_s=self.wait_elapsed,crossed=self.crossed,announcement_count=self.announcement_count,hesitation=self.hesitation.copy()),direct_pending=self.direct_pending,
                         collision_count=getattr(self,'collision_count',0),
                         state_source='Scripted CARLA pedestrian and vehicle; not gesture/intent recognition')
 
@@ -212,6 +216,8 @@ class YieldActor:
         self.yaw=yaw;self.actor=world.try_spawn_actor(bp,carla.Transform(carla.Location(x=float(xyz[0]),y=float(xyz[1]),z=float(xyz[2]+.3)),carla.Rotation(yaw=math.degrees(yaw)-90)))
         if self.actor is None:raise RuntimeError('Pedestrian curb spawn is blocked.')
         self.pose=None;self.last_phase=None;self.gesture_weight=0.;self.last_elapsed=0.
+        self.gait=ExteriorGait(model='walker.pedestrian.0001',cache=GAIT_CACHE.with_name('walker0001.json'))
+        self.wait_anchor=None;self.pace=0.
 
     def update(self,trial,driving):
         if self.pose is None:self.pose={b.name:b for b in self.actor.get_bones().bone_transforms}
@@ -220,15 +226,31 @@ class YieldActor:
         self.gesture_weight=min(1.,self.gesture_weight+dt/.7) if waving else max(0.,self.gesture_weight-dt/.7)
         crossing=trial.phase=='crossing' and driving and self.gesture_weight<.001
         entering=trial.phase=='approach' and driving and trial.gap<22. and self.offset()>self.route.curb_right-1.6
-        self.actor.apply_control(carla.WalkerControl(direction=carla.Vector3D(x=math.sin(self.yaw),y=-math.cos(self.yaw)),speed=1.25 if crossing else .7 if entering else 0.))
-        if self.gesture_weight>0.:
-            if waving and self.last_phase!='mutual_wait':
-                transform=self.actor.get_transform()
-                transform.rotation.yaw=math.degrees(self.yaw)+180.
-                self.actor.set_transform(transform)
-            self.actor.set_bones(carla.WalkerBoneControlIn(yielding_arm(self.pose,trial.elapsed,self.gesture_weight)))
-            self.actor.show_pose()
+        inward=carla.Vector3D(x=math.sin(self.yaw),y=-math.cos(self.yaw));desired=1.25 if crossing else .7 if entering else 0.;direction=inward
+        info={}
+        if waving:
+            if self.wait_anchor is None:self.wait_anchor=self.offset()
+            info=hesitation_target(self.wait_anchor,self.route.curb_right,trial.wait_elapsed)
+            error=info['target_offset_m']-self.offset()
+            desired=min(.75,abs(error)*3.) if abs(error)>.025 and driving else 0.
+            direction=carla.Vector3D(x=-inward.x,y=-inward.y) if error>0 else inward
+        if not driving:desired=0.
+        self.pace+=max(-dt*2.,min(dt*1.7,desired-self.pace))
+        if not driving:self.pace=0.
+        self.actor.apply_control(carla.WalkerControl(direction=direction,speed=self.pace))
+        tr=self.actor.get_transform();speed=self.actor.get_velocity().length()
+        look,_=self.route.sample(max(0.,self.route.cross_s-8.))
+        look_yaw=math.degrees(math.atan2(float(look[1])-tr.location.y,float(look[0])-tr.location.x))
+        facing=(look_yaw+info.get('glance_deg',0.)-tr.rotation.yaw+180.)%360.-180. if waving else 0.
+        if self.gait.available:
+            bones=dict(self.gait.pose(tr.location,speed,dt,facing))
+            if self.gesture_weight>0.:bones.update(yielding_arm(self.pose,trial.elapsed,self.gesture_weight))
+            self.actor.set_bones(carla.WalkerBoneControlIn(list(bones.items())));self.actor.show_pose()
+        elif self.gesture_weight>0. and speed<.08:
+            stationary_turn(self.actor,tr,look_yaw,dt,False,speed)
+            self.actor.set_bones(carla.WalkerBoneControlIn(yielding_arm(self.pose,trial.elapsed,self.gesture_weight)));self.actor.show_pose()
         else:self.actor.hide_pose()
+        with trial.lock:trial.hesitation=dict(info,actual_offset_m=round(self.offset(),3),speed_mps=round(speed,3),gait='matching_native_cycle' if self.gait.available else 'native_animation')
         self.last_phase=trial.phase
 
     def cleared(self):

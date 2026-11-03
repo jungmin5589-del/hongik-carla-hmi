@@ -1,0 +1,4 @@
+.settings-sheet #driving-audio-setting,.settings-sheet #driving-audio-volume-setting{display:flex}
+#driving-audio-volume-setting label{font-size:13px;color:inherit;margin:0}
+#driving-audio-volume{width:120px;accent-color:#3e6ae1}
+#driving-audio-status{display:block;font-size:11px;color:#818b98;margin-top:5px}
