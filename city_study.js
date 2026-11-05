@@ -1,6 +1,6 @@
 /* Native city cases: staged choices, no ETA, exterior voices/effects and softened recorded metal friction. */
 addEventListener('DOMContentLoaded',()=>{
- let session=null,lastNotice=0,lastKnock=0,ctx=null,mechanical=null,outside=null,lastStep=0,lastVoiceEnd=-1000;
+ let session=null,lastNotice=0,lastKnock=0,ctx=null,mechanical=null,outside=null,outsideGain=null,outsidePan=null,outsideFilter=null,lastStep=0,lastVoiceEnd=-1000;
  const speechGate=new CityExteriorSound.SpeechGate();
  const impacts=new Set();
  const client=crypto.randomUUID();
@@ -19,6 +19,7 @@ addEventListener('DOMContentLoaded',()=>{
   const source=ctx.createMediaElementSource(outside),filter=ctx.createBiquadFilter(),panner=ctx.createStereoPanner(),gain=ctx.createGain(),compressor=ctx.createDynamicsCompressor();
   filter.type='lowpass';filter.frequency.value=2600;panner.pan.value=.8;gain.gain.value=key==='city_notice'?.45:.68;
   compressor.threshold.value=-16;compressor.ratio.value=3;compressor.attack.value=.008;compressor.release.value=.15;
+  outsideGain=gain;outsidePan=panner;outsideFilter=filter;
   source.connect(filter).connect(compressor).connect(panner).connect(gain).connect(ctx.destination);outside.play().catch(()=>{});
  }
  function footsteps(){
@@ -58,6 +59,7 @@ addEventListener('DOMContentLoaded',()=>{
    if(speaking||(c?.actor_retreat&&outside?.dataset.voiceKey!=='city_notice'))outside?.pause();
    const nextVoice=speechGate.take(s.elapsed_s,speaking||Boolean(outside&&!outside.paused&&!outside.ended)||performance.now()-lastVoiceEnd<800);
    if(nextVoice)voice(nextVoice);
+   if(outside&&!outside.paused&&c?.exterior&&outsideGain){const ex=c.exterior,d=Math.max(1,Math.hypot((ex.local_forward_m||0)-.9,ex.local_right_m||0));outsideGain.gain.setTargetAtTime(Math.max(.16,Math.min(.68,1.6/d)),ctx.currentTime,.15);outsidePan.pan.setTargetAtTime(Math.max(-.95,Math.min(.95,(ex.local_right_m||0)/d)),ctx.currentTime,.15);outsideFilter.frequency.setTargetAtTime(1200+1400*Math.min(1,4/d),ctx.currentTime,.15);}
    const count=c?.exterior?.knock_count||0;
    if(count>lastKnock){lastKnock=count;if(c.exterior.at_window&&window.CityExteriorSound){const hit=CityExteriorSound.knock(ctx,speaking);impacts.add(hit);hit.onended=()=>impacts.delete(hit)}}
    if(c?.announcement_count>lastNotice){lastNotice=c.announcement_count;speechGate.offer(c?.exterior?.voice_cue,s.elapsed_s,false);outside?.pause();channel?.postMessage({claim:'city-exterior-notice'});voice(s.id==='city_carpool'?'city_taxi_warning':'city_notice')}

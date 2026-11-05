@@ -141,6 +141,7 @@ def filtered_state(data):
         event=dict(active=bool(event.get('active')),pending=bool(event.get('pending')),title=event.get('title','주행을 기다리고 있어요'),
                    description=event.get('description',''),feedback=event.get('feedback',''),live_detail=event.get('live_detail',''),
                    options=event.get('options',[]),outcome=event.get('outcome',{}),narration=narration,
+                   study=event.get('study'),condition=event.get('condition'),vehicle_action=event.get('vehicle_action'),
                    direct_pending=bool(event.get('direct_pending')),direct_label=event.get('direct_label','대응 완료'),
                    staged_options=bool(event.get('staged_options')),hide_eta=bool(event.get('hide_eta'))))
 
@@ -250,6 +251,7 @@ class Gateway:
         if not state.get('connected'):raise ValueError('PC와 연결이 끊겼어요. 다시 연결된 뒤 선택해 주세요.')
         if body.get('session_id')!=state.get('session') or body.get('navigation_id')!=state.get('navigation_id'):raise ValueError('이전 주행 알림이에요. 현재 상황을 다시 열어 주세요.')
         allowed=OBSERVATIONS|{o['action'] for o in event.get('options',[])}
+        if event.get('study'):allowed|={'study_cancel_pending','study_view_opened','study_fixed_help','study_fixed_stop'}
         if event.get('direct_pending'):allowed.add('study_direct_done')
         if body.get('action') not in allowed:raise ValueError('휴대폰에서 사용할 수 없는 조작입니다.')
         request_id=body.get('request_id')

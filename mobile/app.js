@@ -2,7 +2,7 @@
 const $=id=>document.getElementById(id);let state=null,paired=false,busy=false,opened=false,selection=null,openedSession=null,seen=null,exposed=null,presented=null,audio=null,toastTimer=null,beeper=null,optionsReady=false,explanationDone=false;
 const id=()=>crypto.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const standalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
-let pushBusy=false,workerRegistration=null,workerError='';
+let pushBusy=false,workerRegistration=null,workerError='',viewAck=null;
 function toast(message){$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,5000)}
 async function request(path,body){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7000);try{const r=await fetch('/m/api/'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,signal:controller.signal,cache:'no-store'});const value=await r.json();if(!r.ok){const e=Error(value.error||'연결을 확인해 주세요.');e.status=r.status;throw e}return value}finally{clearTimeout(timer)}}
 function stopAudio(){if(audio){audio.pause();audio.removeAttribute('src');audio=null}$('read').textContent='설명 다시 듣기'}
@@ -50,9 +50,10 @@ async function readyWorker(){
 function render(){
  $('pair').hidden=paired;$('dashboard').hidden=!paired;updatePush();if(!state||!paired)return;
  const s=state,e=s.event||{},out=e.outcome||{},resolving=out.phase&&out.phase!=='idle';
+ $('mobile-fixed').hidden=!e.study;
  $('destination').textContent=s.destination||'내 주행';$('connection').textContent=s.connected?'PC와 연결됨':'PC 연결을 기다리는 중';$('dot').classList.toggle('online',!!s.connected);$('speed').textContent=s.connected?Math.round(s.speed_kph):'—';$('remaining').textContent=s.remaining_m==null?'—':s.remaining_m>=1000?(s.remaining_m/1000).toFixed(1)+' km':Math.round(s.remaining_m)+' m';$('gap').textContent=s.gap_m==null?'':`앞차 간격 약 ${s.gap_m} m`;$('beam').hidden=!s.high_beam_on;
  $('status-label').textContent=s.completed?'차량이 정차했습니다':resolving?'선택한 행동의 결과 확인 중':s.stage==='running'?'주행 중':'출발 대기';$('status-copy').textContent=out.summary||e.feedback||(s.stage==='running'?'상황이 생기면 홍익 AI가 알려드릴게요.':'PC에서 주행을 시작해 주세요.');
- const unread=!!s.connected&&!!e.active&&seen!==s.session&&!resolving;$('banner').hidden=!unread;$('launch').classList.toggle('unread',unread);$('launch-copy').textContent=s.completed?'행동 결과 보기':resolving?'행동 결과 확인 중':unread?'새 상황 · 눌러서 확인':'상황 살펴보기';
+ const unread=e.condition!=='A'&&!!s.connected&&!!e.active&&seen!==s.session&&!resolving;$('banner').hidden=!unread;$('launch').hidden=e.condition==='A';$('launch').classList.toggle('unread',unread);$('launch-copy').textContent=s.completed?'행동 결과 보기':resolving?'행동 결과 확인 중':unread?'새 상황 · 눌러서 확인':'상황 살펴보기';
  if(unread&&exposed!==s.session&&document.visibilityState==='visible'){exposed=s.session;ping();navigator.vibrate?.([50]);}
  if(unread&&presented!==s.session&&document.visibilityState==='visible'){presented=s.session;send('study_presented').catch(()=>{});}
  if(!opened)return;
@@ -60,6 +61,8 @@ function render(){
  $('caption').textContent=resolving?'선택한 행동의 결과':'현재 상황과 차량의 판단';$('choices').hidden=!e.active||!!selection||!!resolving||Boolean(e.staged_options&&!explanationDone);$('options-open').hidden=!e.staged_options||explanationDone||!!resolving;$('options-open').disabled=busy;$('direct-done').hidden=!e.direct_pending;$('direct-done').textContent=e.direct_label||'대화 완료';$('direct-done').disabled=busy;$('confirm').hidden=!selection||!!resolving;
  for(const b of $('options').children)b.disabled=busy||!s.connected||!optionsReady||Boolean((e.options||[]).find(o=>o.action===b.dataset.action)?.disabled);
  $('execute').disabled=busy||!s.connected||Boolean((e.options||[]).find(o=>o.action===selection?.action)?.disabled);$('cancel').disabled=busy;
+ const st=e.study,queued=st?.phase==='queued';$('pending-cancel').hidden=!queued;$('pending-cancel').textContent=queued?Math.max(1,Math.ceil(st.countdown_s))+'초 뒤 실행 · 요청 취소':'';
+ if(st?.action==='inspect'&&st.phase!=='queued'&&st.phase!=='idle'&&viewAck!==s.session){viewAck=s.session;send('study_view_opened').catch(()=>{viewAck=null})}
 }
 async function poll(){try{const next=await request('state');if(state?.session!==next.session){stopAudio();opened=false;optionsReady=false;selection=null;openedSession=null;$('dialog').hidden=true;seen=null;presented=null;exposed=null;}state=next;paired=true;render();if(opened&&next.event.active&&!next.event.pending&&!optionsReady&&!busy&&(!next.event.staged_options||explanationDone)){busy=true;try{await send('study_options',{options_visible:true});optionsReady=true}catch(e){toast(e.message)}finally{busy=false;render()}}}catch(e){if(e.status===401){paired=false;stopAudio();opened=false;$('dialog').hidden=true;}else if(state)state={...state,connected:false};render();}finally{setTimeout(poll,500)}}
 async function pair(code){$('pair-error').textContent='';try{await request('pair',{code});paired=true;armSound();toast('PC와 연결했어요. 주행을 시작하면 함께 알려드릴게요.');}catch(e){$('pair-error').textContent=e.message}}
@@ -69,6 +72,9 @@ async function close(){if(!opened)return;stopAudio();opened=false;selection=null
 async function choose(option){if(busy||state?.event?.pending||option.disabled||(state?.event?.options||[]).find(o=>o.action===option.action)?.disabled)return;busy=true;stopAudio();render();try{await send('study_choice',{choice:option.action});selection=option;$('confirm-title').textContent=option.label+' 요청을 실행할까요?';$('confirm-copy').textContent=option.detail;}catch(e){toast(e.message)}finally{busy=false;render()}}
 $('execute').onclick=async()=>{if(busy||!selection||(state?.event?.options||[]).find(o=>o.action===selection.action)?.disabled)return;busy=true;render();const action=selection.action;try{await send(action,{choice:action});selection=null;toast('요청을 전달했어요. PC 주행 화면에서 결과를 확인해 주세요.')}catch(e){toast(e.message)}finally{busy=false;render()}};
 $('cancel').onclick=async()=>{if(busy)return;busy=true;try{await send('study_cancel',{choice:selection?.action});selection=null}catch(e){toast(e.message)}finally{busy=false;render()}};
+$('pending-cancel').onclick=async()=>{try{await send('study_cancel_pending');toast('실행 전 요청을 취소했어요.')}catch(e){toast(e.message)}};
+function fixedRequest(action,label){if(busy||!state?.event.study)return;opened=true;openedSession=state.session;selection={action,label,detail:label==='정차 요청'?'주변 정차 공간을 확인하고 감속해요.':'지원 요청을 전달하고 현재 차량 상태를 확인해요.'};$('dialog').hidden=false;$('confirm-title').textContent=label+'을 실행할까요?';$('confirm-copy').textContent=selection.detail;render();}
+$('fixed-help').onclick=()=>fixedRequest('study_fixed_help','도움 요청');$('fixed-stop').onclick=()=>fixedRequest('study_fixed_stop','정차 요청');
 $('direct-done').onclick=async()=>{if(busy||!state?.event.direct_pending)return;busy=true;render();try{await send('study_direct_done')}catch(e){toast(e.message)}finally{busy=false;render()}};$('options-open').onclick=revealChoices;
 $('launch').onclick=open;$('banner').onclick=open;$('close').onclick=close;$('read').onclick=()=>audio?stopAudio():read();$('settings').onclick=()=>{updatePush();$('preferences').hidden=false};$('pref-close').onclick=()=>$('preferences').hidden=true;
 $('push-enable').onclick=async()=>{

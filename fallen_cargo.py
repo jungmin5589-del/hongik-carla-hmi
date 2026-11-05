@@ -290,6 +290,7 @@ def left_lane_clear(bridge):
     ego_wp=bridge.world.get_map().get_waypoint(bridge.ego.get_location())
     if ego_wp is None or wp.lane_id*ego_wp.lane_id<=0:
         return False
+    extents={item['actor'].id:item.get('extent') for item in bridge.vehicles}
     for actor in bridge.world.get_actors().filter('vehicle.*'):
         if actor.id==bridge.ego.id:continue
         loc=actor.get_location()
@@ -297,7 +298,9 @@ def left_lane_clear(bridge):
         if abs(s-bridge.ego_s)>35.:continue
         c,yaw=bridge.route.sample(s)
         off=(loc.x-c[0])*-math.sin(yaw)+(loc.y-c[1])*math.cos(yaw)
-        if abs(off+bridge.route.width)<actor.bounding_box.extent.y+1.35:
+        extent=extents.get(actor.id)
+        if extent is None:extent=actor.bounding_box.extent
+        if abs(off+bridge.route.width)<extent.y+1.35:
             return False
     return True
 
@@ -316,7 +319,8 @@ def navigation_state(b, options):
         lanes.append(dict(id=i+1,points=points))
     actors=[]
     for item in b.vehicles[1:]:
-        actor=item['actor'];at=actor.get_transform();e=actor.bounding_box.extent
+        actor=item['actor'];at=actor.get_transform();e=item.get('extent')
+        if e is None:e=actor.bounding_box.extent
         actors.append(dict(id=actor.id,kind='vehicle',role='lead',label='앞 트럭',vehicle_type='large',
                            length_m=e.x*2,width_m=e.y*2,height_m=e.z*2,speed_kmh=actor.get_velocity().length()*3.6,
                            world_pose=dict(x=at.location.x,y=at.location.y,yaw=at.rotation.yaw),**local(at.location.x,at.location.y)))

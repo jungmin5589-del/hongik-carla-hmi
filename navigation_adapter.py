@@ -275,6 +275,9 @@ class NavigationAdapter:
                 message = result['feedback']
                 self.options_open = False
                 self.choice = None
+            elif getattr(sc,'study',None) and action in ('study_fixed_help','study_fixed_stop','study_cancel_pending','study_view_opened','study_repeat'):
+                message=sc.study.handle(action,details)
+                sc.log('navigation_'+action,client_event=details)
             elif action=='study_direct_done' and hasattr(sc,'complete_direct'):
                 message=sc.complete_direct(session)['feedback']
                 sc.log('navigation_direct_done',client_event=details)
@@ -298,6 +301,7 @@ class NavigationAdapter:
                     if self.options_open:
                         sc.log('navigation_options_exposed',client_event=details,measurement='UI exposure; not gaze')
                 elif action == 'study_close':
+                    if getattr(sc,'study',None) and sc.study.phase=='queued':sc.study.cancel()
                     if sc.onset:
                         sc.interaction('close', session)
                     else:
