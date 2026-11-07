@@ -60,7 +60,9 @@
   function stop(){player?.dispose();player=null;kind=null}
   function status(text,state){const s=document.getElementById('driving-audio-status');if(s)s.textContent=text;const r=document.getElementById('driving-audio-setting');if(r)r.dataset.soundState=state}
   function owns(){
-   if(document.visibilityState!=='visible')return false;
+   const scene=window.HongikSceneAudio?.getState();
+   if(scene){if(scene.context!=='running'||!scene.owner)return false}
+   else if(document.visibilityState!=='visible')return false;
    try{const now=Date.now(),old=JSON.parse(localStorage.getItem('hongik-driving-sound-owner')||'null');if(old&&old.id!==id&&old.until>now)return false;
     localStorage.setItem('hongik-driving-sound-owner',JSON.stringify({id,until:now+1400}));return true}catch{return true}
   }
@@ -96,7 +98,7 @@
    slider.oninput=()=>{volume=Number(slider.value)/100;try{localStorage.setItem('hongik-driving-sound-volume',String(volume))}catch{}update()};
   }
   const poll=setInterval(()=>{if(!window.CockpitUpdate)return;clearInterval(poll);const prior=window.CockpitUpdate;window.CockpitUpdate=data=>{prior?.(data);latest=data;update()}},100);
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')stop();else update()});
+  document.addEventListener('visibilitychange',()=>{if(!window.HongikSceneAudio&&document.visibilityState!=='visible')stop();else update()});
   addEventListener('pagehide',()=>{clearInterval(poll);stop();ctx?.close()});addEventListener('nurec-exit',stop);
  });
 })(globalThis);

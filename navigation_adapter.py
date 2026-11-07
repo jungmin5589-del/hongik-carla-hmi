@@ -43,11 +43,16 @@ def navigation_html(city_audio=False):
     if city_audio:
         html=html.replace('Math.min(devicePixelRatio,2)','Math.min(devicePixelRatio,1)')
         html=html.replace('function animate(now){requestAnimationFrame(animate);','function animate(now){requestAnimationFrame(animate);if(now-last<1000/24)return;')
-        html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/underbody-sound.js"></script><script defer src="/city-study.js"></script><link rel="stylesheet" href="/city-study.css"></head>')
+        html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/underbody-sound.js"></script><script defer src="/scene-audio.js"></script><script defer src="/city-study.js"></script><link rel="stylesheet" href="/city-study.css"></head>')
     return html.encode('utf-8')
 
 
 def static_asset(path):
+    if path in ('/api/footsteps','/api/footsteps/bank.wav'):
+        from footstep_recording import catalog,verified
+        if path=='/api/footsteps':return json.dumps(catalog()).encode(),'application/json'
+        try:return verified()[0].read_bytes(),'audio/wav'
+        except (OSError,ValueError,KeyError):return None
     if path=='/api/language/en':
         from english_locale import catalog
         return json.dumps(catalog(),ensure_ascii=False).encode('utf-8'),'application/json; charset=utf-8'
@@ -61,7 +66,7 @@ def static_asset(path):
         if path=='/api/mechanical-audio':return json.dumps(metadata()).encode(),'application/json'
         try:return audio(),'audio/wav'
         except (OSError,ValueError,KeyError):return None
-    local = {'/language.js':'language.js','/nurec-nav.js': 'navigation.js', '/nurec-nav.css': 'navigation.css',
+    local = {'/scene-audio.js':'scene_audio.js','/language.js':'language.js','/nurec-nav.js': 'navigation.js', '/nurec-nav.css': 'navigation.css',
              '/recorded-cabin.js':'recorded_cabin.js',
              '/driving-sound.js':'driving_sound.js','/driving-sound.css':'driving_sound.css',
              '/exterior-sound.js':'exterior_sound.js','/underbody-sound.js':'underbody_sound.js','/city-study.js':'city_study.js','/city-study.css':'city_study.css',

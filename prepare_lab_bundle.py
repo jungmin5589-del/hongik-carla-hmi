@@ -45,7 +45,7 @@ def main():
             if z.testzip():raise RuntimeError('Engine archive integrity failure')
         os.replace(temporary,archive)
         print('Engine archive verified',flush=True)
-    for name in ('city-audio','english-audio','sohee-narration','sohee-pedestrian','exterior-gait','recorded-cabin','mechanical-recording'):
+    for name in ('city-audio','english-audio','sohee-narration','sohee-pedestrian','exterior-gait','recorded-cabin','mechanical-recording','recorded-footsteps'):
         shutil.copytree(ROOT.parent/'cache'/name,target/'cache'/name,dirs_exist_ok=True)
     from passenger_music import MUSIC,TRACKS
     music=target/'cache/music';music.mkdir(exist_ok=True)

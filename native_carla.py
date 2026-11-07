@@ -665,8 +665,8 @@ def native_navigation_html(midterm=False):
     html=html.replace("item.kind==='pedestrian'?personMesh():carMesh", "item.kind==='obstacle'?new THREE.Mesh(new THREE.BoxGeometry(item.width_m,.45,item.length_m),new THREE.MeshStandardMaterial({color:0xa98450,roughness:1})):item.kind==='pedestrian'?personMesh():carMesh")
     if midterm:
         html=html.replace('src="/research-events.js','src="/midterm-panel.js')
-        html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/underbody-sound.js"></script><script defer src="/midterm-audio.js"></script><link rel="stylesheet" href="/midterm-panel.css"></head>')
-    else:html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/underbody-sound.js"></script><script defer src="/city-study.js"></script><link rel="stylesheet" href="/city-study.css"></head>')
+        html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/underbody-sound.js"></script><script defer src="/scene-audio.js"></script><script defer src="/midterm-audio.js"></script><link rel="stylesheet" href="/midterm-panel.css"></head>')
+    else:html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/underbody-sound.js"></script><script defer src="/scene-audio.js"></script><script defer src="/city-study.js"></script><link rel="stylesheet" href="/city-study.css"></head>')
     return html.encode('utf-8')
 
 

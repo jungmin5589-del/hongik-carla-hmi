@@ -32,5 +32,9 @@ const ctx=context(),p=new Player(ctx);assert.equal(ctx.starts.length,5);p.update
  window.CockpitUpdate({...data,nurec:{...data.nurec,mode:'paused'}});assert.equal(contexts[0].stops.length,5);
  window.CockpitUpdate(data);assert.equal(contexts[0].starts.length,10);
  document.visibilityState='hidden';documentEvents.visibilitychange();assert.equal(contexts[0].stops.length,10);
+ window.HongikSceneAudio={getState:()=>({context:'running',owner:true})};
+ documentEvents.visibilitychange();assert.equal(contexts[0].starts.length,15,'Armed scene keeps ambience behind the driving window');
+ window.HongikSceneAudio.getState=()=>({context:'running',owner:false});
+ window.CockpitUpdate(data);assert.equal(contexts[0].stops.length,15,'Other navigation owner stops this tab');
  console.log('PASS cabin noise: finite waveforms, speed/traffic/voice mix, actual-input gate, pause/hidden disposal and no duplicate stop');
 })().catch(e=>{console.error(e);process.exitCode=1});

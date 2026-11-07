@@ -1,7 +1,7 @@
 """Existing scene assets aligned to real recorded CARLA events, not speaker capture.
 
-Reuses verified cached dialogue and ports the existing browser's procedural
-knock/step/rattle waveforms. Does not invent dialogue or add engine ambience.
+Reuses verified cached dialogue, recorded shoe contacts and the existing
+procedural knock/rattle effects. Does not invent dialogue or engine ambience.
 """
 import json
 import math
@@ -44,11 +44,12 @@ def door():
     return pan(lowpass(a,1500),.85,.32)
 
 
-def step():
-    t=np.arange(round(RATE*.13))/RATE;k=np.log(45/105)/.10
-    phase=2*np.pi*105*(np.exp(k*np.minimum(t,.10))-1)/k+2*np.pi*45*np.maximum(0,t-.1)
-    gain=.035*np.exp(np.log(.001/.035)*t/.12)
-    return pan((np.sin(phase)*gain).astype(np.float32),.8)
+def step(variant=0):
+    from footstep_recording import verified
+    path,record=verified();part=record['segments'][variant%4]
+    with wave.open(str(path)) as w:
+        rate=w.getframerate();w.setpos(round(part['offset']*rate));data=np.frombuffer(w.readframes(round(part['duration']*rate)),dtype='<i2').astype(np.float32)/32768
+    return resample_poly(data,RATE,rate).astype(np.float32)
 
 
 def rattle():
@@ -76,8 +77,8 @@ def voice(key):
 
 def render(timeline,duration,output):
     mix=np.zeros((math.ceil(duration*RATE),2),dtype=np.float32)
-    events=[];played=[];last_voice=last_knock=0;last_step=-1.;mechanical_start=None
-    knock=door();footstep=step();mechanical=None;last_mode=False;busy_until=0.
+    events=[];played=[];last_voice=last_knock=0;mechanical_start=None
+    knock=door();mechanical=None;last_mode=False;busy_until=0.;step_distance=0.;step_count=0;last_step_at=None
     cover=any(item['state']['scenario'].get('context',{}).get('sound_kind')=='loose_underbody_cover' for item in timeline)
     def add(at,clip,kind,key=None):
         start=round(at*RATE);skip=max(0,-start);start=max(0,start);n=min(len(clip)-skip,len(mix)-start)
@@ -117,16 +118,23 @@ def render(timeline,duration,output):
                 if count-last_knock>1:raise RuntimeError('Polling missed a door knock')
                 last_knock=count
                 if ext.get('at_window'):add(at,knock,'door_knock')
-            if sc['id']=='city_carpool' and ext.get('walk_speed_mps',0)>.083 and at-last_step>=.6:
-                add(at,footstep,'footstep');last_step=at
+            dt=0. if last_step_at is None else min(.25,max(0.,at-last_step_at));last_step_at=at
+            if sc['id']=='city_carpool' and ext.get('walk_speed_mps',0)>.12:
+                step_distance+=ext['walk_speed_mps']*dt;stride=[.48,.54,.50,.57][step_count%4]
+                if step_distance>=stride:
+                    step_distance%=stride;d=max(1.,math.hypot(ext.get('local_forward_m',0)-.9,ext.get('local_right_m',0)))
+                    add(at,pan(lowpass(step(step_count),1800),min(.65,ext.get('local_right_m',0)/d),min(.1,.18/(1+d*.5))),'recorded_footstep');step_count+=1
+            else:step_distance=0.
             active=c.get('rattle_active',False)
             if active and mechanical_start is None:mechanical_start=at
             if not active and mechanical_start is not None:
                 fill_mechanical(mechanical_start,at)
                 mechanical_start=None
-        elif mechanical_start is not None:
-            fill_mechanical(mechanical_start,at)
-            mechanical_start=None
+        else:
+            last_step_at=None;step_distance=0.
+            if mechanical_start is not None:
+                fill_mechanical(mechanical_start,at)
+                mechanical_start=None
         last_mode=enabled
     if mechanical_start is not None:
         fill_mechanical(mechanical_start,duration)
@@ -136,7 +144,7 @@ def render(timeline,duration,output):
         target.setnchannels(2);target.setsampwidth(2);target.setframerate(RATE)
         target.writeframes((np.clip(mix,-1,1)*32767).astype('<i2').tobytes())
     result=dict(events=events,dialogue=played,peak=peak*gain,rate=RATE,channels=2,normalization_gain=gain,
-        scope='Existing cached voices and procedural effects mixed against actual CARLA event timestamps; not captured PC playback',
+        scope='Cached voices, recorded shoe contacts and procedural effects aligned to CARLA events; not captured PC playback',
         engine_ambience_added=False)
     output.with_suffix('.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
     return result

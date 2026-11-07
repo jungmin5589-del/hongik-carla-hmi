@@ -103,3 +103,5 @@ an unmapped/forest segment may have no buildings.
 ## 보행자와 서로 양보
 
 50번 시작 화면에 네 번째 독립 조건을 추가했습니다. 사람과 차량이 서로 기다리다가 양보 안내·모의 관제·대기 선택에 따라 횡단과 재출발이 이어집니다. [실행·동작·검증 범위](docs/PEDESTRIAN-YIELD-KO.md).
+
+장면 음성은 내비를 뒤로 보내도 유지하며, 취객 발소리는 실제 신발 접촉 녹음을 사용합니다. [소리 활성화·출처·검증 범위](docs/SCENE-AUDIO-KO.md).

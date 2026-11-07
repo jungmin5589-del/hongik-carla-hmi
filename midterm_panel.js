@@ -231,7 +231,7 @@ function notify(){
  }
  render();
 }
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')stopSpeech();notify()});
+document.addEventListener('visibilitychange',notify);
 window.addEventListener?.('pagehide',stopSpeech);
 window.addEventListener?.('nurec-exit',stopSpeech);
 window.CockpitUpdate=data=>{

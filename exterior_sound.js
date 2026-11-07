@@ -30,6 +30,7 @@
    if(!this.pending||busy)return null;
    const key=this.pending.key;this.pending=null;return key;
   }
+  retry(cue,elapsed){if(cue?.key&&cue.index===this.last&&!this.pending&&elapsed<=cue.expires_s)this.pending={...cue}}
  }
  const api={doorWave,knock,SpeechGate};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.CityExteriorSound=api;
 })(globalThis);

@@ -22,6 +22,7 @@ OPTIONS={
 
 # Whole sentences first. Small labels also cover the original Tesla-style UI.
 PAIRS='''
+장면 소리 켜기	Enable scene sound
 알림 설정	Notification settings
 내 주행과 연결	Connect to your drive
 휴대폰에서도	On your phone,

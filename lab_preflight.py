@@ -23,7 +23,8 @@ def main():
     if not all(v['cached'] for v in english().values()):errors.append('English narration cache incomplete')
     from cabin_recording import verified
     from mechanical_recording import audio
-    for name,check in [('recorded cabin',verified),('mechanical sound',audio)]:
+    from footstep_recording import verified as footsteps
+    for name,check in [('recorded cabin',verified),('mechanical sound',audio),('recorded footsteps',footsteps)]:
         try:check()
         except Exception as exc:errors.append(name+': '+type(exc).__name__)
     from exterior_gait import CACHE
