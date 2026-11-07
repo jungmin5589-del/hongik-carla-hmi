@@ -18,7 +18,7 @@ addEventListener('DOMContentLoaded',()=>{
    if(previous===s.session&&s.yielding.announcement_count>announcement){
     if(document.visibilityState==='visible'){
      channel?.postMessage({claim:'exterior-yield-notice'});exterior?.pause();
-     exterior=new Audio('/api/narration/audio/yield_notice.wav');exterior.play().catch(()=>{});
+     exterior=new Audio(window.HongikLocale?.audioURL('yield_notice')||'/api/narration/audio/yield_notice.wav');exterior.play().catch(()=>{});
     }
    }
    previous=s.session;announcement=s.yielding.announcement_count;

@@ -120,6 +120,20 @@ class GatewayTests(unittest.TestCase):
         self.pair()
         for body in (dict(action='emergency_stop',session_id='s1',navigation_id='s1-weaving',request_id='1'),dict(action='study_highbeam',session_id='old',navigation_id='old-weaving',request_id='2')):
             self.assertEqual(self.session.post(self.url+'/m/api/command',json=body).status_code,400)
+    def test_english_preference_requires_pairing_and_audio_remains_private(self):
+        self.assertEqual(self.session.get(self.url+'/m/api/state?lang=en').status_code,401)
+        self.assertEqual(self.session.get(self.url+'/m/english-audio/night.wav').status_code,401)
+        self.pair();self.assertEqual(self.session.get(self.url+'/m/api/state?lang=en').status_code,200)
+        self.assertEqual(self.gateway.pairing.device['language'],'en')
+        self.assertEqual(self.session.get(self.url+'/m/english-audio/unknown.wav').status_code,404)
+        self.session.get(self.url+'/m/api/state?lang=ko');self.assertEqual(self.gateway.pairing.device['language'],'ko')
+    def test_english_notification_preserves_session_dedup(self):
+        self.pair();self.gateway.pairing.device['language']='en';self.gateway.pairing.subscribe(subscription())
+        self.event.clear();self.gateway.poll_once();self.assertTrue(self.event.wait(2))
+        self.assertEqual(self.sent[-1]['title'],'There is a new driving situation')
+        self.assertIn('lang=en',self.sent[-1]['url']);self.assertEqual(self.sent[-1]['tag'],'s1:situation')
+        r=self.session.post(self.url+'/m/api/push-test',json={});self.assertEqual(r.status_code,200)
+        self.assertEqual(self.sent[-1]['title'],'Hongik AI notification check');self.assertIn('lang=en',self.sent[-1]['url'])
     def test_no_push_before_subscription_and_per_session_dedup(self):
         self.pair();before=len(self.sent);self.gateway.poll_once();self.assertEqual(len(self.sent),before)
         self.gateway.pairing.subscribe(subscription());self.event.clear();self.gateway.poll_once();self.assertTrue(self.event.wait(2))

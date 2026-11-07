@@ -14,7 +14,7 @@ addEventListener('DOMContentLoaded',()=>{
   try{const old=JSON.parse(localStorage.getItem('city-audio-owner')||'null'),now=Date.now();if(old&&old.id!==client&&old.until>now)return false;localStorage.setItem('city-audio-owner',JSON.stringify({id:client,until:now+1600}));return true}catch{return true}
  }
  function voice(key){
-  outside?.pause();outside?.remove();outside=new Audio('/api/narration/audio/'+key+'.wav');outside.id='city-exterior-audio';outside.hidden=true;document.body.appendChild(outside);
+  outside?.pause();outside?.remove();outside=new Audio(window.HongikLocale?.audioURL(key)||'/api/narration/audio/'+key+'.wav');outside.id='city-exterior-audio';outside.hidden=true;document.body.appendChild(outside);
   outside.dataset.voiceKey=key;outside.onended=()=>{lastVoiceEnd=performance.now()};
   const source=ctx.createMediaElementSource(outside),filter=ctx.createBiquadFilter(),panner=ctx.createStereoPanner(),gain=ctx.createGain(),compressor=ctx.createDynamicsCompressor();
   filter.type='lowpass';filter.frequency.value=2600;panner.pan.value=.8;gain.gain.value=key==='city_notice'?.45:.68;

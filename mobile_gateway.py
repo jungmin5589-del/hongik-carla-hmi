@@ -21,7 +21,7 @@ import urllib.request
 from datetime import datetime,timedelta,timezone
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse,parse_qs
 
 import qrcode
 import requests
@@ -188,9 +188,16 @@ class Gateway:
         if value['event'].get('active'):events.append(('situation','새로운 주행 상황이 있어요','홍익 AI를 열어 상황 설명과 대응 방법을 확인해 보세요.'))
         if value['event'].get('outcome',{}).get('phase')=='complete':events.append(('end','요청한 대응을 마쳤어요','선택한 행동의 결과를 확인해 주세요.'))
         for kind,title,body in events:
+            language=(self.pairing.device or {}).get('language','ko')
+            if language=='en':
+                title,body={
+                    'start':('Your drive has started','Review the driving status and your choices on your phone.'),
+                    'situation':('There is a new driving situation','Open Hongik AI to review the situation and response choices.'),
+                    'end':('Your request is complete','Review the outcome of your choice.')
+                }[kind]
             key=session+':'+kind
             if self.pairing.mark_notification(key):
-                payload=dict(title=title,body=body,tag=key,session=session,url='/m/?event='+key)
+                payload=dict(title=title,body=body,tag=key,session=session,url='/m/?lang='+language+'&event='+key)
                 threading.Thread(target=self.deliver,args=(payload,),daemon=True).start()
 
     def refresh_network(self,address=None):
@@ -328,8 +335,24 @@ def handler(gateway):
                     target=secure_url if 'secure=1' in self.path else plain_url;b=io.BytesIO();qrcode.make(target).save(b,format='PNG');self.send(b.getvalue(),'image/png');return
                 markup=(ASSETS/'connect.html').read_text(encoding='utf-8').replace('{{IP}}',html.escape(gateway.address)).replace('{{PIN}}',gateway.pairing.pin).replace('{{HTTP_PORT}}',str(HTTP_PORT)).replace('{{HTTPS_PORT}}',str(HTTPS_PORT)).replace('{{FINGERPRINT}}',gateway.keys['ca_fingerprint'])
                 self.send(markup.encode(),'text/html; charset=utf-8');return
+            if path in ('/m/language.js','/m/language/en'):
+                if path.endswith('.js'):self.send((ROOT/'language.js').read_bytes(),'application/javascript; charset=utf-8')
+                else:
+                    from english_locale import catalog
+                    self.send(catalog())
+                return
+            if path.startswith('/m/english-audio/'):
+                if not self.authorized():self.fail('연결이 필요합니다.',401);return
+                from english_voice import audio_path
+                key=path.removeprefix('/m/english-audio/').removesuffix('.wav')
+                try:self.send(audio_path(key).read_bytes(),'audio/wav')
+                except (OSError,ValueError,KeyError):self.send_error(404)
+                return
             if path=='/m/api/state':
                 if not self.authorized():self.fail('PC와 휴대폰을 먼저 연결해 주세요.',401);return
+                language=parse_qs(urlparse(self.path).query).get('lang',[None])[0]
+                if language in ('ko','en') and gateway.pairing.device.get('language')!=language:
+                    with gateway.pairing.lock:gateway.pairing.device['language']=language;gateway.pairing.save()
                 self.send(gateway.state());return
             if path.startswith('/m/audio/'):
                 if not self.authorized():self.fail('연결이 필요합니다.',401);return
@@ -345,7 +368,9 @@ def handler(gateway):
                    '/m/icon-192.png':('icon-192.png','image/png'),'/m/icon-512.png':('icon-512.png','image/png')}
             if path in ('/','/m'):self.send_response(302);self.send_header('Location','/m/');self.end_headers();return
             if path in files:
-                name,kind=files[path];self.send((ASSETS/name).read_bytes(),kind);return
+                name,kind=files[path];payload=(ASSETS/name).read_bytes()
+                if name=='index.html':payload=payload.replace(b'</head>',b'<script src="/m/language.js"></script></head>')
+                self.send(payload,kind);return
             self.send_error(404)
         def do_POST(self):
             if not self.check_host():self.fail('접속 주소를 확인해 주세요.',403);return
@@ -371,7 +396,9 @@ def handler(gateway):
                     self.send(dict(subscribed=False));return
                 if path=='/m/api/push-test':
                     if not gateway.pairing.device.get('subscription'):raise ValueError('시스템 알림을 먼저 켜 주세요.')
-                    gateway.deliver(dict(title='홍익 AI 알림 연결 확인',body='실제 주행 상황이 생기면 이곳으로 알려드릴게요.',tag='test-'+secrets.token_hex(4),url='/m/'))
+                    language=(gateway.pairing.device or {}).get('language','ko')
+                    title,body=('Hongik AI notification check','Driving situation alerts will appear here.') if language=='en' else ('홍익 AI 알림 연결 확인','실제 주행 상황이 생기면 이곳으로 알려드릴게요.')
+                    gateway.deliver(dict(title=title,body=body,tag='test-'+secrets.token_hex(4),url='/m/?lang='+language))
                     self.send(dict(sent=gateway.push_error is None));return
                 self.send_error(404)
             except (ValueError,TypeError,KeyError) as error:self.fail(str(error))

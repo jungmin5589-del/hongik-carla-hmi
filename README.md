@@ -1,3 +1,5 @@
+[한국어 / English 내비와 음성](docs/ENGLISH-NAVIGATION-KO.md): 기존 디자인에 언어 선택을 추가했습니다. 영어 Sohee 설명·Aiden 외부 대사는 미리 생성한 음성으로 재생합니다.
+
 [준호 중간 발표 UX 적용과 실제 CARLA 동작](docs/MIDTERM-UX-IMPLEMENTATION-KO.md): 기존 테슬라형 내비를 유지하고 A/B 조건, 세로 선택지, 3초 취소와 결과 확인을 적용했습니다. 졸음운전 관제 연락을 클락션으로 교체했습니다.
 
 [도로 위 낙하물](docs/FALLEN-CARGO-KO.md): 50번 선택 화면에 낙하·감속·확인·회피·정지·판단 위임을 추가했습니다.

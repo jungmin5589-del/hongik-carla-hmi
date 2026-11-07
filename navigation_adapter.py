@@ -32,6 +32,7 @@ FOG_OPTIONS = [
 
 def navigation_html(city_audio=False):
     html = (WEB / 'index.html').read_text(encoding='utf-8-sig')
+    html=html.replace('</head>','<script src="/language.js"></script></head>')
     # Same HTML, Three.js, cockpit and research UI as 36; this route alone omits
     # providers which would start another session or claim unsupported inputs.
     html = re.sub(r'<script[^>]*src="/(?:qwen-speech|navigation-voice|hongik-wake|hongik-assistant|experience|multimodal)\.js[^>]*></script>', '', html)
@@ -47,12 +48,20 @@ def navigation_html(city_audio=False):
 
 
 def static_asset(path):
+    if path=='/api/language/en':
+        from english_locale import catalog
+        return json.dumps(catalog(),ensure_ascii=False).encode('utf-8'),'application/json; charset=utf-8'
+    if path.startswith('/api/english-audio/') and path.endswith('.wav'):
+        from english_voice import audio_path
+        key=path.removeprefix('/api/english-audio/').removesuffix('.wav')
+        try:return audio_path(key).read_bytes(),'audio/wav'
+        except (OSError,ValueError,KeyError):return None
     if path in ('/api/mechanical-audio','/api/mechanical-audio/scrape.wav'):
         from mechanical_recording import audio,metadata
         if path=='/api/mechanical-audio':return json.dumps(metadata()).encode(),'application/json'
         try:return audio(),'audio/wav'
         except (OSError,ValueError,KeyError):return None
-    local = {'/nurec-nav.js': 'navigation.js', '/nurec-nav.css': 'navigation.css',
+    local = {'/language.js':'language.js','/nurec-nav.js': 'navigation.js', '/nurec-nav.css': 'navigation.css',
              '/recorded-cabin.js':'recorded_cabin.js',
              '/driving-sound.js':'driving_sound.js','/driving-sound.css':'driving_sound.css',
              '/exterior-sound.js':'exterior_sound.js','/underbody-sound.js':'underbody_sound.js','/city-study.js':'city_study.js','/city-study.css':'city_study.css',

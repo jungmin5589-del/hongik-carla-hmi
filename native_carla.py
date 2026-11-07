@@ -648,6 +648,10 @@ def native_navigation_html(midterm=False):
     return html.encode('utf-8')
 
 
+def native_home_html():
+    return (ROOT/'native_home.html').read_bytes().replace(b'<main>',b'<script src="/language.js"></script><main>',1)
+
+
 def handler(bridge):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*_):pass
@@ -658,7 +662,7 @@ def handler(bridge):
         def do_GET(self):
             path=urlparse(self.path).path
             try:
-                if path=='/':self.send((ROOT/'native_home.html').read_bytes(),'text/html; charset=utf-8')
+                if path=='/':self.send(native_home_html(),'text/html; charset=utf-8')
                 elif path=='/navigation':self.send(native_navigation_html(bridge.presentation=='midterm'),'text/html; charset=utf-8')
                 elif path=='/navigation/classic':self.send(native_navigation_html(),'text/html; charset=utf-8')
                 elif path in ('/midterm-panel.js','/midterm-panel.css'):
