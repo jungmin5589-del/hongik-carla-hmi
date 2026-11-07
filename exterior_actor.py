@@ -7,7 +7,9 @@ from exterior_dialogue import dialogue_cue,AttentionGate
 from exterior_gait import ExteriorGait,stationary_turn
 
 IMPACTS=(.75,1.12,1.72)
-DOOR_FORWARD=-.75
+# Keep the approach behind the car, but finish at the front side window:
+# the rear door was at the outer edge of the calibrated 216-degree lab view.
+DOOR_FORWARD=.55
 
 def exterior_point(route,s,offset):
  """The real sidewalk continues behind the bounded driving-route crop."""

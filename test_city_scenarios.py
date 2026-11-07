@@ -81,7 +81,7 @@ class ContextTests(unittest.TestCase):
   phase,s,off=exterior_target(0.,18.)
   self.assertEqual(phase,'waiting');self.assertEqual(s,6.)
   phase,s,off=exterior_target(4.,18.)
-  self.assertEqual(phase,'approaching_from_rear');self.assertAlmostEqual(s,17.25);self.assertAlmostEqual(off,5.15)
+  self.assertEqual(phase,'approaching_from_rear');self.assertAlmostEqual(s,18.55);self.assertAlmostEqual(off,5.15)
  def test_door_hits_are_three_irregular_impacts_not_replayed_on_pause(self):
   self.assertEqual([knock_count(t) for t in (0,.74,.76,1.13,1.73,4.9,5.76)],[0,0,1,2,3,3,4])
   sc=self.scene('carpool');self.tick(sc,9);sc.interaction('open',sc.session);sc.interaction('relocate',sc.session)
@@ -118,7 +118,7 @@ class ContextTests(unittest.TestCase):
  def test_post_greeting_motion_stays_in_a_short_strip_next_to_the_door(self):
   for elapsed in (28.+i*.2 for i in range(360)):
    phase,s,off=exterior_target(float(elapsed),5.,False,20.,28.)
-   self.assertIn(phase,('knocking','pacing'));self.assertGreaterEqual(s,4.25);self.assertLessEqual(s,4.85)
+   self.assertIn(phase,('knocking','pacing'));self.assertGreaterEqual(s,5.55);self.assertLessEqual(s,6.15)
    self.assertGreaterEqual(off,5.15);self.assertLessEqual(off,5.3)
 
 if __name__=='__main__':unittest.main()

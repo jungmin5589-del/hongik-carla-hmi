@@ -1,8 +1,10 @@
 """Original five local tracks, read-only streaming. Audio stays outside Git."""
 import re
+import os
 from pathlib import Path
 
-MUSIC=Path.home()/'Desktop/홍익대/2026 2학기/휴먼 자율주행 인터렉션 디자인/CARLA-YOLO-실습/music'
+MUSIC=Path(os.environ.get('HONGIK_MUSIC_DIR',Path(__file__).resolve().parents[1]/'cache/music'))
+if not MUSIC.is_dir():MUSIC=Path.home()/'Desktop/홍익대/2026 2학기/휴먼 자율주행 인터렉션 디자인/CARLA-YOLO-실습/music'
 TRACKS=[
  ('yerin','그건 아마 우리의 잘못은 아닐 거야','백예린','Our love is great','yerin.flac','#d7b99f'),
  ('chet','I Fall In Love Too Easily','Chet Baker','60 Essential Hits · Prince of Cool','chet.flac','#a0b5c1'),

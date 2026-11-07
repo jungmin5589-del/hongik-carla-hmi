@@ -14,7 +14,11 @@ async function main(){
   const rear=await until(async()=>{const d=await get('/state'),ex=d.scenario?.context.exterior;if(ex?.voice_cue?.index===1&&ex.local_forward_m<-6)return d});await frame('01-voice-behind');
   await until(()=>page.evaluate(()=>{const a=document.getElementById('city-exterior-audio');return a&&!a.paused&&a.currentTime>.1}));
   const audio=await page.evaluate(()=>{const a=document.getElementById('city-exterior-audio');return {url:a.currentSrc,time:a.currentTime,paused:a.paused}});assert.ok(audio.url.endsWith((english?'/api/english-audio/':'/api/narration/audio/')+'city_taxi_call.wav'));
-  const ex=rear.scenario.context.exterior;const angle=(Math.atan2(ex.local_right_m-.35,ex.local_forward_m+.9)*180/Math.PI-90+540)%360-180;assert.ok(Math.abs(angle)>50,'First voice must be outside camera horizontal FOV');
+  const ex=rear.scenario.context.exterior,eye=rear.rig?.eye||rear.camera?.eye||(rear.rig?[0,-.35,1.2]:[.9,0,1.6]);
+  const bearing=Math.atan2(ex.local_right_m-eye[1],ex.local_forward_m-eye[0])*180/Math.PI;
+  const yaws=rear.rig?[-rear.rig.fov,0,rear.rig.fov].map(v=>v+rear.rig.yaw):[rear.camera?.yaw??35];
+  const angles=yaws.map(y=>(bearing-y+540)%360-180),angle=Math.min(...angles.map(Math.abs));
+  assert.ok(angles.every(a=>Math.abs(a)>(rear.rig?.fov||rear.camera?.fov||100)/2),'First voice must be outside all displayed camera FOVs');
   const windowState=await until(async()=>{const d=await get('/state');return d.scenario?.context.exterior.at_window?d:null});await frame('02-at-side-window');
   const door=await until(async()=>{const d=await get('/state');return d.scenario?.context.exterior.knock_count>=3?d:null});await frame('03-door-knock');
   assert.equal(door.scenario.collision_count,0);assert.ok(door.scenario.context.exterior.door_speech_started_s>rear.scenario.elapsed_s+5);

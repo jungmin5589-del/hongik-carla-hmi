@@ -11,6 +11,8 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parent
 PYTHON=ROOT.parent/'mobile-env/Scripts/python.exe'
+if (ROOT.parent/'python/python.exe').is_file():PYTHON=ROOT.parent/'python/python.exe'
+if not PYTHON.is_file() and (ROOT/'.venv-lab/Scripts/python.exe').is_file():PYTHON=ROOT/'.venv-lab/Scripts/python.exe'
 URL='http://127.0.0.1:8776/'
 
 

@@ -1,3 +1,5 @@
+[연구실 3면 화면 준비](docs/LAB-READY-KO.md): 원본 Surround 설정을 적용하고, 기존 연구실 0.9.15를 건드리지 않는 별도 0.9.16 실행 폴더를 준비합니다. 취객 밝기는 기존 값으로 복구했습니다.
+
 [한국어 / English 내비와 음성](docs/ENGLISH-NAVIGATION-KO.md): 기존 디자인에 언어 선택을 추가했습니다. 영어 Sohee 설명·Aiden 외부 대사는 미리 생성한 음성으로 재생합니다.
 
 [준호 중간 발표 UX 적용과 실제 CARLA 동작](docs/MIDTERM-UX-IMPLEMENTATION-KO.md): 기존 테슬라형 내비를 유지하고 A/B 조건, 세로 선택지, 3초 취소와 결과 확인을 적용했습니다. 졸음운전 관제 연락을 클락션으로 교체했습니다.

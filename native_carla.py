@@ -32,6 +32,7 @@ from city_scenarios import ContextScenario, ExteriorActor, OPTIONS as CONTEXT_OP
 from midterm_study import StudyMixin, OPTIONS as MIDTERM_OPTIONS, option as study_option, enrich_navigation
 from passenger_music import library as music_library, stream as stream_music
 from fallen_cargo import CargoScenario, CargoActor, OPTIONS as CARGO_OPTIONS, navigation_state as cargo_navigation_state, left_lane_clear, following_speed
+from lab_settings import sun_altitude
 
 ROOT = Path(__file__).resolve().parent
 PORT, RPC = 8774, 2026
@@ -228,12 +229,13 @@ class NativeBridge:
     def __init__(self, quality='high'):
         self.stop=threading.Event();self.lock=threading.RLock();self.frame_event=threading.Condition()
         self.jpeg=None;self.frame_id=0;self.images=queue.Queue(maxsize=1)
-        self.state=dict(kind='hongik-native-carla',phase='choose',renderer_backend='carla',error=None,
+        from lab_settings import enabled
+        self.state=dict(kind='hongik-native-carla',phase='choose',renderer_backend='carla',error=None,lab_rig=enabled(),
                         mode='paused',quality=quality,width=SIZES[quality][0],height=SIZES[quality][1],
                         speed_kph=0,frames=0,frame=0,target_fps=30,measured_fps=0)
         self.presentation='midterm';self.condition='B'
         self.command={'mode':'paused'};self.profile=None;self.scenario=None;self.ego=None
-        self.vehicles=[];self.pedestrian=None;self.cargo=None;self.camera=None;self.collision=None;self.world=None;self.route=None;self.ego_s=100.
+        self.vehicles=[];self.pedestrian=None;self.cargo=None;self.camera=None;self.rig=None;self.collision=None;self.world=None;self.route=None;self.ego_s=100.
         self.pending=queue.Queue();self.navigation=NativeNavigation(self);self.camera_generation=0
         self.run_dir=ROOT/'native-runs'/time.strftime('%Y%m%d-%H%M%S')
         self.run_dir.mkdir(parents=True,exist_ok=True)
@@ -256,6 +258,8 @@ class NativeBridge:
                 self.state.update(frames=self.frame_id,width=img.width,height=img.height,
                                   measured_fps=round((len(times)-1)/max(.01,now-times[0]),1))
                 self.frame_event.notify_all()
+                rig=self.rig
+                if rig:rig.frames.publish('center',img.frame,data)
 
     def connect(self,profile=None):
         from launch_native_carla import OWNED, CARLA, process_command
@@ -264,6 +268,8 @@ class NativeBridge:
         if str(CARLA/'CarlaUE4.exe').lower() not in command.lower() or '-carla-rpc-port=2026' not in command:
             raise RuntimeError('이 앱이 시작한 CARLA를 확인하지 못했습니다. 50번 실행 파일을 사용해 주세요.')
         client=carla.Client('127.0.0.1',RPC);client.set_timeout(90.)
+        if client.get_client_version().split('-')[0]!=client.get_server_version().split('-')[0]:
+            raise RuntimeError('CARLA Python client and server versions must match; use the lab environment for 0.9.15.')
         world=client.get_world()
         target='Town03' if profile in ('yield','carpool') else 'Town04'
         if not world.get_map().name.endswith('/'+target):
@@ -278,6 +284,7 @@ class NativeBridge:
 
     def clear_actors(self):
         self.camera_generation+=1
+        if self.rig:self.rig.close();self.rig=None;self.camera=None
         if self.cargo:self.cargo.destroy();self.cargo=None
         if self.pedestrian:self.pedestrian.destroy();self.pedestrian=None
         owned=[self.camera,self.collision,*[v['actor'] for v in self.vehicles]]
@@ -290,6 +297,10 @@ class NativeBridge:
                 except RuntimeError:pass
         self.camera=self.collision=self.ego=None;self.vehicles=[]
         if self.world:
+            for actor in self.world.get_actors().filter('sensor.camera.rgb'):
+                parent=actor.parent
+                if actor.attributes.get('role_name','').startswith('hongik_native_') or parent and parent.attributes.get('role_name','').startswith('hongik_native_'):
+                    actor.stop();actor.destroy()
             for actor in self.world.get_actors().filter('vehicle.*'):
                 if actor.id not in known_ids and actor.attributes.get('role_name','').startswith('hongik_native_'):
                     actor.destroy()
@@ -357,7 +368,7 @@ class NativeBridge:
                 for i in range(14):
                     self.spawn('vehicle.audi.a2' if i%2 else 'vehicle.tesla.model3',-40+i*23.,-self.route.width,'fast',90,
                                color=['185,189,193','45,49,55','214,216,219'][i%3])
-            weather=carla.WeatherParameters(cloudiness=15,precipitation=0,sun_altitude_angle=-8 if profile=='night' else -4 if profile=='carpool' else 40,
+            weather=carla.WeatherParameters(cloudiness=15,precipitation=0,sun_altitude_angle=sun_altitude(profile),
                                            fog_density=0,fog_distance=0,fog_falloff=.1,wetness=0)
             self.world.set_weather(weather)
             # Let every suspension settle before showing the ready state.
@@ -385,14 +396,9 @@ class NativeBridge:
     def make_camera(self,quality):
         if quality not in SIZES:raise ValueError('Invalid camera quality')
         self.camera_generation+=1
+        if self.rig:self.rig.close();self.rig=None;self.camera=None
         if self.camera:
             self.camera.stop();self.camera.destroy()
-        w,h=SIZES[quality];bp=self.world.get_blueprint_library().find('sensor.camera.rgb')
-        for key,value in {'image_size_x':w,'image_size_y':h,'fov':55 if self.profile=='cargo' and self.scenario.zoom_requested else 100 if self.profile=='carpool' else 85,'sensor_tick':1/30,'motion_blur_intensity':0.}.items():
-            if bp.has_attribute(key):bp.set_attribute(key,str(value))
-        if self.profile=='carpool' and bp.has_attribute('exposure_compensation'):bp.set_attribute('exposure_compensation','1.5')
-        eye=carla.Location(x=-.9,y=.35,z=1.3) if self.profile=='carpool' else carla.Location(x=.9,z=1.6)
-        self.camera=self.world.spawn_actor(bp,carla.Transform(eye,carla.Rotation(pitch=-2,yaw=90 if self.profile=='carpool' else 0)),attach_to=self.ego)
         generation=self.camera_generation
         def receive(img):
             if generation!=self.camera_generation:return
@@ -400,8 +406,22 @@ class NativeBridge:
             except queue.Empty:pass
             try:self.images.put_nowait((generation,img))
             except queue.Full:pass
+        from lab_settings import enabled,settings
+        if enabled():
+            from lab_capture import LabCapture
+            cfg=settings();cfg['render']=list(SIZES[quality])
+            if self.profile=='carpool':cfg['eye']=cfg['carpool_eye']
+            self.rig=LabCapture(self.world,self.ego,cfg,receive);self.camera=self.rig.cameras['center']
+            self.state.update(quality=quality,width=cfg['render'][0],height=cfg['render'][1],rig=dict(enabled=True,fov=cfg['fov'],yaw=cfg['yaw'],eye=cfg['eye'],render=cfg['render'],display=cfg['display'],sensor_count=3))
+            return
+        w,h=SIZES[quality];bp=self.world.get_blueprint_library().find('sensor.camera.rgb')
+        if bp.has_attribute('role_name'):bp.set_attribute('role_name','hongik_native_single')
+        for key,value in {'image_size_x':w,'image_size_y':h,'fov':55 if self.profile=='cargo' and self.scenario.zoom_requested else 100 if self.profile=='carpool' else 85,'sensor_tick':1/30,'motion_blur_intensity':0.}.items():
+            if bp.has_attribute(key):bp.set_attribute(key,str(value))
+        eye=carla.Location(x=.9,z=1.6)
+        self.camera=self.world.spawn_actor(bp,carla.Transform(eye,carla.Rotation(pitch=-2,yaw=35 if self.profile=='carpool' else 0)),attach_to=self.ego)
         self.camera.listen(receive)
-        self.state.update(quality=quality,width=w,height=h)
+        self.state.update(quality=quality,width=w,height=h,camera=dict(eye=[.9,0.,1.6],yaw=35 if self.profile=='carpool' else 0,fov=100 if self.profile=='carpool' else 85))
 
     def control(self,body):
         with self.lock:
@@ -552,8 +572,10 @@ class NativeBridge:
         sc.tick_cargo(dt,driving,velocity*3.6,distance,offset,clear,right,height)
         if getattr(sc,'study',None):sc.study.tick(dt,driving)
         if sc.zoom_requested and not sc.zoom_applied and velocity<.14:
-            self.make_camera(self.state['quality']);sc.zoom_applied=True
-            sc.log('cargo_camera_zoom_applied',fov_deg=55)
+            if not self.rig:self.make_camera(self.state['quality'])
+            sc.zoom_applied=True
+            sc.log('cargo_camera_zoom_applied',fov_deg=self.rig.config['fov'] if self.rig else 55,
+                   inspection_fov_deg=55,mode='digital_inspection' if self.rig else 'camera_fov')
         target,lateral=sc.target()
         if getattr(sc,'study',None):target,lateral=sc.study.targets(target,lateral)
         if not sc.onset:target=following_speed(truck['actor'].get_velocity().length()*3.6,sc.truck_gap)
@@ -693,8 +715,20 @@ def handler(bridge):
                 elif path=='/drive':
                     self.send((ROOT/'drive.html').read_bytes().replace('NuRec'.encode(),b'CARLA RGB'),'text/html; charset=utf-8')
                 elif path=='/frame.jpg':
-                    if bridge.jpeg:self.send(bridge.jpeg,'image/jpeg')
+                    if bridge.jpeg:
+                        data=bridge.jpeg
+                        if getattr(bridge,'rig',None) and bridge.profile=='cargo' and bridge.scenario.zoom_applied:
+                            from lab_capture import inspection_jpeg
+                            data=inspection_jpeg(data,bridge.rig.config['fov'])
+                        self.send(data,'image/jpeg')
                     else:self.send_error(503)
+                elif path=='/rig/bundle':
+                    if not bridge.rig:self.send_error(409);return
+                    params=parse_qs(urlparse(self.path).query);rig=bridge.rig
+                    after=int(params.get('after',['-1'])[0]) if params.get('token',[''])[0]==rig.frames.token else -1
+                    frame,data=rig.frames.after(after)
+                    if data:self.send(data,'application/zip')
+                    else:self.send(b'','application/zip',204)
                 elif path=='/stream':
                     self.send_response(200);self.send_header('Content-Type','multipart/x-mixed-replace; boundary=frame')
                     self.send_header('Cache-Control','no-store');self.end_headers();last=-1
@@ -744,7 +778,9 @@ def main():
     parser=argparse.ArgumentParser();parser.add_argument('--no-browser',action='store_true');args=parser.parse_args()
     class NativeHTTPServer(ThreadingHTTPServer):
         request_queue_size=64
-    bridge=NativeBridge();server=NativeHTTPServer(('127.0.0.1',PORT),handler(bridge))
+    from lab_settings import enabled,settings
+    quality=next(k for k,v in SIZES.items() if list(v)==settings()['render']) if enabled() else 'high'
+    bridge=NativeBridge(quality);server=NativeHTTPServer(('127.0.0.1',PORT),handler(bridge))
     server.daemon_threads=True
     if not args.no_browser:webbrowser.open(f'http://127.0.0.1:{PORT}/')
     print(f'CARLA native scenario app: http://127.0.0.1:{PORT}/',flush=True)
