@@ -1,8 +1,9 @@
 """Paired LAN handset companion; simulator/control port remains loopback-only.
 
-Only a filtered HMI state, approved research choices, and cached Sohee audio
-cross this gateway. No NuRec frames, world coordinates, source files, or driving
-start/steering controls are exposed. OS push is opt-in and requires secure PWA.
+The companion keeps its filtered state. Explicit /m/navigation pairing also
+provides the existing cockpit, simulator geometry, media and session-checked
+start/pause through a fixed route allowlist. Engine/reset/steering APIs and
+private files remain unavailable. OS push is opt-in and requires secure PWA.
 """
 import base64
 import hashlib
@@ -253,20 +254,21 @@ class Gateway:
             if isinstance(error,WebPushException) and error.response is not None and error.response.status_code in (404,410):
                 with self.pairing.lock:self.pairing.device['subscription']=None;self.pairing.save()
 
-    def command(self,body):
+    def queue_command(self,body,source='hongik_mobile'):
         state=self.state();event=state.get('event',{})
         if not state.get('connected'):raise ValueError('PC와 연결이 끊겼어요. 다시 연결된 뒤 선택해 주세요.')
         if body.get('session_id')!=state.get('session') or body.get('navigation_id')!=state.get('navigation_id'):raise ValueError('이전 주행 알림이에요. 현재 상황을 다시 열어 주세요.')
         allowed=OBSERVATIONS|{o['action'] for o in event.get('options',[])}
         if event.get('study'):allowed|={'study_cancel_pending','study_view_opened','study_fixed_help','study_fixed_stop'}
         if event.get('direct_pending'):allowed.add('study_direct_done')
+        if (event.get('study') or {}).get('repeatable'):allowed.add('study_repeat')
         if body.get('action') not in allowed:raise ValueError('휴대폰에서 사용할 수 없는 조작입니다.')
         request_id=body.get('request_id')
         if not isinstance(request_id,str) or not 1<=len(request_id)<=128:raise ValueError('요청을 다시 확인해 주세요.')
         details=body.get('client_event') or {}
         if not isinstance(details,dict):raise ValueError('요청 형식을 다시 확인해 주세요.')
         details={k:details[k] for k in ('choice','options_visible','client_ms','phase','event_visible') if k in details}
-        details['source']='hongik_mobile';details['device']=self.pairing.device['id']
+        details['source']=source;details['device']=self.pairing.device['id']
         clean=dict(action=body['action'],session_id=body['session_id'],navigation_id=body['navigation_id'],request_id=request_id,client_event=details)
         req=urllib.request.Request('http://127.0.0.1:8774/api/command',data=json.dumps(clean).encode(),headers={'Content-Type':'application/json'})
         try:
@@ -275,11 +277,15 @@ class Gateway:
             try:message=json.loads(error.read()).get('error')
             except ValueError:message=None
             raise ValueError(message or 'PC가 요청을 반영하지 못했어요.')
+        return queued
+
+    def command(self,body):
+        queued=self.queue_command(body)
         from urllib.parse import urlencode
         url='http://127.0.0.1:8774/api/reply?'+urlencode(dict(session=body['session_id'],id=queued['command_id']))
         with urllib.request.urlopen(url,timeout=5) as r:reply=json.load(r)
         if not reply.get('accepted'):raise ValueError(reply.get('message','요청을 확인하지 못했어요.'))
-        self.log('mobile_command_accepted',action=body['action'],session=state['session'])
+        self.log('mobile_command_accepted',action=body['action'],session=body['session_id'])
         return reply
 
 
@@ -308,6 +314,8 @@ def handler(gateway):
         def fail(self,message,status=400):self.send(dict(error=message),status=status)
         def do_GET(self):
             if not self.check_host():self.fail('접속 주소를 확인해 주세요.',403);return
+            from tablet_navigation import serve
+            if serve(self,gateway):return
             path=urlparse(self.path).path
             if path=='/health':self.send(dict(kind='hongik-mobile',tls_port=HTTPS_PORT,address=gateway.address,polling=gateway.worker_alive));return
             if path.startswith('/pc/'):
@@ -332,8 +340,11 @@ def handler(gateway):
                     self.send(dict(address=gateway.address,phone_url=plain_url,secure_url=secure_url,pin=gateway.pairing.pin,expires=gateway.pairing.expires,
                                    paired=bool(gateway.pairing.device),push_enabled=bool(gateway.pairing.device and gateway.pairing.device.get('subscription')),fingerprint=gateway.keys['ca_fingerprint']));return
                 if path=='/qr.png':
-                    target=secure_url if 'secure=1' in self.path else plain_url;b=io.BytesIO();qrcode.make(target).save(b,format='PNG');self.send(b.getvalue(),'image/png');return
-                markup=(ASSETS/'connect.html').read_text(encoding='utf-8').replace('{{IP}}',html.escape(gateway.address)).replace('{{PIN}}',gateway.pairing.pin).replace('{{HTTP_PORT}}',str(HTTP_PORT)).replace('{{HTTPS_PORT}}',str(HTTPS_PORT)).replace('{{FINGERPRINT}}',gateway.keys['ca_fingerprint'])
+                    target=secure_url if 'secure=1' in self.path else plain_url
+                    if 'tablet=1' in self.path:target=target.replace('/m/#','/m/navigation#')
+                    b=io.BytesIO();qrcode.make(target).save(b,format='PNG');self.send(b.getvalue(),'image/png');return
+                template=ROOT/'tablet_pc.html' if parse_qs(urlparse(self.path).query).get('view')==['tablet'] else ASSETS/'connect.html'
+                markup=template.read_text(encoding='utf-8').replace('{{IP}}',html.escape(gateway.address)).replace('{{PIN}}',gateway.pairing.pin).replace('{{HTTP_PORT}}',str(HTTP_PORT)).replace('{{HTTPS_PORT}}',str(HTTPS_PORT)).replace('{{FINGERPRINT}}',gateway.keys['ca_fingerprint'])
                 self.send(markup.encode(),'text/html; charset=utf-8');return
             if path in ('/m/language.js','/m/language/en'):
                 if path.endswith('.js'):self.send((ROOT/'language.js').read_bytes(),'application/javascript; charset=utf-8')
@@ -386,6 +397,8 @@ def handler(gateway):
                 if path=='/m/api/pair':
                     token=gateway.pairing.pair(str(body.get('code','')),self.client_address[0]);cookie=f'{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/m/; Max-Age=86400'+('; Secure' if self.secure() else '')
                     self.send(dict(paired=True),cookie=cookie);return
+                from tablet_navigation import post
+                if post(self,gateway,body):return
                 if not self.authorized():self.fail('휴대폰 연결이 필요합니다.',401);return
                 if path=='/m/api/command':self.send(gateway.command(body));return
                 if path=='/m/api/subscribe':
@@ -403,6 +416,10 @@ def handler(gateway):
                 self.send_error(404)
             except (ValueError,TypeError,KeyError) as error:self.fail(str(error))
             except OSError:self.fail('PC와의 연결을 확인해 주세요.',503)
+        def do_HEAD(self):
+            if not self.check_host():self.fail('접속 주소를 확인해 주세요.',403);return
+            from tablet_navigation import serve
+            if not serve(self,gateway,head=True):self.send_error(404)
     return Handler
 
 

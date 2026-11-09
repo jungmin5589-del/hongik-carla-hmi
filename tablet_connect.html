@@ -1,0 +1,9 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DRIVE · 아이패드 내비 연결</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#17212d;font-family:system-ui,'Malgun Gothic',sans-serif}main{max-width:540px;margin:12vh auto;padding:30px}small{letter-spacing:.18em;color:#3e6ae1}h1{font-size:34px;letter-spacing:-.05em}p{line-height:1.8;color:#66717f}form{padding:28px;background:white;border-radius:22px}input,button{width:100%;padding:17px;border-radius:12px;font:inherit}input{font-size:28px;text-align:center;letter-spacing:.2em;border:1px solid #d6dce6}button{margin-top:14px;border:0;background:#3e6ae1;color:white;font-weight:600}button:disabled{opacity:.5}</style>
+<main><small>DRIVE</small><h1>내비게이션 연결</h1><p>PC와 같은 Wi-Fi에서 연결하세요.<br>차량 3D 화면·지도·음악·홍익 AI를 이 화면에서 사용할 수 있습니다.</p><form id="pair"><label for="code">PC에 표시된 연결 코드</label><input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required><button id="connect">전체 내비게이션 열기</button><p id="status" role="status"></p></form></main>
+<script>
+const form=document.getElementById('pair'),button=document.getElementById('connect'),status=document.getElementById('status');
+async function pair(code){button.disabled=true;status.textContent='PC에 연결하고 있어요…';try{const response=await fetch('/m/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});const value=await response.json();if(!response.ok)throw Error(value.error);location.replace('/m/navigation'+location.search)}catch(e){status.textContent=e.message||'PC 연결을 확인해 주세요.';button.disabled=false}}
+form.onsubmit=e=>{e.preventDefault();pair(document.getElementById('code').value.trim())};
+const automatic=new URLSearchParams(location.hash.slice(1)).get('pair');if(automatic){history.replaceState(null,'',location.pathname+location.search);pair(automatic)}
+</script></html>
