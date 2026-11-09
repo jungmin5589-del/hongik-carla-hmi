@@ -18,7 +18,7 @@ root.innerHTML=`<button id="research-launch" type="button" aria-label="홍익 AI
  <div id="research-confirmation" hidden><p id="research-confirm-copy"></p><div class="research-confirm-actions">
  <button id="research-back" type="button">선택 취소</button><button id="research-execute" type="button" class="research-primary">실행</button></div></div>
  </div></section>
- <section id="research-ending" hidden role="status" aria-live="polite"><small>홍익 AI</small><h2>주변 상황을 확인했어요</h2><p id="research-ending-message"></p><p id="research-ending-summary"></p><button id="research-ending-home" type="button">확인</button></section>`;
+ <section id="research-ending" hidden role="status" aria-live="polite"><small>홍익 AI</small><h2>주변 상황을 확인했어요</h2><p id="research-ending-message"></p><p id="research-ending-summary"></p><button id="research-ending-home" type="button">시나리오 선택으로</button></section>`;
 document.body.appendChild(root);
 const $=id=>document.getElementById(id),launch=$('research-launch'),dialog=$('research-dialog');
 let current=null,event=null,session=null,seen=null,unread=false,phase='options',selected=null;
@@ -37,6 +37,7 @@ content.replaceChildren(left,right);
 root.insertAdjacentHTML('beforeend','<button id="research-fixed-help" class="midterm-fixed" type="button">도움 요청</button><button id="research-fixed-stop" class="midterm-fixed" type="button">정차 요청</button>');
 const passive=document.createElement('div');passive.id='midterm-passive';passive.innerHTML='<small>차량 상태</small><strong id="midterm-passive-title"></strong><p id="midterm-passive-body"></p>';$('route-card').append(passive);
 const endClose=document.createElement('button');endClose.id='research-ending-close';endClose.type='button';endClose.textContent='×';endClose.setAttribute('aria-label','결과 닫기');$('research-ending').append(endClose);
+const returnHome=document.createElement('button');returnHome.id='research-return-home';returnHome.type='button';returnHome.textContent='시나리오 선택으로';returnHome.hidden=true;root.append(returnHome);
 const previous=window.CockpitUpdate;
 let player=null,speechTurn=0;
 let explanationFinished=false,endingDismissed=false,viewAcknowledged=false,latestData=null;
@@ -91,13 +92,24 @@ function record(action,details={}){post(action,details).catch(()=>{})}
 function feedback(text){$('research-feedback').textContent=text;$('research-feedback').hidden=!text}
 function showError(error){localFeedback=error.message||'요청을 확인하지 못했습니다.';feedbackBaseline=event?.feedback||'';render()}
 function isCurrent(token){return token===generation&&!dialog.hidden}
+function scenarioComplete(){return latestData?.nurec?.scenario?.completed===true||event?.outcome?.phase==='complete'}
+function returnToSelection(){
+ if(!scenarioComplete())return;
+ stopSpeech();
+ const target=new URL('/',location.href);
+ if(['A','B'].includes(event?.condition))target.searchParams.set('condition',event.condition);
+ const lang=window.HongikLocale?.lang;if(['ko','en'].includes(lang))target.searchParams.set('lang',lang);
+ location.assign(target.pathname+target.search);
+}
 function render(){
  if(!event)return;
- const outcome=event.outcome||{},resolving=outcome.phase&&outcome.phase!=='idle';
- if(outcome.phase==='complete'&&!endingDismissed)dialog.hidden=true;
+ const outcome=event.outcome||{},resolving=outcome.phase&&outcome.phase!=='idle',complete=scenarioComplete();
+ if(complete&&!endingDismissed)dialog.hidden=true;
  if(resolving){phase='result';selected=null;optionsReady=false}
- $('research-ending').hidden=outcome.phase!=='complete'||endingDismissed;
- $('research-ending-message').textContent=outcome.message||'';
+ $('research-ending').hidden=!complete||endingDismissed;
+ returnHome.hidden=!complete||!endingDismissed;
+ $('research-fixed-help').hidden=complete;$('research-fixed-stop').hidden=complete;
+ $('research-ending-message').textContent=outcome.message||(complete?'주행이 끝났어요. 다른 상황을 선택할 수 있어요.':'');
  $('research-ending-summary').textContent=outcome.summary||'';
  const stages={applying:'요청한 대응을 진행하고 있어요',observing:'주변의 반응을 확인하고 있어요',stopping:'서서히 정차하고 있어요',complete:'주변 확인 완료'};
  $('research-title').textContent=event.title;
@@ -222,7 +234,7 @@ $('research-close').onclick=close;$('research-back').onclick=cancel;$('research-
 $('research-options-open').onclick=()=>{explanationFinished=true;revealOptions()};
 $('research-direct-done').onclick=async()=>{if(busy||!event?.direct_pending)return;const token=generation;busy=true;render();try{await post('study_direct_done')}catch(error){if(isCurrent(token))showError(error)}finally{if(isCurrent(token)){busy=false;render()}}};
 $('research-read').onclick=()=>player?stopSpeech():readExplanation();
-$('research-ending-home').onclick=()=>{endingDismissed=true;dialog.hidden=true;launch.setAttribute('aria-expanded','false');render()};
+$('research-ending-home').onclick=returnToSelection;returnHome.onclick=returnToSelection;
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dialog.hidden){e.preventDefault();close()}});
 function notify(){
  if(event?.active&&seen!==current.id&&document.visibilityState==='visible'){
@@ -251,7 +263,7 @@ window.CockpitUpdate=data=>{
  $('midterm-passive-title').textContent=data.nurec?.scenario?.completed?'차량이 정차했어요':data.passive?.title||event.title;$('midterm-passive-body').textContent=event.outcome?.summary||data.passive?.body||event.vehicle_action||event.description;
  if(event.study?.phase==='queued')viewAcknowledged=false;
  if(!event.active&&!selected?.fixed){unread=false;if(!event.staged_options||dialog.hidden)phase='options';selected=null;optionsReady=false}
- if(event.pending||event.outcome?.phase==='complete'){unread=false;stopSpeech()}
+ if(event.pending||scenarioComplete()){unread=false;stopSpeech()}
  notify();prepareOptions();
 };
 })();

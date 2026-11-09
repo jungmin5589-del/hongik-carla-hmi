@@ -26,11 +26,12 @@ async function main(){
   await until(async()=>(await state()).scenario?.study.phase==='observing');await page.waitForTimeout(400);await shot('04-actual-horn-result');
   assert.equal((await state()).scenario.horn_count,1);
   await until(async()=>(await state()).scenario?.completed);await page.waitForTimeout(400);await shot('05-complete');if(english)assert.equal(/[가-힣]/.test(await page.locator('#research-ending-summary').textContent()),false);
-  await page.locator('#research-ending-home').click();await page.waitForTimeout(800);assert.equal(await page.locator('#research-ending').isVisible(),false);
+  await page.locator('#research-ending-close').click();assert.equal(await page.locator('#research-ending').isVisible(),false);assert.equal(await page.locator('#research-return-home').isVisible(),true);
   await page.setViewportSize({width:390,height:844});await shot('06-mobile');assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.locator('#settings-open').click();await page.locator('#settings-sheet').waitFor();await shot('07-settings');
+  await page.locator('#settings-close').click();await page.locator('#research-return-home').click();await page.waitForURL(url=>url.pathname==='/');assert.equal(await page.locator('#condition').inputValue(),'B');assert.equal(await page.locator('[data-profile]').count(),7);
   assert.deepEqual(errors,[]);assert.deepEqual(failed,[]);
-  fs.writeFileSync(path.join(folder,'result.json'),JSON.stringify({errors,failed,verified:['explicit choice','3-second cancellation without horn','one physical horn','result and stop','mobile width','result dismiss'],state:await state()},null,2));
+  fs.writeFileSync(path.join(folder,'result.json'),JSON.stringify({errors,failed,verified:['explicit choice','3-second cancellation without horn','one physical horn','result and stop','mobile width','result dismiss and return to selection'],state:await state()},null,2));
   console.log('BROWSER VERIFIED',folder);
  }finally{await browser.close()}
 }

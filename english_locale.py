@@ -22,6 +22,8 @@ OPTIONS={
 
 # Whole sentences first. Small labels also cover the original Tesla-style UI.
 PAIRS='''
+시나리오 선택으로	Back to scenario selection
+주행이 끝났어요. 다른 상황을 선택할 수 있어요.	The drive has ended. You can select another scenario.
 장면 소리 켜기	Enable scene sound
 알림 설정	Notification settings
 내 주행과 연결	Connect to your drive
