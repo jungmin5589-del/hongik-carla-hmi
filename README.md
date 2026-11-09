@@ -105,3 +105,5 @@ an unmapped/forest segment may have no buildings.
 50번 시작 화면에 네 번째 독립 조건을 추가했습니다. 사람과 차량이 서로 기다리다가 양보 안내·모의 관제·대기 선택에 따라 횡단과 재출발이 이어집니다. [실행·동작·검증 범위](docs/PEDESTRIAN-YIELD-KO.md).
 
 장면 음성은 내비를 뒤로 보내도 유지하며, 취객 발소리는 실제 신발 접촉 녹음을 사용합니다. [소리 활성화·출처·검증 범위](docs/SCENE-AUDIO-KO.md).
+
+[연구실 아이패드 연결·시나리오 정렬·현장 수정 보존](docs/LAB-IPAD-AND-ALIGNMENT-KO.md): 현재 PC의 QR로 모바일을 연결하고, 55번 읽기 전용 연결 보고서로 엔진·내비·게이트웨이 구성을 확인합니다. 주행 검사는 `validate_native_alignment.py`로 수행하며 현장 참가자 주행 중에는 실행하지 않습니다.

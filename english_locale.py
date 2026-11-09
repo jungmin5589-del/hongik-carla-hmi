@@ -146,6 +146,10 @@ PC와 연결했어요. 주행을 시작하면 함께 알려드릴게요.	Connect
 주행을 기다리고 있어요\tWaiting to start
 주행 중\tDriving
 정차 중\tStopped
+주차 구역\tParking area
+출발 위치·방향 정렬을 확인하지 못했습니다. 다시 준비해 주세요.\tThe departure position and heading could not be verified. Prepare the scene again.
+차량의 출발 위치·방향이 달라졌습니다. 출발 위치로 다시 준비해 주세요.\tThe vehicle has moved from its departure position. Reset the scene before starting.
+이전 주행 화면에서 온 요청입니다. 현재 내비를 새로 열어 주세요.\tThis request came from an earlier drive. Reopen the current navigation screen.
 출발 준비\tReady to depart
 출발 대기\tReady to depart
 주행 지도\tNavigation map

@@ -181,13 +181,18 @@ def navigation_state(b,options):
  def local(x,y):
   dx,dy=x-tr.location.x,y-tr.location.y
   return dict(forward_m=dx*math.cos(yaw)+dy*math.sin(yaw),right_m=-dx*math.sin(yaw)+dy*math.cos(yaw),up_m=-.4,yaw_deg=0.)
- offsets=route.lane_offsets if b.profile=='carpool' else [(i-1)*route.width for i in range(4)]
+ offsets=list(route.lane_offsets) if b.profile=='carpool' else [(i-1)*route.width for i in range(4)]
+ if b.profile=='carpool' and not any(abs(x-b.scenario.base_offset)<.1 for x in offsets):
+  offsets=sorted([*offsets,b.scenario.base_offset])
+ road_map=getattr(b,'road_map',None)
+ wp=road_map.get_waypoint(tr.location,project_to_road=False,lane_type=carla.LaneType.Any) if road_map else None
+ lane_type=str(wp.lane_type) if wp else 'Parking' if b.profile=='carpool' else 'Driving'
  lanes=[]
  for i,off in enumerate(offsets):
   samples=[]
   for d in range(-20,81,3):
    p,_=route.sample(b.ego_s+d,off);samples.append(dict(**local(p[0],p[1]),width_m=route.width))
-  lanes.append(dict(id=i+1,points=samples))
+  lanes.append(dict(id=i+1,points=samples,kind='Parking' if b.profile=='carpool' and abs(off-b.scenario.base_offset)<.1 else 'Driving'))
  actors=[]
  if b.pedestrian:
   p=b.pedestrian.actor.get_transform()
@@ -204,7 +209,7 @@ def navigation_state(b,options):
  points=route.points[::3,:2].tolist();sid=sc['session'];map_name='CARLA Town03' if b.profile=='carpool' else 'CARLA Town04'
  return dict(connected=b.state['phase']=='live',schema=2,renderer='CARLA RGB',map=map_name,frame=b.state['frame'],timestamp=time.time(),
              source='Scripted passenger interaction and audio, not automated diagnosis',road=dict(id=30,lanes=lanes),lane_width_m=route.width,actors=actors,destinations=[],
-             ego=dict(id=b.ego.id,role='native_carla_ego',**local(tr.location.x,tr.location.y),speed_kmh=b.state['speed_kph'],lane_index=2,lane_count=len(lanes),lane_id=-2),
+             ego=dict(id=b.ego.id,role='native_carla_ego',**local(tr.location.x,tr.location.y),speed_kmh=b.state['speed_kph'],lane_index=2,lane_count=sum(l['kind']=='Driving' for l in lanes),lane_id=wp.lane_id if wp else -2,lane_type=lane_type),
              world_pose=dict(x=tr.location.x,y=tr.location.y,yaw=tr.rotation.yaw),
              route=dict(destination=dict(id='city_end',name='동승자 대기 장소' if b.profile=='carpool' else '목적지',point=points[-1],distance_m=0,detail='정차 중' if b.profile=='carpool' else '주행 중'),points=points,index=0,remaining_m=0,arrived=False,off_route=False),
              session=dict(session_id=sid,stage='running' if sc['elapsed_s']>0 else 'ready',scenario=5 if b.profile=='carpool' else 6,

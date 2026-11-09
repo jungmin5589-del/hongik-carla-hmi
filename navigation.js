@@ -9,18 +9,18 @@
  const depart=document.createElement('button');depart.id='passenger-depart';depart.textContent='출발';depart.hidden=true;depart.onclick=()=>control({mode:'auto'});document.querySelector('.visualization').append(depart);
  const beam=document.createElement('span');beam.id='nurec-highbeam';beam.hidden=true;beam.setAttribute('aria-label','상향등 켜짐');beam.textContent='≡◖';document.querySelector('.speed-panel').append(beam);
  const duration=document.createElement('select');duration.id='nurec-duration';duration.hidden=true;bar.append(duration);
- let busy=false,audio=null,lastHorn=null,lastImpact=null,lastCargoHit=null;
+ let busy=false,audio=null,lastHorn=null,lastImpact=null,lastCargoHit=null,controlSession=null;
  document.addEventListener('pointerdown',()=>{if(!audio){const C=window.AudioContext||window.webkitAudioContext;if(C)audio=new C()}audio?.resume().catch(()=>{})});
  function horn(){if(!audio)return;const start=audio.currentTime;for(const hz of [340,425]){const o=audio.createOscillator(),g=audio.createGain();o.type='sawtooth';o.frequency.value=hz;g.gain.setValueAtTime(0,start);g.gain.linearRampToValueAtTime(.055,start+.025);g.gain.setValueAtTime(.055,start+.32);g.gain.linearRampToValueAtTime(0,start+.40);o.connect(g).connect(audio.destination);o.start(start);o.stop(start+.42)}}
  function impactSound(){if(!audio||audio.state!=='running')return;const b=audio.createBuffer(1,Math.floor(audio.sampleRate*.45),audio.sampleRate),a=b.getChannelData(0);for(let i=0;i<a.length;i++)a[i]=(Math.random()*2-1)*Math.exp(-i/(audio.sampleRate*.09));const source=audio.createBufferSource(),filter=audio.createBiquadFilter(),gain=audio.createGain();source.buffer=b;filter.type='lowpass';filter.frequency.value=1100;gain.gain.value=.14;source.connect(filter).connect(gain).connect(audio.destination);source.start()}
- async function control(body){if(busy)return;busy=true;try{const r=await fetch('/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=r.status===204?{}:await r.json();if(!r.ok)throw Error(data.error||'요청을 반영하지 못했습니다.')}catch(e){$('nurec-status').textContent=e.message}finally{busy=false}}
+ async function control(body){if(busy)return;busy=true;try{const r=await fetch('/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(controlSession?{session_id:controlSession,...body}:body)});const data=r.status===204?{}:await r.json();if(!r.ok)throw Error(data.error||'요청을 반영하지 못했습니다.')}catch(e){$('nurec-status').textContent=e.message}finally{busy=false}}
  async function goHome(){window.dispatchEvent(new Event('nurec-exit'));try{const s=await(await fetch('/state')).json();if(!s.scenario?.completed)await control({mode:'paused'})}catch{}location.assign('http://127.0.0.1:8775/')}
  home.onclick=goHome;$('experience-open').onclick=goHome;
  $('nurec-start').disabled=true;$('nurec-pause').disabled=true;
  $('nurec-start').onclick=()=>control({mode:'auto'});$('nurec-pause').onclick=()=>control({mode:'paused'});$('nurec-reset').onclick=()=>control({reset:true});$('nurec-quality').onchange=()=>control({quality:$('nurec-quality').value});
  const previous=window.CockpitUpdate;
  window.CockpitUpdate=data=>{
-  previous?.(data);const n=data.nurec;if(!n)return;const s=n.scenario;
+  previous?.(data);const n=data.nurec;if(!n)return;const s=n.scenario;controlSession=n.kind==='hongik-native-carla'?s.session:null;
   beam.hidden=!s.high_beam?.on;
   if(lastHorn?.session===s.session&&s.horn_count>lastHorn.count&&document.visibilityState==='visible')horn();lastHorn={session:s.session,count:s.horn_count};
   const key=s.session+':'+s.crash?.phase;if(lastImpact?.session===s.session&&lastImpact.key!==key&&s.crash?.primary_collision_verified&&['primary_impact','secondary_impact'].includes(s.crash.phase)&&document.visibilityState==='visible')impactSound();lastImpact={session:s.session,key};

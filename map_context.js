@@ -1,6 +1,17 @@
 /* Navigation map only. Cached OSM footprints and actual CARLA actor poses. */
 (function(root){
  'use strict';
+ class AtlasLoader{
+  constructor(fetcher,apply,options={}){this.fetcher=fetcher;this.apply=apply;this.now=options.now||Date.now;this.key=null;this.loaded=null;this.busy=false;this.retryAt=0}
+  async request(key){
+   if(key!==this.key){this.key=key;this.retryAt=0}
+   if(this.busy||this.loaded===key||this.now()<this.retryAt)return;
+   const requested=key;this.busy=true;
+   try{const value=await this.fetcher();if(this.key===requested){this.apply(value);this.loaded=requested}}
+   catch{if(this.key===requested)this.retryAt=this.now()+1000}
+   finally{this.busy=false;if(this.key!==requested)this.request(this.key)}
+  }
+ }
  function actorPose(actor,ego){
   if(actor.world_pose)return actor.world_pose;
   const a=ego.yaw*Math.PI/180,c=Math.cos(a),s=Math.sin(a);
@@ -33,7 +44,7 @@
   }
   ctx.restore();
  }
- const api={actorPose,drawContext,drawActors};
+ const api={AtlasLoader,actorPose,drawContext,drawActors};
  if(typeof module==='object'&&module.exports)module.exports=api;
  else root.NurecMapContext=api;
 })(globalThis);

@@ -84,15 +84,35 @@ class HighwayRoute:
         return s, float(distances[i])
 
 
-def steering(route, distance, offset, transform, speed):
+def steering(route, distance, offset, transform, speed, geometry=None):
     """Pure pursuit in CARLA's left-handed XY coordinate system."""
     lookahead = max(6., min(17., 5.+speed*.65))
     point, _ = route.sample(distance+lookahead, offset)
     yaw = math.radians(transform.rotation.yaw)
-    angle = math.atan2(point[1]-transform.location.y, point[0]-transform.location.x)-yaw
+    geometry=geometry or dict(wheelbase=2.85,rear_offset=0.,max_steer=.58)
+    rear=geometry['rear_offset']
+    dx=point[0]-transform.location.x-rear*math.cos(yaw)
+    dy=point[1]-transform.location.y-rear*math.sin(yaw)
+    angle = math.atan2(dy,dx)-yaw
     angle = math.atan2(math.sin(angle), math.cos(angle))
-    wheel_angle = math.atan2(2.*2.85*math.sin(angle), lookahead)
-    return max(-.75, min(.75, wheel_angle/.58))
+    wheel_angle = math.atan2(2.*geometry['wheelbase']*math.sin(angle), max(1.,math.hypot(dx,dy)))
+    curve=geometry.get('steering_curve',[])
+    # The UE4 PhysX steering table uses km/h (verified in the local engine source).
+    scale=float(np.interp(speed*3.6,[p[0] for p in curve],[p[1] for p in curve])) if curve else 1.
+    return max(-.75, min(.75, wheel_angle/(geometry['max_steer']*max(.1,scale))))
+
+
+def curve_speed_limit(route,distance,offset,preferred):
+    """Keep the requested straight speed; brake progressively before tight bends."""
+    limit=max(0.,preferred)/3.6
+    for ahead in (0.,20.,40.,60.,90.,120.):
+        a,ya=route.sample(distance+ahead-3.,offset);b,yb=route.sample(distance+ahead+3.,offset)
+        change=abs((yb-ya+math.pi)%(2*math.pi)-math.pi)
+        curvature=change/max(.1,float(np.linalg.norm(b[:2]-a[:2])))
+        if curvature>1e-5:
+            future=math.sqrt(3./curvature)
+            limit=min(limit,math.sqrt(future*future+2.*2.3*ahead))
+    return limit*3.6
 
 
 def fog_density(elapsed):

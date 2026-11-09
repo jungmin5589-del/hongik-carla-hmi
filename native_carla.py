@@ -22,7 +22,8 @@ from io import BytesIO
 
 from action_outcome import ActionOutcome
 from navigation_adapter import NavigationAdapter, navigation_html, static_asset
-from native_carla_route import HighwayRoute, steering, fog_density
+from native_carla_route import HighwayRoute, steering, fog_density, curve_speed_limit
+from native_alignment import route_atlas, route_index, start_alignment, steering_geometry, tracking_alignment, ego_lane
 from scenario2 import Scenario2
 from voice_bank import narration, audio_path
 from pedestrian_yield import CrossingRoute, YieldScenario, YieldActor, OPTIONS as YIELD_OPTIONS, navigation_state as yield_navigation_state
@@ -60,6 +61,7 @@ class NativeScenario(Scenario2):
         self.highbeam_at = None
         self.highbeam_on = False
         self.actual_elapsed = 0.
+        self.collision_count = 0
 
     def tick(self, dt, driving, speed, gap):
         with self.lock:
@@ -111,6 +113,7 @@ class NativeScenario(Scenario2):
             result = dict(id=self.TYPE_ID, session=self.session, enabled=True, onset=self.onset,
                           elapsed_s=round(self.elapsed, 2), duration_s=300, remaining_s=max(0,300-self.elapsed),
                           gap_m=round(self.gap, 2), target_gap_m=self.desired_gap, horn_count=self.horn_count,
+                          collision_count=self.collision_count,
                           action=self.last_action, action_complete=self.action_complete, feedback=self.feedback,
                           completed=self.completed, completion_reason=self.completion_reason,
                           outcome=self.outcome.public(), dialog_open=self.dialog_open,
@@ -149,16 +152,21 @@ class NativeNavigation(NavigationAdapter):
         return BLOCKADE_OPTIONS if self.bridge.profile == 'congestion' else FOG_OPTIONS if self.bridge.profile == 'fog' else OPTIONS
 
     def atlas(self):
-        r = self.bridge.route
+        r=self.bridge.route
         if r is None:return dict(map='CARLA',roads=[],destinations=[],buildings=[])
-        if self.bridge.profile in ('yield','carpool'):
-            return dict(map='CARLA Town03',roads=[dict(points=r.points[:,:2].tolist(),width=r.width)],destinations=[],buildings=[])
-        centre=[r.sample(float(s),r.width*.5)[0][:2].tolist() for s in r.arc[::3]]
-        return dict(map='CARLA Town04', roads=[dict(points=centre, width=r.width*4)],
-                    destinations=[], buildings=[], context_source=None)
+        if self.atlas_cache is None:
+            name='CARLA Town03' if self.bridge.profile in ('yield','carpool') else 'CARLA Town04'
+            self.atlas_cache=route_atlas(r,name)
+        return self.atlas_cache
 
     def state(self):
-        return enrich_navigation(self.raw_state(),self.bridge)
+        data=self.raw_state()
+        if data.get('connected'):
+            index,count=ego_lane(data.get('road',{}).get('lanes',[]))
+            data['ego'].update(lane_index=index,lane_count=count)
+            wp=self.bridge.road_map.get_waypoint(self.bridge.ego.get_location(),project_to_road=False,lane_type=carla.LaneType.Any)
+            if wp:data['ego']['lane_type']=str(wp.lane_type)
+        return enrich_navigation(data,self.bridge)
 
     def raw_state(self):
         b = self.bridge
@@ -216,7 +224,7 @@ class NativeNavigation(NavigationAdapter):
                     world_pose=dict(x=tr.location.x,y=tr.location.y,yaw=tr.rotation.yaw),
                     route=dict(destination=dict(id='trial_end',name='목적지',point=route_points[-1],
                                                 distance_m=round(b.route.length),detail='경로 안내'),
-                               points=route_points,index=int(b.ego_s% b.route.length/6),remaining_m=round(remain*30/3.6),
+                               points=route_points,index=route_index(b.route,b.ego_s),remaining_m=round(remain*30/3.6),
                                arrived=sc['completed'] and sc['completion_reason']=='duration_end',off_route=False),
                     session=dict(session_id=sc['session'],stage='running' if sc['elapsed_s']>0 or b.command['mode']=='auto' else 'ready',
                                  scenario={'congestion':1,'night':2,'fog':3}[profile],
@@ -280,7 +288,8 @@ class NativeBridge:
         if settings.no_rendering_mode:
             settings.no_rendering_mode=False;world.apply_settings(settings)
         self.client=client;self.world=world
-        self.route=CrossingRoute.build(world.get_map()) if profile in ('yield','carpool') else HighwayRoute.build(world.get_map())
+        self.road_map=world.get_map()
+        self.route=CrossingRoute.build(self.road_map) if profile in ('yield','carpool') else HighwayRoute.build(self.road_map)
 
     def clear_actors(self):
         self.camera_generation+=1
@@ -374,6 +383,18 @@ class NativeBridge:
             # Let every suspension settle before showing the ready state.
             for v in self.vehicles:v['actor'].apply_control(carla.VehicleControl(brake=1,hand_brake=True))
             for _ in range(16):self.world.wait_for_tick(2.)
+            settled=0;deadline=time.monotonic()+6.
+            while time.monotonic()<deadline:
+                alignment=start_alignment(self.route,self.vehicles)
+                settled=settled+1 if alignment['ready'] else 0
+                if settled>=4:break
+                self.world.wait_for_tick(2.)
+            self.state['departure_alignment']=alignment
+            if settled<4:
+                raise RuntimeError('출발 위치·방향 정렬을 확인하지 못했습니다. 다시 준비해 주세요.')
+            for item in self.vehicles:
+                item['geometry']=steering_geometry(item['actor'])
+                item['rest_z']=item['actor'].get_location().z-self.route.sample(item['s'],item['offset'])[0][2]
             self.make_camera(self.state['quality'])
             sensor=self.world.get_blueprint_library().find('sensor.other.collision')
             self.collision=self.world.spawn_actor(sensor,carla.Transform(),attach_to=self.ego)
@@ -425,12 +446,18 @@ class NativeBridge:
 
     def control(self,body):
         with self.lock:
+            if body.get('session_id') and (not self.scenario or body['session_id']!=self.scenario.session):
+                raise ValueError('이전 주행 화면에서 온 요청입니다. 현재 내비를 새로 열어 주세요.')
             if body.get('reset'):
                 if not self.profile:raise ValueError('시나리오를 먼저 선택해 주세요.')
                 self.pending.put(('profile',self.profile))
             if 'mode' in body:
                 if body['mode'] not in ('auto','paused'):raise ValueError('Invalid mode')
-                if not self.scenario or self.scenario.completed:raise ValueError('시나리오를 먼저 준비해 주세요.')
+                if self.state['phase']!='live' or not self.scenario or self.scenario.completed:raise ValueError('시나리오를 먼저 준비해 주세요.')
+                if body['mode']=='auto' and self.scenario.elapsed==0:
+                    alignment=start_alignment(self.route,self.vehicles)
+                    self.state['departure_alignment']=alignment
+                    if not alignment['ready']:raise ValueError('차량의 출발 위치·방향이 달라졌습니다. 출발 위치로 다시 준비해 주세요.')
                 self.command['mode']=body['mode']
             if 'quality' in body:
                 if body['quality'] not in SIZES:raise ValueError('Invalid quality')
@@ -458,7 +485,8 @@ class NativeBridge:
                     sc=self.scenario;driving=self.command['mode']=='auto' and not sc.completed
                     self.state['mode']='auto' if driving else 'paused'
                     ego=self.vehicles[0];et=ego['actor'].get_transform()
-                    ego['s'],error=self.route.project([et.location.x,et.location.y],ego['s']);self.ego_s=ego['s']
+                    ego['s'],_=self.route.project([et.location.x,et.location.y],ego['s']);self.ego_s=ego['s']
+                    error=tracking_alignment(self.route,ego,et)['position_error_m']
                     if self.profile=='cargo':
                         self.update_cargo(dt,driving,snapshot,error)
                         continue
@@ -493,7 +521,7 @@ class NativeBridge:
                         u=min(1.,max(0.,(elapsed-10.)/5.));ramp=u*u*(3-2*u)
                         amplitude=.65*(.2 if elapsed<sc.settle_until else 1.)
                         lead['offset']=ramp*(1.6+amplitude*math.sin((elapsed-10.)*2*math.pi/10.5))
-                    controls=[]
+                    controls=[];traffic_alignment=[]
                     planned_at=time.perf_counter()
                     for j,item in enumerate(self.vehicles):
                         if item['role']=='truck':
@@ -503,13 +531,19 @@ class NativeBridge:
                         if item['role']=='fast' and getattr(sc,'study',None) and sc.study.action=='merge' and sc.study.phase in ('applying','observing'):
                             sc.study.traffic_yield_ids.update(v['actor'].id for v in self.vehicles if v['role']=='fast' and v['s']<ego['s'])
                             item['speed']=20. if item['actor'].id in sc.study.traffic_yield_ids else 90.
-                        if item['role']=='fast' and item['s']-ego['s']>205:
+                        if driving and item['role']=='fast' and item['s']-ego['s']>205:
                             # Recycle only beyond the front display range, behind the rear view.
-                            rear=min(v['s'] for v in self.vehicles if v['role']=='fast')-23.
+                            rear=min(min(v['s'] for v in self.vehicles if v['role']=='fast')-23.,ego['s']-90.)
                             xyz,a=self.route.sample(rear,item['offset'])
-                            item['actor'].set_transform(carla.Transform(carla.Location(x=float(xyz[0]),y=float(xyz[1]),z=float(xyz[2]+.35)),carla.Rotation(yaw=math.degrees(a))))
-                            item['actor'].set_target_velocity(carla.Vector3D(x=25*math.cos(a),y=25*math.sin(a)))
-                            item['s']=rear
+                            item['actor'].set_transform(carla.Transform(carla.Location(x=float(xyz[0]),y=float(xyz[1]),z=float(xyz[2]+item['rest_z'])),carla.Rotation(yaw=math.degrees(a))))
+                            recycled_speed=curve_speed_limit(self.route,rear,item['offset'],90.)/3.6
+                            item['actor'].set_target_velocity(carla.Vector3D(x=recycled_speed*math.cos(a),y=recycled_speed*math.sin(a)))
+                            item['actor'].set_target_angular_velocity(carla.Vector3D())
+                            item['s']=rear;item['steer']=item['acc']=0.
+                            controls.append(carla.command.ApplyVehicleControl(item['actor'].id,carla.VehicleControl()))
+                            # The client transform cache still describes the old front position
+                            # until the next snapshot. Never steer toward the rear from it.
+                            continue
                         if item['role']=='fast':
                             # Different car models accelerate differently. Preserve the
                             # dense flow without allowing the faster model to rear-end it.
@@ -519,8 +553,10 @@ class NativeBridge:
                                 bumper=front['s']-item['s']-front['extent'].x-item['extent'].x
                                 cap=front['actor'].get_velocity().length()*3.6+1.6*(bumper-14.)
                                 item['speed']=max(0.,min(item['speed'],cap))
+                        item['speed']=curve_speed_limit(self.route,item['s'],item['offset'],item['speed'])
                         actor=item['actor'];tr=actor.get_transform();v=actor.get_velocity().length()
-                        steer=steering(self.route,item['s'],item['offset'],tr,v)
+                        traffic_alignment.append(tracking_alignment(self.route,item,tr))
+                        steer=steering(self.route,item['s'],item['offset'],tr,v,item['geometry'])
                         item['steer']+=max(-dt*1.5,min(dt*1.5,steer-item['steer']))
                         difference=item['speed']/3.6-v
                         item['acc']=max(-3.,min(8.,item['acc']+difference*dt)) if driving else 0.
@@ -536,6 +572,7 @@ class NativeBridge:
                     self.ego.set_light_state(carla.VehicleLightState(lights))
                     self.state.update(frame=snapshot.frame,speed_kph=round(speed,2),lane_error_m=round(error,3),
                                       profile=self.profile,physical_vehicles=len(self.vehicles),
+                                      traffic_alignment=traffic_alignment,
                                       control_cycle_ms=round((time.perf_counter()-cycle_started)*1000,1),
                                       projection_ms=round((projected_at-cycle_started)*1000,1),
                                       planning_ms=round((planned_at-projected_at)*1000,1))
@@ -582,7 +619,7 @@ class NativeBridge:
         controls=[]
         for item,kph,off in ((ego,target,lateral),(truck,25.,0.)):
             actor=item['actor'];at=actor.get_transform();v=actor.get_velocity().length()
-            steer=steering(self.route,item['s'],off,at,v)
+            steer=steering(self.route,item['s'],off,at,v,item['geometry'])
             item['steer']+=max(-dt*1.2,min(dt*1.2,steer-item['steer']))
             difference=kph/3.6-v
             throttle=max(0.,min(.5,.18+.3*difference)) if difference>0 else 0.
@@ -610,7 +647,7 @@ class NativeBridge:
         target=sc.target_speed();lateral=0.
         if getattr(sc,'study',None):target,lateral=sc.study.targets(target,lateral)
         if sc.phase in ('resume','finishing','complete') and not safe:target=0.
-        steer=steering(self.route,self.ego_s,lateral,actor.get_transform(),velocity)
+        steer=steering(self.route,self.ego_s,lateral,actor.get_transform(),velocity,item['geometry'])
         item['steer']+=max(-dt*1.5,min(dt*1.5,steer-item['steer']))
         difference=target/3.6-velocity
         throttle=max(0,min(.45,.2+.28*difference)) if difference>0 else 0.
@@ -629,7 +666,7 @@ class NativeBridge:
         sc=self.scenario;item=self.vehicles[0];tr=self.ego.get_transform();velocity=self.ego.get_velocity().length()
         centre,yaw=self.route.sample(self.ego_s)
         offset=(tr.location.x-centre[0])*-math.sin(yaw)+(tr.location.y-centre[1])*math.cos(yaw)
-        wp=self.world.get_map().get_waypoint(tr.location,project_to_road=False,lane_type=carla.LaneType.Any)
+        wp=self.road_map.get_waypoint(tr.location,project_to_road=False,lane_type=carla.LaneType.Any)
         safe=bool(wp and wp.lane_type in (carla.LaneType.Shoulder,carla.LaneType.Parking))
         clear=self.pedestrian.cleared(self.ego) if self.pedestrian else False
         sc.tick_context(dt,driving,velocity*3.6,self.ego_s,offset,clear,safe)
@@ -637,7 +674,7 @@ class NativeBridge:
         if self.pedestrian:self.pedestrian.update(sc,driving)
         target,lateral=sc.target()
         if getattr(sc,'study',None):target,lateral=sc.study.targets(target,lateral)
-        steer=steering(self.route,self.ego_s,lateral,tr,velocity)
+        steer=steering(self.route,self.ego_s,lateral,tr,velocity,item['geometry'])
         item['steer']+=max(-dt*1.2,min(dt*1.2,steer-item['steer']))
         difference=target/3.6-velocity
         throttle=max(0,min(.45,.2+.28*difference)) if difference>0 else 0.
