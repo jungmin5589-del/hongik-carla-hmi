@@ -196,6 +196,12 @@ class Gateway:
                     'situation':('There is a new driving situation','Open Hongik AI to review the situation and response choices.'),
                     'end':('Your request is complete','Review the outcome of your choice.')
                 }[kind]
+            elif language=='zh':
+                title,body={
+                    'start':('行程已开始','您可以在移动设备上查看行驶状态和选择结果。'),
+                    'situation':('出现了新的行驶情况','打开弘益 AI 查看情况说明和应对选项。'),
+                    'end':('请求处理已结束','请查看所选行动的实际结果。')
+                }[kind]
             key=session+':'+kind
             if self.pairing.mark_notification(key):
                 payload=dict(title=title,body=body,tag=key,session=session,url='/m/?lang='+language+'&event='+key)
@@ -346,11 +352,19 @@ def handler(gateway):
                 template=ROOT/'tablet_pc.html' if parse_qs(urlparse(self.path).query).get('view')==['tablet'] else ASSETS/'connect.html'
                 markup=template.read_text(encoding='utf-8').replace('{{IP}}',html.escape(gateway.address)).replace('{{PIN}}',gateway.pairing.pin).replace('{{HTTP_PORT}}',str(HTTP_PORT)).replace('{{HTTPS_PORT}}',str(HTTPS_PORT)).replace('{{FINGERPRINT}}',gateway.keys['ca_fingerprint'])
                 self.send(markup.encode(),'text/html; charset=utf-8');return
-            if path in ('/m/language.js','/m/language/en'):
+            if path in ('/m/language.js','/m/language/en','/m/language/zh'):
                 if path.endswith('.js'):self.send((ROOT/'language.js').read_bytes(),'application/javascript; charset=utf-8')
                 else:
-                    from english_locale import catalog
+                    if path.endswith('/zh'):from chinese_locale import catalog
+                    else:from english_locale import catalog
                     self.send(catalog())
+                return
+            if path.startswith('/m/chinese-audio/'):
+                if not self.authorized():self.fail('연결이 필요합니다.',401);return
+                from research_voice import audio_path,ALIASES
+                key=path.removeprefix('/m/chinese-audio/').removesuffix('.wav')
+                try:self.send(audio_path('zh_scene_'+ALIASES.get(key,key)).read_bytes(),'audio/wav')
+                except (OSError,ValueError,KeyError):self.send_error(404)
                 return
             if path.startswith('/m/english-audio/'):
                 if not self.authorized():self.fail('연결이 필요합니다.',401);return
@@ -362,7 +376,7 @@ def handler(gateway):
             if path=='/m/api/state':
                 if not self.authorized():self.fail('PC와 휴대폰을 먼저 연결해 주세요.',401);return
                 language=parse_qs(urlparse(self.path).query).get('lang',[None])[0]
-                if language in ('ko','en') and gateway.pairing.device.get('language')!=language:
+                if language in ('ko','en','zh') and gateway.pairing.device.get('language')!=language:
                     with gateway.pairing.lock:gateway.pairing.device['language']=language;gateway.pairing.save()
                 self.send(gateway.state());return
             if path.startswith('/m/audio/'):
@@ -411,6 +425,7 @@ def handler(gateway):
                     if not gateway.pairing.device.get('subscription'):raise ValueError('시스템 알림을 먼저 켜 주세요.')
                     language=(gateway.pairing.device or {}).get('language','ko')
                     title,body=('Hongik AI notification check','Driving situation alerts will appear here.') if language=='en' else ('홍익 AI 알림 연결 확인','실제 주행 상황이 생기면 이곳으로 알려드릴게요.')
+                    if language=='zh':title,body='弘益 AI 通知连接确认','出现行驶情况时，将在这里通知您。'
                     gateway.deliver(dict(title=title,body=body,tag='test-'+secrets.token_hex(4),url='/m/?lang='+language))
                     self.send(dict(sent=gateway.push_error is None));return
                 self.send_error(404)

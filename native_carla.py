@@ -34,6 +34,7 @@ from midterm_study import StudyMixin, OPTIONS as MIDTERM_OPTIONS, option as stud
 from passenger_music import library as music_library, stream as stream_music
 from fallen_cargo import CargoScenario, CargoActor, OPTIONS as CARGO_OPTIONS, navigation_state as cargo_navigation_state, left_lane_clear, following_speed
 from lab_settings import sun_altitude
+from research_store import ResearchStore
 
 ROOT = Path(__file__).resolve().parent
 PORT, RPC = 8774, 2026
@@ -242,6 +243,7 @@ class NativeBridge:
                         mode='paused',quality=quality,width=SIZES[quality][0],height=SIZES[quality][1],
                         speed_kph=0,frames=0,frame=0,target_fps=30,measured_fps=0)
         self.presentation='midterm';self.condition='B'
+        self.language='ko';self.research=ResearchStore()
         self.command={'mode':'paused'};self.profile=None;self.scenario=None;self.ego=None
         self.vehicles=[];self.pedestrian=None;self.cargo=None;self.camera=None;self.rig=None;self.collision=None;self.world=None;self.route=None;self.ego_s=100.
         self.pending=queue.Queue();self.navigation=NativeNavigation(self);self.camera_generation=0
@@ -349,6 +351,7 @@ class NativeBridge:
             modern=self.presentation=='midterm'
             native_cls,context_cls,yield_cls,cargo_cls=(StudyNative,StudyContext,StudyYield,StudyCargo) if modern else (NativeScenario,ContextScenario,YieldScenario,CargoScenario)
             self.scenario=cargo_cls(event_path) if profile=='cargo' else yield_cls(event_path,self.route) if profile=='yield' else context_cls(profile,event_path,self.ego_s,offset) if profile in CONTEXT_OPTIONS else native_cls(profile,event_path)
+            self.research.attach(self.scenario,profile,self.condition,self.language)
             if modern:self.scenario.study.bind(self,self.condition)
             self.state.update(presentation=self.presentation,condition=self.condition)
             if profile=='carpool':
@@ -455,10 +458,14 @@ class NativeBridge:
                 if body['mode'] not in ('auto','paused'):raise ValueError('Invalid mode')
                 if self.state['phase']!='live' or not self.scenario or self.scenario.completed:raise ValueError('시나리오를 먼저 준비해 주세요.')
                 if body['mode']=='auto' and self.scenario.elapsed==0:
+                    participant=self.research.current_participant()
+                    if participant and getattr(self.scenario,'research_participant_id',None)!=participant['id']:
+                        raise ValueError('참가자가 바뀌었어요. 시나리오를 다시 선택해 주세요.')
                     alignment=start_alignment(self.route,self.vehicles)
                     self.state['departure_alignment']=alignment
                     if not alignment['ready']:raise ValueError('차량의 출발 위치·방향이 달라졌습니다. 출발 위치로 다시 준비해 주세요.')
                 self.command['mode']=body['mode']
+                if body['mode']=='auto':self.research.start(self.scenario.session)
             if 'quality' in body:
                 if body['quality'] not in SIZES:raise ValueError('Invalid quality')
                 if self.ego is None:self.state['quality']=body['quality']
@@ -703,12 +710,13 @@ def native_navigation_html(midterm=False):
     if midterm:
         html=html.replace('src="/research-events.js','src="/midterm-panel.js')
         html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/underbody-sound.js"></script><script defer src="/scene-audio.js"></script><script defer src="/midterm-audio.js"></script><link rel="stylesheet" href="/midterm-panel.css"></head>')
+        html=html.replace('</head>','<script defer src="/feedback-voice.js"></script></head>')
     else:html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/underbody-sound.js"></script><script defer src="/scene-audio.js"></script><script defer src="/city-study.js"></script><link rel="stylesheet" href="/city-study.css"></head>')
     return html.encode('utf-8')
 
 
 def native_home_html():
-    return (ROOT/'native_home.html').read_bytes().replace(b'<main>',b'<script src="/language.js"></script><main>',1)
+    return (ROOT/'native_home.html').read_bytes().replace(b'<main>',b'<script src="/language.js"></script><script defer src="/participant-setup.js"></script><main>',1)
 
 
 def handler(bridge):
@@ -722,6 +730,26 @@ def handler(bridge):
             path=urlparse(self.path).path
             try:
                 if path=='/':self.send(native_home_html(),'text/html; charset=utf-8')
+                elif path=='/admin':self.send((ROOT/'research_admin.html').read_bytes(),'text/html; charset=utf-8')
+                elif path=='/admin/api/trials':self.send(bridge.research.list(parse_qs(urlparse(self.path).query).get('q',[''])[0]))
+                elif path=='/admin/api/events':self.send(bridge.research.detail(parse_qs(urlparse(self.path).query).get('trial',[''])[0]))
+                elif path=='/admin/export':self.send(bridge.research.export_csv(parse_qs(urlparse(self.path).query).get('kind',['trials'])[0]),'text/csv; charset=utf-8')
+                elif path=='/api/participant/current':self.send(dict(participant=bridge.research.current_participant()))
+                elif path=='/participant-setup.js':self.send((ROOT/'participant_setup.js').read_bytes(),'application/javascript')
+                elif path=='/feedback-voice.js':self.send((ROOT/'feedback_voice.js').read_bytes(),'application/javascript')
+                elif path=='/api/research-voice':
+                    from research_voice import catalog
+                    self.send(catalog(parse_qs(urlparse(self.path).query).get('lang',['ko'])[0]))
+                elif path.startswith('/api/research-audio/'):
+                    from research_voice import audio_path as response_audio
+                    self.send(response_audio(path.removeprefix('/api/research-audio/').removesuffix('.wav')).read_bytes(),'audio/wav')
+                elif path=='/api/language/zh':
+                    from chinese_locale import catalog
+                    self.send(catalog())
+                elif path.startswith('/api/chinese-audio/'):
+                    from research_voice import audio_path as chinese_audio,ALIASES
+                    key=path.removeprefix('/api/chinese-audio/').removesuffix('.wav')
+                    self.send(chinese_audio('zh_scene_'+ALIASES.get(key,key)).read_bytes(),'audio/wav')
                 elif path=='/navigation':self.send(native_navigation_html(bridge.presentation=='midterm'),'text/html; charset=utf-8')
                 elif path=='/navigation/classic':self.send(native_navigation_html(),'text/html; charset=utf-8')
                 elif path in ('/midterm-panel.js','/midterm-panel.css'):
@@ -789,7 +817,13 @@ def handler(bridge):
                 if not 0<size<=4096:raise ValueError('Invalid request size')
                 body=json.loads(self.rfile.read(size))
                 if not isinstance(body,dict):raise ValueError('Invalid request')
-                if self.path=='/api/select':
+                if self.path=='/api/participant':
+                    with bridge.lock:
+                        if bridge.scenario and bridge.scenario.elapsed>0 and not bridge.scenario.completed:raise ValueError('현재 주행이 끝난 뒤 참가자를 변경해 주세요.')
+                        participant=bridge.research.participant(body.get('name'))
+                    self.send(dict(participant=participant))
+                elif self.path=='/admin/api/sync':bridge.research.changed();self.send(dict(accepted=True))
+                elif self.path=='/api/select':
                     profile=body.get('profile')
                     if profile not in PROFILES:raise ValueError('시나리오를 선택해 주세요.')
                     condition=body.get('condition','B');presentation=body.get('presentation','midterm')
@@ -797,6 +831,7 @@ def handler(bridge):
                     with bridge.lock:
                         if bridge.state['phase']=='preparing':raise ValueError('시나리오를 준비하고 있어요.')
                         bridge.condition=condition;bridge.presentation=presentation
+                        bridge.language=body.get('language','ko') if body.get('language','ko') in ('ko','en','zh') else 'ko'
                         bridge.command['mode']='paused';bridge.state['phase']='preparing'
                         bridge.pending.put(('profile',profile))
                     self.send({'accepted':True})
@@ -822,7 +857,7 @@ def main():
     if not args.no_browser:webbrowser.open(f'http://127.0.0.1:{PORT}/')
     print(f'CARLA native scenario app: http://127.0.0.1:{PORT}/',flush=True)
     try:server.serve_forever()
-    finally:bridge.stop.set();server.server_close()
+    finally:bridge.stop.set();bridge.research.close();server.server_close()
 
 
 if __name__=='__main__':main()

@@ -3,6 +3,9 @@ from http.server import ThreadingHTTPServer
 from types import SimpleNamespace
 from native_carla import handler
 from midterm_study import COPY,OPTIONS,option
+import tempfile
+from pathlib import Path
+from research_store import ResearchStore
 
 def fixture():
     title,situation,behavior=COPY['night'];sid='english-render-fixture'
@@ -24,9 +27,10 @@ def main():
     import native_carla
     native_carla.PORT=8784
     value=fixture()
+    temporary=tempfile.TemporaryDirectory();research=ResearchStore(Path(temporary.name),start_worker=False);research.participant('QA-UI')
     bridge=SimpleNamespace(presentation='midterm',navigation=SimpleNamespace(state=lambda:value,atlas=lambda:dict(map='CARLA',roads=[],destinations=[],buildings=[]),
         command=lambda body:dict(session_id='english-render-fixture',command_id='fixture'),reply=lambda *args:dict(accepted=True,message='확인했습니다.')),
-        state=dict(phase='choose'),scenario=None)
+        state=dict(phase='choose'),scenario=None,research=research)
     print('Isolated English rendering fixture: 8784; not a driving session',flush=True)
     ThreadingHTTPServer(('127.0.0.1',8784),handler(bridge)).serve_forever()
 

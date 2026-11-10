@@ -54,12 +54,13 @@ if(voiceChannel)voiceChannel.onmessage=message=>{if(message.data?.claim!==voiceC
 function stopSpeech(){
  speechTurn++;if(player){player.pause();player.removeAttribute('src');player.load();player.remove?.();player=null}
  window.passengerNarration?.setDuck?.(1);
- $('research-read').textContent='설명 다시 듣기';$('research-voice-status').textContent=voiceEnabled?'Sohee':'음성 꺼짐';
+ $('research-read').textContent='설명 다시 듣기';$('research-voice-status').textContent=voiceEnabled?(window.HongikLocale?.lang==='zh'?'Vivian':'Sohee'):'음성 꺼짐';
 }
 function readExplanation(){
+ window.HongikFeedback?.stop();
  stopSpeech();if(!voiceEnabled)return;
  const voice=event?.narration;
- if(!voice?.cached||(!/^\/api\/english-audio\/[a-z_]+\.wav$/.test(voice.url||'')&&!/^\/api\/narration\/audio\/(blockade|congestion|night|fog|normal|complete|yield|city_yield|city_carpool|city_rattle|city_fog|city_cargo)\.wav$/.test(voice.url||''))){
+ if(!voice?.cached||(!/^\/api\/(?:english-audio|chinese-audio)\/[a-z_]+\.wav$/.test(voice.url||'')&&!/^\/api\/narration\/audio\/(blockade|congestion|night|fog|normal|complete|yield|city_yield|city_carpool|city_rattle|city_fog|city_cargo)\.wav$/.test(voice.url||''))){
   $('research-voice-status').textContent='Sohee 음성을 준비하지 못했어요.';return;
  }
  const turn=speechTurn;voiceChannel?.postMessage({claim:voiceClient});
@@ -98,7 +99,7 @@ function returnToSelection(){
  stopSpeech();
  const target=new URL('/',location.href);
  if(['A','B'].includes(event?.condition))target.searchParams.set('condition',event.condition);
- const lang=window.HongikLocale?.lang;if(['ko','en'].includes(lang))target.searchParams.set('lang',lang);
+ const lang=window.HongikLocale?.lang;if(['ko','en','zh'].includes(lang))target.searchParams.set('lang',lang);
  location.assign(target.pathname+target.search);
 }
 function render(){
@@ -193,6 +194,7 @@ async function choose(option){
  try{
   await post('study_choice',{choice:option.action});if(!isCurrent(token))return;
   selected=option;phase='confirm';$('research-confirm-copy').textContent=option.label+' 요청을 실행할까요? '+option.detail;
+ window.HongikFeedback?.say('choice');
  }catch(error){if(isCurrent(token))showError(error)}
  finally{if(isCurrent(token)){busy=false;render();if(phase==='confirm')$('research-execute').focus()}}
 }
@@ -246,6 +248,7 @@ function notify(){
 document.addEventListener('visibilitychange',notify);
 window.addEventListener?.('pagehide',stopSpeech);
 window.addEventListener?.('nurec-exit',stopSpeech);
+window.addEventListener?.('hongik-feedback-speaking',stopSpeech);
 window.CockpitUpdate=data=>{
  previous?.(data);
  const next=data.session?.navigation?.research_event;

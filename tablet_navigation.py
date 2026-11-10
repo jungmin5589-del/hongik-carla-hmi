@@ -15,10 +15,11 @@ STATIC = {'/cockpit.css','/cockpit.js','/driving-sound.css','/driving-sound.js',
  '/midterm-panel.css','/midterm-panel.js','/multimodal.css','/nurec-map-context.js',
  '/nurec-nav-boot.js','/nurec-nav.css','/nurec-nav.js','/recorded-cabin.js',
  '/research-events.css','/research-events.js','/scene-audio.js','/underbody-sound.js',
- '/city-study.js','/city-study.css','/pedestrian-ui.js'}
+ '/city-study.js','/city-study.css','/pedestrian-ui.js','/participant-setup.js','/feedback-voice.js'}
 JSON_GET = {'/api/state','/api/atlas','/api/library','/api/language/en','/state',
- '/api/footsteps','/api/mechanical-audio','/api/recorded-cabin','/api/cabin-audio'}
-SOUNDS = re.compile(r'^/api/(?:narration/audio|english-audio)/[a-z_]+\.wav$')
+ '/api/footsteps','/api/mechanical-audio','/api/recorded-cabin','/api/cabin-audio',
+ '/api/participant/current','/api/research-voice','/api/language/zh'}
+SOUNDS = re.compile(r'^/api/(?:narration/audio|english-audio|chinese-audio|research-audio)/[a-z_]+\.wav$')
 MEDIA = re.compile(r'^/media/[a-zA-Z0-9_-]+$')
 
 
@@ -108,6 +109,9 @@ def serve(h, gateway, head=False):
             if session!=gateway.state().get('session') or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}',key):
                 raise ValueError('이전 주행의 요청입니다. 내비를 새로 열어 주세요.')
             target=path+'?'+urlencode({'session':session,'id':key})
+        elif path=='/api/research-voice':
+            lang=parse_qs(parsed.query).get('lang',['ko'])[0]
+            target=path+'?'+urlencode({'lang':lang if lang in ('ko','en','zh') else 'ko'})
         else:target=path  # Asset cache tags are unnecessary; arbitrary queries stay local.
         if media or audio:
             headers={}
@@ -137,19 +141,22 @@ def serve(h, gateway, head=False):
 
 def post(h,gateway,body):
     path=urlparse(h.path).path
-    if path not in ('/api/command','/control','/api/select'):return False
+    if path not in ('/api/command','/control','/api/select','/api/participant'):return False
     if not authenticated(h,gateway):h.fail('전체 내비 연결이 필요합니다.',401);return True
     try:
         if path=='/api/command':h.send(gateway.queue_command(body,source='hongik_tablet'));return True
         state=gateway.state()
-        if path=='/control':
+        if path=='/api/participant':
+            if set(body)-{'name','language'}:raise ValueError('참가자 입력을 확인해 주세요.')
+            clean=body
+        elif path=='/control':
             if set(body)!={'mode','session_id'} or body.get('mode') not in ('auto','paused'):
                 raise ValueError('엔진 초기화·화질 설정은 PC에서 해 주세요.')
             if not state.get('connected') or body['session_id']!=state.get('session'):
                 raise ValueError('현재 주행 화면에서 다시 요청해 주세요.')
             clean=body
         else:
-            if set(body)!={'profile','presentation','condition'} or body.get('profile') not in {
+            if set(body)-{'profile','presentation','condition','language'} or body.get('profile') not in {
                 'congestion','night','fog','yield','carpool','rattle','cargo'} or body.get('condition') not in ('A','B') or body.get('presentation')!='midterm':
                 raise ValueError('주행 환경을 다시 선택해 주세요.')
             if state.get('connected') and state.get('elapsed_s',0)>0 and not state.get('completed'):

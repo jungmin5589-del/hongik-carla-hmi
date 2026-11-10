@@ -6,7 +6,7 @@
   const h=[...a].map(v=>v.toString(16).padStart(2,'0')).join('');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
  };
  const style=document.createElement('style');style.textContent=`
-  #nurec-reset,#nurec-quality,.nurec-controls a,.navigation-settings-title,a[href="/drive"],a[href^="http://127.0.0.1:8776"]{display:none!important}
+  #nurec-reset,#nurec-quality,#research-admin,.nurec-controls a,.navigation-settings-title,a[href="/drive"],a[href^="http://127.0.0.1:8776"]{display:none!important}
   html,body{overscroll-behavior:none}button,a,input,select{touch-action:manipulation}
   .view-tools{bottom:100px;right:18px;left:auto;z-index:4}
  `;document.head.append(style);

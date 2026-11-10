@@ -22,6 +22,10 @@ OPTIONS={
 
 # Whole sentences first. Small labels also cover the original Tesla-style UI.
 PAIRS='''
+참가자 이름 또는 ID	Participant name or ID
+참가자 등록	Register participant
+등록된 참가자:	Registered participant:
+관리자 · 실험 기록	Admin · Research records
 시나리오 선택으로	Back to scenario selection
 주행이 끝났어요. 다른 상황을 선택할 수 있어요.	The drive has ended. You can select another scenario.
 장면 소리 켜기	Enable scene sound

@@ -85,5 +85,21 @@ class TabletTests(unittest.TestCase):
             self.assertEqual(self.client.post(self.url+'/api/select',json=body).status_code,400)
             forward.assert_not_called()
 
+    def test_research_registration_and_language_forward_but_admin_is_private(self):
+        self.grant()
+        with patch('tablet_navigation.backend',return_value=Response()) as forward:
+            body={'name':'P-CN-001','language':'zh'}
+            self.assertEqual(self.client.post(self.url+'/api/participant',json=body).status_code,200)
+            forward.assert_called_with('/api/participant',body=body)
+            self.assertEqual(self.client.get(self.url+'/api/research-voice?lang=zh').status_code,200)
+            forward.assert_called_with('/api/research-voice?lang=zh')
+            self.assertEqual(self.client.get(self.url+'/api/research-voice?lang=invalid').status_code,200)
+            forward.assert_called_with('/api/research-voice?lang=ko')
+            forward.reset_mock()
+            for path in ('/admin','/admin/api/trials','/admin/export?kind=events','/research.sqlite3','/drive-config.json'):
+                self.assertEqual(self.client.get(self.url+path).status_code,404)
+            forward.assert_not_called()
+            self.assertEqual(self.client.post(self.url+'/api/participant',json={'name':'P001','directory':'not-allowed'}).status_code,400)
+
 
 if __name__=='__main__':unittest.main()

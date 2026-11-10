@@ -1,3 +1,5 @@
+[참가자 기록·관리자·응답 음성·중국어](docs/RESEARCH-RECORDS-AND-CHINESE-KO.md): 기존 내비에서 참가자 등록, 선택/실행 시간 기록, 비공개 Drive 백업, Sohee 응답과 간체자·표준중국어를 연결합니다.
+
 [연구실 GitHub Pull·Push 연결](docs/LAB-GIT-WORKFLOW-KO.md): ZIP으로 전달한 폴더에 Git 기록을 연결하고, 연구실 WebSocket 수정분을 먼저 보존한 뒤 동기화합니다.
 
 [연구실 3면 화면 준비](docs/LAB-READY-KO.md): 원본 Surround 설정을 적용하고, 기존 연구실 0.9.15를 건드리지 않는 별도 0.9.16 실행 폴더를 준비합니다. 취객 밝기는 기존 값으로 복구했습니다.

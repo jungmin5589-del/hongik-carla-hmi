@@ -47,7 +47,10 @@ HTTP LAN에서 없는 `crypto.randomUUID`를 Web Crypto 난수 기반 UUID로 �
   이 브라우저 검사의 실행 명령은 격리된 모의 수신기로 보냈으므로
   실제 CARLA 행동 실행이나 실제 iPad Safari 검증과 구별한다.
 - 사용자가 실제 아이패드에서 기존 내비 전체가 표시되는 것을 확인했다.
-  실기기의 오디오·선택에 따른 실제 주행 결과는 별도로 확인한다.
+- 실제 4차로 정체에서 사용자가 아이패드로 ‘트럭과 거리 넓히기’를 실행했고,
+  PC의 동일 세션이 lateral 대응 → 완료(achieved) → 정차로 이어지는 것을 확인했다.
+  해당 확인 시 접촉 기록은 0건이었다. 모든 상황·선택지의 실기기 검증은 아니다.
+- 실제 아이패드 오디오의 주관적 음질과 새 전체 내비의 잠금 알림은 별도 확인이 필요하다.
 
 관련 코드: `tablet_navigation.py`, `tablet_boot.js`, `tablet_connect.html`,
 `tablet_pc.html`, `mobile_gateway.py`.
