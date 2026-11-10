@@ -1,6 +1,6 @@
-import tempfile,unittest
+import os,tempfile,unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock,patch
 from lab_one_click import run
 
 class OneClickTests(unittest.TestCase):
@@ -29,5 +29,11 @@ class OneClickTests(unittest.TestCase):
     def test_read_only_check_does_not_extract_or_launch(self):
         run(self.root,check=True,runner=self.runner)
         self.assertEqual(self.runner.call_count,1);self.assertEqual(Path(self.runner.call_args.args[0][1]).name,'lab_preflight.py')
+    def test_native_stop_and_start_choose_the_same_portable_engine(self):
+        from launch_native_carla import engine_path
+        engine=self.bundle/'CARLA_0.9.16';engine.mkdir();(engine/'CarlaUE4.exe').write_bytes(b'fixture')
+        with patch.dict(os.environ,{},clear=True):self.assertEqual(engine_path(self.root),engine)
+        with patch.dict(os.environ,{'CARLA_ROOT':str(self.bundle/'explicit-engine')}):
+            self.assertEqual(engine_path(self.root),self.bundle/'explicit-engine')
 
 if __name__=='__main__':unittest.main()

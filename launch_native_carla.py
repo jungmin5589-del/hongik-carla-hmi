@@ -15,7 +15,11 @@ ROOT=Path(__file__).resolve().parent
 NO_WINDOW=0x08000000
 OWNED=ROOT/'native-owned.json'
 PYTHON=Path(sys.executable)
-CARLA=Path(os.environ.get('CARLA_ROOT','C:/CARLA_0.9.16'))
+def engine_path(root=ROOT):
+    bundled=Path(root).parent/'CARLA_0.9.16'
+    return Path(os.environ.get('CARLA_ROOT',str(bundled) if (bundled/'CarlaUE4.exe').is_file() else 'C:/CARLA_0.9.16'))
+
+CARLA=engine_path()
 
 
 def listening(port):
