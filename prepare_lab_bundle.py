@@ -15,12 +15,19 @@ def copy_source(destination):
         source=ROOT/name;data=source.read_bytes();check_content(name,data);target=destination/'live'/name
         if target.exists() and target.read_bytes()!=data:
             old=backup/name;old.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(target,old)
-        target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data)
+        target.parent.mkdir(parents=True,exist_ok=True)
+        if not target.is_file() or target.read_bytes()!=data:target.write_bytes(data)
         manifest.append(dict(path='live/'+name,sha256=hashlib.sha256(data).hexdigest()))
     for name in MOBILE:shutil.copy2(ROOT/'mobile'/name,destination/'live/mobile'/name)
     (destination/'live/ui_assets').mkdir(exist_ok=True)
     for p in (ROOT/'ui_assets').glob('552-*.svg'):shutil.copy2(p,destination/'live/ui_assets'/p.name)
     (destination/'SOURCE-MANIFEST.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
+    shutil.copy2(ROOT/'00_START_LAB.bat',destination/'00_START_LAB.bat')
+    for filename,doc in [('00_START_HERE.md','LAB-READY-KO.md'),('01_ONE_CLICK_GUIDE-KO.md','LAB-ONE-CLICK-KO.md')]:
+        target=destination/filename;data=(ROOT/'docs'/doc).read_bytes()
+        if target.exists() and target.read_bytes()!=data:
+            backup.mkdir(parents=True,exist_ok=True);shutil.copy2(target,backup/filename)
+        target.write_bytes(data)
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--destination',type=Path,required=True);parser.add_argument('--refresh-source-only',action='store_true');args=parser.parse_args()
@@ -45,7 +52,7 @@ def main():
             if z.testzip():raise RuntimeError('Engine archive integrity failure')
         os.replace(temporary,archive)
         print('Engine archive verified',flush=True)
-    for name in ('city-audio','english-audio','sohee-narration','sohee-pedestrian','exterior-gait','recorded-cabin','mechanical-recording','recorded-footsteps'):
+    for name in ('city-audio','english-audio','research-voice','sohee-narration','sohee-pedestrian','exterior-gait','recorded-cabin','mechanical-recording','recorded-footsteps'):
         shutil.copytree(ROOT.parent/'cache'/name,target/'cache'/name,dirs_exist_ok=True)
     from passenger_music import MUSIC,TRACKS
     music=target/'cache/music';music.mkdir(exist_ok=True)

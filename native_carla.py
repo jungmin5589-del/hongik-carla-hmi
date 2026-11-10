@@ -730,6 +730,7 @@ def handler(bridge):
             path=urlparse(self.path).path
             try:
                 if path=='/':self.send(native_home_html(),'text/html; charset=utf-8')
+                elif path=='/lab':self.send((ROOT/'lab_start.html').read_bytes(),'text/html; charset=utf-8')
                 elif path=='/admin':self.send((ROOT/'research_admin.html').read_bytes(),'text/html; charset=utf-8')
                 elif path=='/admin/api/trials':self.send(bridge.research.list(parse_qs(urlparse(self.path).query).get('q',[''])[0]))
                 elif path=='/admin/api/events':self.send(bridge.research.detail(parse_qs(urlparse(self.path).query).get('trial',[''])[0]))

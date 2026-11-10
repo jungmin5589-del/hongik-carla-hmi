@@ -40,7 +40,8 @@ def stop_native():
     print('Stopped only the recorded CARLA-native application processes.')
 
 
-def main():
+def main(start_path='/'):
+    if start_path not in ('/','/lab'):raise ValueError('Unknown local startup page')
     if '--stop' in sys.argv:
         stop_native();return
     if listening(8774):
@@ -49,7 +50,7 @@ def main():
         except Exception as exc:raise RuntimeError('Port 8774 belongs to another app; leave it untouched.') from exc
         if state.get('kind')=='hongik-native-carla':
             ensure_phone()
-            webbrowser.open('http://127.0.0.1:8774/');return
+            webbrowser.open('http://127.0.0.1:8774'+start_path);return
         # The existing NuRec stop script verifies recorded process identities.
         if not (ROOT/'owned-processes.json').is_file():
             raise RuntimeError('Another untracked driving session is running on 8774.')
@@ -87,7 +88,7 @@ def main():
         if p.poll() is not None:raise RuntimeError('Native app startup failed. Check native-runs logs.')
         if listening(8774):
             ensure_phone()
-            webbrowser.open('http://127.0.0.1:8774/');return
+            webbrowser.open('http://127.0.0.1:8774'+start_path);return
         time.sleep(.25)
     raise RuntimeError('Native app did not become ready.')
 

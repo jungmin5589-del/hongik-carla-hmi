@@ -3,7 +3,7 @@ import argparse,json,os,sys,urllib.request
 from pathlib import Path
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--preview',action='store_true');parser.add_argument('--check',action='store_true');parser.add_argument('--carla-root',type=Path)
+    parser=argparse.ArgumentParser();parser.add_argument('--preview',action='store_true');parser.add_argument('--check',action='store_true');parser.add_argument('--welcome',action='store_true');parser.add_argument('--carla-root',type=Path)
     args=parser.parse_args()
     from lab_settings import settings
     cfg=settings()
@@ -33,6 +33,6 @@ def main():
         if not state.get('lab_rig'):launcher.stop_native()
     # Prevent this launcher's flags from being interpreted by the native launcher.
     sys.argv=[sys.argv[0]]
-    launcher.main()
+    launcher.main(start_path='/lab' if args.welcome else '/')
 
 if __name__=='__main__':main()

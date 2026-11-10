@@ -1,3 +1,5 @@
+[연구실 원클릭 실행과 아이패드 QR](docs/LAB-ONE-CLICK-KO.md): SSD 폴더의 `00_START_LAB.bat`에서 준비·검사·3면 앱·내비·QR을 이어갑니다. MotionHouse 현장 연결은 별도 확인 항목입니다.
+
 [참가자 기록·관리자·응답 음성·중국어](docs/RESEARCH-RECORDS-AND-CHINESE-KO.md): 기존 내비에서 참가자 등록, 선택/실행 시간 기록, 비공개 Drive 백업, Sohee 응답과 간체자·표준중국어를 연결합니다.
 
 [연구실 GitHub Pull·Push 연결](docs/LAB-GIT-WORKFLOW-KO.md): ZIP으로 전달한 폴더에 Git 기록을 연결하고, 연구실 WebSocket 수정분을 먼저 보존한 뒤 동기화합니다.

@@ -21,6 +21,9 @@ def main():
         except Exception as exc:errors.append(key+': '+type(exc).__name__)
     from english_voice import catalog as english
     if not all(v['cached'] for v in english().values()):errors.append('English narration cache incomplete')
+    from research_voice import catalog as responses
+    for lang in ('ko','en','zh'):
+        if not all(v['cached'] for v in responses(lang)['voices'].values()):errors.append(lang+' response/Chinese narration cache incomplete')
     from cabin_recording import verified
     from mechanical_recording import audio
     from footstep_recording import verified as footsteps
