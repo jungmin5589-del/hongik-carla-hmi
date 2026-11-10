@@ -6,10 +6,23 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 from native_carla import StudyNative, NativeNavigation, StudyContext
-from midterm_study import OPTIONS
+from midterm_study import OPTIONS,bay_run_in_clear,find_nearby_parking
 
 
 class MidtermTests(unittest.TestCase):
+    def test_bay_rejects_pole_on_approach_even_when_final_bay_is_clear(self):
+        route=SimpleNamespace(sample=lambda s,offset:([s,offset,0.],0.))
+        self.assertFalse(bay_run_in_clear(route,0.,0.,65.,10.5,[(40.,9.)]))
+        self.assertTrue(bay_run_in_clear(route,0.,0.,65.,10.5,[(40.,20.)]))
+
+    def test_parking_relocation_fits_corners_not_just_vehicle_center(self):
+        import carla
+        road=SimpleNamespace(get_waypoint=lambda q,**kwargs:SimpleNamespace(lane_type=carla.LaneType.Parking) if 1.5<q.y<4.5 else None)
+        b=SimpleNamespace(scenario=SimpleNamespace(start_s=5.,base_offset=3.5),
+            vehicles=[{'extent':SimpleNamespace(x=2.4,y=1.08)}],world=SimpleNamespace(get_map=lambda:road),
+            route=SimpleNamespace(length=100.,sample=lambda s,offset:([s,offset,0.],0.)))
+        bay=find_nearby_parking(b)
+        self.assertGreater(bay['s'],b.scenario.start_s);self.assertLess(bay['offset'],3.5)
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory()
         self.sc=StudyNative('night',Path(self.temp.name)/'events.jsonl')
@@ -78,6 +91,15 @@ class MidtermTests(unittest.TestCase):
         self.assertEqual(self.sc.study._ready(0,6),(True,'partial'))
         self.sc.study.status='partial'
         self.assertIn('확인하지 못했어요',self.sc.study.describe())
+
+    def test_highway_stops_wait_at_a_crawl_without_stopping_in_lane(self):
+        for profile in ('night','fog','rattle'):
+            with self.subTest(profile=profile):
+                self.sc.profile=profile;self.b.profile=profile
+                study=self.sc.study;study.phase='applying';study.action='safe_stop'
+                study.safe_bay={'s':180.,'offset':10.5};study.offset=0.;self.b.ego_s=100.
+                with patch('midterm_study.path_to_bay_clear',return_value=False):
+                    self.assertEqual(study.targets(30.,0.),(12.,0.))
 
     def test_blocked_congestion_stop_keeps_rolling_before_shoulder_entry(self):
         self.sc.profile='congestion';self.b.profile='congestion'

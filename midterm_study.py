@@ -174,7 +174,7 @@ class StudyRequests:
             self.safe_checked=True
             if profile=='carpool' and self.bridge:
                 # Existing start location is a validated parking lane. Move within it.
-                self.safe_bay=dict(s=sc.start_s+6.,offset=sc.base_offset)
+                self.safe_bay=find_nearby_parking(self.bridge)
                 sc.last_action='relocate';sc.actor_retreat=True
         self.feedback={
           'horn':'경적을 한 번 울렸어요. 앞차의 반응을 확인하고 있어요.',
@@ -286,15 +286,15 @@ class StudyRequests:
             ds=self.safe_bay['s']-b.ego_s
             if not path_to_bay_clear(b,self.safe_bay['offset']):
                 self.bay_blocked_s+=self.last_dt
-                if sc.profile=='congestion':
+                if sc.profile in ('congestion','night','fog','rattle'):
                     self.bay_waiting=True
-                    return min(speed,18.),self.offset
+                    return min(speed,18. if sc.profile=='congestion' else 12.),self.offset
                 return 0.,self.offset
             if self.bay_waiting:
                 # Reserve a fresh run-in after adjacent trucks have passed.
                 # The old stop point may already be beside or behind us.
                 bay=find_bay(b)
-                if not bay:return min(speed,18.),self.offset
+                if not bay:return min(speed,18. if sc.profile=='congestion' else 12.),self.offset
                 self.safe_bay=bay;self.bay_start_s=b.ego_s
                 self.base_lateral=self.offset;self.bay_waiting=False
                 ds=bay['s']-b.ego_s
@@ -304,7 +304,7 @@ class StudyRequests:
             lateral=self.base_lateral+(self.safe_bay['offset']-self.base_lateral)*u
             # Never continue at the minimum crawl speed after passing the stop
             # point; actual full-vehicle parking containment gates success.
-            if ds<=2.5:
+            if ds<=(.25 if sc.profile=='carpool' else 2.5):
                 # A slow final alignment lets the rear corner clear the lane
                 # boundary. Stop if alignment cannot be reached within 5 m.
                 if abs(self.offset-self.safe_bay['offset'])>.10 and ds>-5.:return 1.5,lateral
@@ -378,12 +378,49 @@ def rear_approach_clear(b):
     return True
 
 
+def find_nearby_parking(b):
+    """Choose a full-footprint parking stop and check its final approach."""
+    import carla
+    sc=b.scenario;extent=b.vehicles[0]['extent'];road_map=b.world.get_map()
+    for travel in (3.,4.,6.,9.,12.,15.,18.):
+      if sc.start_s+travel+extent.x>=b.route.length:continue
+      for shift in (0.,-.25,-.5,-.75,-1.):
+        off=sc.base_offset+shift;valid=True
+        for along in (travel-2.,travel,travel+.5):
+          p,yaw=b.route.sample(sc.start_s+along,off)
+          for forward in (-extent.x-.15,extent.x+.15):
+            for right in (-extent.y-.12,extent.y+.12):
+                q=carla.Location(x=float(p[0]+forward*math.cos(yaw)-right*math.sin(yaw)),y=float(p[1]+forward*math.sin(yaw)+right*math.cos(yaw)),z=float(p[2]))
+                wp=road_map.get_waypoint(q,project_to_road=False,lane_type=carla.LaneType.Any)
+                if not wp or wp.lane_type!=carla.LaneType.Parking:valid=False;break
+            if not valid:break
+          if not valid:break
+        if valid:return dict(s=sc.start_s+travel,offset=off)
+    return None
+
+
+def bay_run_in_clear(route,start,base,stop,offset,obstacles):
+    """Keep the full approach away from sign/light pole bases, not just the bay."""
+    runway=max(16.,stop-start)
+    for step in range(int(math.ceil(runway/2.))+4):
+        distance=min(runway+5.,step*2.)
+        u=min(1.,max(0.,distance/max(4.,runway-12.)));u=u*u*(3.-2.*u)
+        p,_=route.sample(start+distance,base+(offset-base)*u)
+        if any((p[0]-x)**2+(p[1]-y)**2<4.**2 for x,y in obstacles):return False
+    return True
+
+
 def find_bay(b):
     if not b or not b.route or not b.world:return None
     import carla
     small=b.profile in ('yield','carpool')
     offsets=(3.2,3.5,3.8) if small else (9.6,9.9,10.2,10.5)
     road_map=b.world.get_map()
+    obstacles=[]
+    for actor in b.world.get_actors():
+        if actor.type_id.startswith(('traffic.traffic_light','traffic.stop','traffic.yield','static.prop.')):
+            loc=actor.get_location();obstacles.append((loc.x,loc.y))
+    base=getattr(getattr(b.scenario,'study',None),'offset',0.)
     # Crossing several lanes requires a real run-in; a nearby shoulder point
     # is not reachable by an immediate sideways shift.
     for ds in range(25 if small else 65,161,5):
@@ -397,7 +434,7 @@ def find_bay(b):
                     wp=road_map.get_waypoint(carla.Location(x=float(p[0]),y=float(p[1]),z=float(p[2])),project_to_road=False,lane_type=carla.LaneType.Any)
                     if not wp or wp.lane_type not in (carla.LaneType.Shoulder,carla.LaneType.Parking):valid=False;break
                 if not valid:break
-            if valid:return dict(s=float(s),offset=float(off))
+            if valid and bay_run_in_clear(b.route,b.ego_s,base,s,off,obstacles):return dict(s=float(s),offset=float(off))
     return None
 
 
