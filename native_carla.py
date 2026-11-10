@@ -375,10 +375,14 @@ class NativeBridge:
             elif profile=='rattle':self.scenario.shoulder_offset=find_shoulder(self.route,self.world.get_map(),self.ego_s+35.)
             else:self.spawn('vehicle.nissan.micra',100+self.scenario.BASE_GAP+4.2,0.,'lead',color='220,223,226')
             if profile=='congestion':
-                for s,offset in [(102.,self.route.width),(120.,2*self.route.width),(86.,2*self.route.width)]:
-                    self.spawn('vehicle.carlamotors.european_hgv',s,offset,'truck',30)
-                for i in range(14):
-                    self.spawn('vehicle.audi.a2' if i%2 else 'vehicle.tesla.model3',-40+i*23.,-self.route.width,'fast',90,
+                # Two abreast columns, each three HGVs long. Keep the same
+                # longitudinal wave within a column so trucks never converge.
+                for lane in (1,2):
+                    for relative_s in (-16.,2.,20.):
+                        truck=self.spawn('vehicle.carlamotors.european_hgv',self.ego_s+relative_s,lane*self.route.width,'truck',30)
+                        truck['formation_s']=relative_s
+                for i in range(18):
+                    self.spawn('vehicle.audi.a2' if i%2 else 'vehicle.tesla.model3',-26+i*18.,-self.route.width,'fast',90,
                                color=['185,189,193','45,49,55','214,216,219'][i%3])
             weather=carla.WeatherParameters(cloudiness=15,precipitation=0,sun_altitude_angle=sun_altitude(profile),
                                            fog_density=0,fog_distance=0,fog_falloff=.1,wetness=0)
@@ -532,15 +536,25 @@ class NativeBridge:
                     planned_at=time.perf_counter()
                     for j,item in enumerate(self.vehicles):
                         if item['role']=='truck':
-                            preferred=[2.,20.,-14.][j-2]
-                            item['speed']=max(25.,min(35.,30.+3*math.sin(elapsed/6+j)+.4*(ego['s']+preferred-item['s'])))
+                            preferred=item['formation_s']
+                            # Anchor to the slow lead, not the ego: a stop request
+                            # must let the truck columns pass rather than trap us.
+                            anchor=lead['s']-(sc.BASE_GAP+4.2)
+                            item['speed']=max(25.,min(35.,target+.5*(anchor+preferred-item['s'])))
                         if item['role']=='fast':item['speed']=90.
+                        if driving and item['role']=='fast' and not item.get('flow_started'):
+                            # The passing lane represents traffic already in
+                            # motion, not a queue accelerating from our stop.
+                            _,a=self.route.sample(item['s'],item['offset'])
+                            initial=curve_speed_limit(self.route,item['s'],item['offset'],90.)/3.6
+                            item['actor'].set_target_velocity(carla.Vector3D(x=initial*math.cos(a),y=initial*math.sin(a)))
+                            item['flow_started']=True
                         if item['role']=='fast' and getattr(sc,'study',None) and sc.study.action=='merge' and sc.study.phase in ('applying','observing'):
                             sc.study.traffic_yield_ids.update(v['actor'].id for v in self.vehicles if v['role']=='fast' and v['s']<ego['s'])
                             item['speed']=20. if item['actor'].id in sc.study.traffic_yield_ids else 90.
                         if driving and item['role']=='fast' and item['s']-ego['s']>205:
                             # Recycle only beyond the front display range, behind the rear view.
-                            rear=min(min(v['s'] for v in self.vehicles if v['role']=='fast')-23.,ego['s']-90.)
+                            rear=min(min(v['s'] for v in self.vehicles if v['role']=='fast')-18.,ego['s']-90.)
                             xyz,a=self.route.sample(rear,item['offset'])
                             item['actor'].set_transform(carla.Transform(carla.Location(x=float(xyz[0]),y=float(xyz[1]),z=float(xyz[2]+item['rest_z'])),carla.Rotation(yaw=math.degrees(a))))
                             recycled_speed=curve_speed_limit(self.route,rear,item['offset'],90.)/3.6
@@ -558,7 +572,7 @@ class NativeBridge:
                             if ahead:
                                 front=min(ahead,key=lambda v:v['s'])
                                 bumper=front['s']-item['s']-front['extent'].x-item['extent'].x
-                                cap=front['actor'].get_velocity().length()*3.6+1.6*(bumper-14.)
+                                cap=front['actor'].get_velocity().length()*3.6+1.6*(bumper-10.)
                                 item['speed']=max(0.,min(item['speed'],cap))
                         item['speed']=curve_speed_limit(self.route,item['s'],item['offset'],item['speed'])
                         actor=item['actor'];tr=actor.get_transform();v=actor.get_velocity().length()

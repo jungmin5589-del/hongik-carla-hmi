@@ -171,6 +171,12 @@ class StudyRequests:
         if action in ('safe_stop','end_ride'):
             self.bay_start_s=self.bridge.ego_s if self.bridge else 0.;self.bay_blocked_s=0.
             self.safe_bay=find_bay(self.bridge) if self.bridge else None
+            # A mapped shoulder is not necessarily reachable through two HGV
+            # columns. Do not initiate a multi-lane crossing into that traffic.
+            if profile=='congestion' and self.bridge and any(
+                    v['role']=='truck' and abs(v['s']-self.bridge.ego_s)<60.
+                    for v in self.bridge.vehicles):
+                self.safe_bay=None
             self.safe_checked=True
             if profile=='carpool' and self.bridge:
                 # Existing start location is a validated parking lane. Move within it.

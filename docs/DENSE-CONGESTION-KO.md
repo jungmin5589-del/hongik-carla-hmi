@@ -1,0 +1,7 @@
+# Dense congestion and stop correction
+
+- Congestion only: two right-hand lanes now each contain three HGVs (six total), 18 m between centers. Their 25–35 km/h targets follow the slow lead formation rather than the ego, so they can pass a stopping ego.
+- Passing lane: 18 cars instead of 14, center spacing 18 m instead of 23 m, following clearance target 10 m instead of 14 m. Initial flow starts in motion; 90 km/h is the straight-road target, with existing curve/following limits retained. It is not a promise that every car always maintains 90 km/h.
+- The previous congestion end-ride run contained physical contact while crossing toward the shoulder. When HGV columns occupy the adjacent corridor, stop/end-ride now preserves the current lane and brakes, instead of trying to cross both occupied lanes. This is a partial response (stopped, shoulder unavailable), never a verified safe service exit.
+- Actual local 1280×720 three-camera preview: 40 seconds driving, then fixed stop through completed outcome at approximately 61.6 seconds. 26 physical vehicles, ego collision count 0, final actual speed 0, lateral target effectively 0. Driving render rate around 20–21 fps on this laptop. Physical lab motion not tested.
+- 22 request/alignment unit checks passed. Actual evidence stays in ignored validation/dense-congestion-20261110-212959. Test final cleanup attempted to pause an already completed session and was rejected (400); the measured stop and outcome assertions had already passed. No participant was registered for this developer run.

@@ -66,6 +66,16 @@ class MidtermTests(unittest.TestCase):
         self.sc.study.status='partial'
         self.assertIn('확인하지 못했어요',self.sc.study.describe())
 
+    def test_blocked_congestion_stop_does_not_cross_truck_columns(self):
+        self.sc.profile='congestion';self.b.profile='congestion'
+        self.b.ego_s=100.;self.b.vehicles=[dict(role='truck',s=102.)]
+        study=self.sc.study;study.action='end_ride'
+        with patch('midterm_study.find_bay',return_value=dict(s=180.,offset=10.5)):
+            study._execute()
+        self.assertIsNone(study.safe_bay)
+        self.assertEqual(study.targets(30.,0.),(0.,0.))
+        self.assertEqual(study._ready(0.,6.),(True,'partial'))
+
     def test_inspection_requires_actual_view_exposure(self):
         self.sc.study.action='inspect'
         self.assertFalse(self.sc.study._ready(0,5)[0])
