@@ -1,5 +1,5 @@
 """Lab entry: own isolated CARLA port, original navigation, calibrated three views."""
-import argparse,json,os,sys,urllib.request
+import argparse,json,os,sys,time,urllib.request
 from pathlib import Path
 
 def main():
@@ -30,7 +30,10 @@ def main():
     if launcher.listening(8774):
         with urllib.request.urlopen('http://127.0.0.1:8774/state',timeout=3) as response:state=json.load(response)
         if state.get('kind')!='hongik-native-carla':raise RuntimeError('Another app is using 8774; left unchanged')
-        if not state.get('lab_rig'):launcher.stop_native()
+        if not state.get('lab_rig'):
+            launcher.stop_native()
+            deadline=time.monotonic()+8.
+            while (launcher.listening(8774) or launcher.listening(2026)) and time.monotonic()<deadline:time.sleep(.2)
     # Prevent this launcher's flags from being interpreted by the native launcher.
     sys.argv=[sys.argv[0]]
     launcher.main(start_path='/lab' if args.welcome else '/')

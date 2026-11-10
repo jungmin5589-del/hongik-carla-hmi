@@ -206,7 +206,9 @@ class StudyRequests:
         if b and b.ego:
             loc=b.ego.get_location();centre,yaw=b.route.sample(b.ego_s)
             self.offset=float((loc.x-centre[0])*-math.sin(yaw)+(loc.y-centre[1])*math.cos(yaw))
-        if not driving or self.phase in ('idle','complete'):return
+        # A paused request cannot progress, but an already requested stop can
+        # finish after the physical actor has actually remained stationary.
+        if self.phase in ('idle','complete') or (not driving and (self.phase!='stopping' or not b or not b.ego)):return
         if self.phase=='queued':
             if sc.elapsed-self.pending_at>=3.:self._execute()
             return

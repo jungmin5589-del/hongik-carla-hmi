@@ -85,5 +85,26 @@ class MidtermTests(unittest.TestCase):
         self.assertEqual(self.sc.study.phase,'stopping');self.assertEqual(self.sc.study.status,'cancelled')
         self.assertEqual(self.sc.study.targets(30.,0.)[0],0.)
 
+    def paused_actor(self,speed):
+        self.b.ego=SimpleNamespace(get_location=lambda:SimpleNamespace(x=0.,y=0.),get_velocity=lambda:SimpleNamespace(length=lambda:speed/3.6))
+        self.b.route=SimpleNamespace(sample=lambda s:([0.,0.,0.],0.));self.b.ego_s=0.
+
+    def test_cancelled_stop_finishes_when_paused_and_physically_stationary(self):
+        self.paused_actor(0.);self.sc.study.phase='observing';self.sc.study.action='horn';self.sc.study.cancel()
+        elapsed=self.sc.elapsed
+        for _ in range(12):self.sc.study.tick(.1,False)
+        self.assertEqual(self.sc.study.phase,'complete');self.assertTrue(self.sc.completed)
+        self.assertEqual(self.sc.study.status,'cancelled');self.assertEqual(self.sc.elapsed,elapsed)
+
+    def test_paused_moving_actor_cannot_claim_stop_complete(self):
+        self.paused_actor(5.);self.sc.study.phase='stopping'
+        for _ in range(20):self.sc.study.tick(.1,False)
+        self.assertFalse(self.sc.completed);self.assertEqual(self.sc.study.stopped,0.)
+
+    def test_paused_stop_without_actor_cannot_finish(self):
+        self.sc.study.phase='stopping'
+        for _ in range(20):self.sc.study.tick(.1,False)
+        self.assertFalse(self.sc.completed)
+
 
 if __name__=='__main__':unittest.main()

@@ -20,7 +20,7 @@ async function main(){
   await page.waitForFunction(()=>document.getElementById('qr').hidden&&document.getElementById('pin').textContent==='');
   assert.equal(await page.locator('#url').getAttribute('href'),null);
   await page.unroute('http://127.0.0.1:8776/pc/state',fail);await page.locator('#refresh').click();await page.locator('#qr').waitFor({state:'visible'});
-  const state=await(await page.request.get('http://127.0.0.1:8774/state')).json();assert.equal(state.kind,'hongik-native-carla');assert.equal(state.lab_rig,true);assert.equal(state.mode,'paused');
+  const state=await(await page.request.get('http://127.0.0.1:8774/state')).json();assert.equal(state.kind,'hongik-native-carla');assert.equal(state.lab_rig,true);assert.equal(state.mode,'paused');await page.locator('#return-select').waitFor();assert.equal(await page.locator('#return-select').isEnabled(),true);await page.locator('#return-select').click();assert.equal(await page.locator('#navigation').getAttribute('src'),'/?condition=B');
   assert.deepEqual(errors,[]);fs.writeFileSync(path.join(folder,'result.json'),JSON.stringify({portableService:true,physicalLab:false,physicalMotion:false,driveStarted:false,errors,verified:['original selector and participant form','Mandarin selection available','actual gateway QR image decoded','connection-code polling','hide stale QR on connection loss','recover connection display','collapse QR panel']},null,2));
   console.log('LAB START UI VERIFIED',folder);
  }finally{await browser.close()}

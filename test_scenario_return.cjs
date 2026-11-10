@@ -8,10 +8,13 @@ async function main(){
  const server=spawn(py,['-u','-c',`
 from http.server import ThreadingHTTPServer
 from types import SimpleNamespace
-import native_carla
+import native_carla,tempfile
+from pathlib import Path
+from research_store import ResearchStore
 from preview_language import fixture
 value=fixture()
-bridge=SimpleNamespace(presentation='midterm',navigation=SimpleNamespace(state=lambda:value,atlas=lambda:dict(map='CARLA',roads=[],destinations=[],buildings=[])),state=dict(phase='live',profile='night',frames=3,width=1280,height=720,measured_fps=0),scenario=None)
+temporary=tempfile.TemporaryDirectory();research=ResearchStore(Path(temporary.name),start_worker=False);research.participant("QA-RETURN")
+bridge=SimpleNamespace(research=research,presentation='midterm',navigation=SimpleNamespace(state=lambda:value,atlas=lambda:dict(map='CARLA',roads=[],destinations=[],buildings=[])),state=dict(phase='live',profile='night',frames=3,width=1280,height=720,measured_fps=0),scenario=None)
 server=ThreadingHTTPServer(('127.0.0.1',0),native_carla.handler(bridge))
 native_carla.PORT=server.server_port
 print('FIXTURE_PORT='+str(server.server_port),flush=True)
@@ -21,9 +24,9 @@ server.serve_forever()
  try{
   const port=await new Promise((resolve,reject)=>{let output='',error='';const timer=setTimeout(()=>reject(Error('Fixture startup timeout')),20000);server.stderr.on('data',b=>error+=b);server.stdout.on('data',b=>{output+=b;const match=output.match(/FIXTURE_PORT=(\d+)/);if(match){clearTimeout(timer);resolve(Number(match[1]))}});server.once('exit',code=>{clearTimeout(timer);reject(Error('Fixture exited '+code+': '+error))})});
   const origin='http://127.0.0.1:'+port;
-  browser=await chromium.launch({channel:'msedge',headless:true});
+  browser=await chromium.launch({channel:'msedge',headless:true,args:['--use-angle=swiftshader']});
   const context=await browser.newContext({viewport:{width:1280,height:720}});
-  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const page=await context.newPage(),errors=[];page.setDefaultTimeout(20000);page.setDefaultNavigationTimeout(20000);page.on('pageerror',e=>{errors.push(e.message);console.error('Page error',e.message)});page.on('requestfailed',r=>console.error('Request failed',new URL(r.url()).pathname,r.failure()?.errorText));page.on('response',r=>{if(r.url().includes('/api/language/'))console.log('Language pack',r.status(),new URL(r.url()).pathname)});
   const seed=await(await page.request.get(origin+'/api/state')).json();
   let state=structuredClone(seed),hubProfile='night',selections=[];
   await page.route(url=>url.pathname==='/api/state',r=>r.fulfill({json:state}));
@@ -31,7 +34,7 @@ server.serve_forever()
   await page.route('**/api/select',r=>{const body=r.request().postDataJSON();selections.push(body);hubProfile=body.profile;r.fulfill({json:{accepted:true}})});
   const folder=path.join(__dirname,'validation','scenario-return-'+Date.now());fs.mkdirSync(folder,{recursive:true});
   const verified=[];
-  for(const kind of ['action','duration'])for(const lang of ['ko','en']){
+  for(const kind of ['action','duration','cancelled'])for(const lang of ['zh','ko','en']){
    const condition=lang==='en'?'A':'B';
    state=structuredClone(seed);state.session.session_id+='-'+kind+'-'+lang;
    state.session.navigation.research_event.condition=condition;
@@ -43,10 +46,10 @@ server.serve_forever()
    event.active=false;event.outcome={phase:'observing',summary:'',message:''};
    await page.waitForTimeout(500);assert.equal(await page.locator('#research-ending').isVisible(),false);
    state.nurec.scenario.completed=true;
-   state.nurec.scenario.completion_reason=kind==='action'?'action_outcome':'duration_end';
-   event.outcome={phase:kind==='action'?'complete':'idle',summary:'',message:''};
+   state.nurec.scenario.completion_reason=kind==='duration'?'duration_end':'action_outcome';
+   event.outcome={phase:kind==='duration'?'idle':'complete',status:kind==='cancelled'?'cancelled':'achieved',summary:'',message:''};
    await page.locator('#research-ending').waitFor({state:'visible'});
-   assert.equal(await page.locator('#research-ending-home').textContent(),lang==='en'?'Back to scenario selection':'시나리오 선택으로');
+   assert.equal(await page.locator('#research-ending-home').textContent(),lang==='en'?'Back to scenario selection':lang==='zh'?'返回场景选择':'시나리오 선택으로');
    assert.equal(await page.locator('#research-fixed-stop').isVisible(),false);
    await page.waitForTimeout(800);assert.equal(new URL(page.url()).pathname,'/navigation');
    if(kind==='duration'){
@@ -60,13 +63,13 @@ server.serve_forever()
     await page.screenshot({path:path.join(folder,kind+'-'+lang+'.png')});
     await page.locator('#research-ending-home').click();
    }
-   await page.waitForURL(url=>url.pathname==='/');
+   console.log('Returning',kind,lang);await page.waitForURL(url=>url.pathname==='/');console.log('Home',kind,lang);
    assert.equal(new URL(page.url()).searchParams.get('lang'),lang);
    assert.equal(await page.locator('#condition').inputValue(),condition);
    assert.equal(await page.locator('[data-profile]').count(),7);
-   const before=selections.length;await page.waitForTimeout(800);assert.equal(selections.length,before);
-   await page.locator('[data-profile="fog"]').click();await page.waitForURL('**/navigation');
-   assert.deepEqual(selections.at(-1),{profile:'fog',presentation:'midterm',condition});
+   console.log('Checking home',kind,lang);const before=selections.length;await page.waitForTimeout(800);assert.equal(selections.length,before);
+   await page.locator('[data-profile="fog"]').click();console.log('Selected fog',kind,lang);await page.waitForURL('**/navigation');
+   assert.deepEqual(selections.at(-1),{profile:'fog',presentation:'midterm',condition,language:lang});
    verified.push(kind+' / '+lang+' / condition '+condition);
    await page.setViewportSize({width:1280,height:720});
   }
