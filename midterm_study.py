@@ -14,7 +14,7 @@ def option(key, label, detail):
 
 OPTIONS = {
  'congestion':[
-  option('lateral','트럭과 거리 넓히기','차로 안에서 옆 트럭과 간격을 더 둬요.'),
+  option('horn','클락션','앞차에 경적을 길게 한 번 울려요.'),
   option('merge','1차로로 진입하기','안전한 틈이 확보되면 왼쪽 차로로 이동해요.'),
   option('end_ride','근처에서 내리기','안전하게 정차할 장소를 확인하고 이용을 마쳐요.')],
  'fog':[
@@ -99,7 +99,7 @@ class StudyRequests:
         self.lane_started=False;self.lane_clear=False;self.safe_stable=0.;self.offset=0.
         self.repeat_count=0;self.service_end=False;self.traffic_yield_ids=set()
         self.original_action=None;self.base_lateral=None;self.last_dt=.04;self.last_level=None
-        self.bay_start_s=0.;self.bay_blocked_s=0.
+        self.bay_start_s=0.;self.bay_blocked_s=0.;self.bay_waiting=False
 
     def bind(self,bridge,condition):
         self.bridge=bridge;self.condition=condition
@@ -169,14 +169,8 @@ class StudyRequests:
         if action=='lateral':self.target_offset=max(-.65,self.offset-.5)
         if action in ('merge','pass','avoid'):self.target_offset=-float(getattr(self.bridge.route,'width',3.5)) if self.bridge else -3.5
         if action in ('safe_stop','end_ride'):
-            self.bay_start_s=self.bridge.ego_s if self.bridge else 0.;self.bay_blocked_s=0.
+            self.bay_start_s=self.bridge.ego_s if self.bridge else 0.;self.bay_blocked_s=0.;self.bay_waiting=False
             self.safe_bay=find_bay(self.bridge) if self.bridge else None
-            # A mapped shoulder is not necessarily reachable through two HGV
-            # columns. Do not initiate a multi-lane crossing into that traffic.
-            if profile=='congestion' and self.bridge and any(
-                    v['role']=='truck' and abs(v['s']-self.bridge.ego_s)<60.
-                    for v in self.bridge.vehicles):
-                self.safe_bay=None
             self.safe_checked=True
             if profile=='carpool' and self.bridge:
                 # Existing start location is a validated parking lane. Move within it.
@@ -245,7 +239,7 @@ class StudyRequests:
     def _ready(self,speed,age):
         sc=self.sc;b=self.bridge;a=self.action
         if getattr(sc,'collision_count',0):return speed<.5,'collision'
-        if a=='horn':return age>=2.,'achieved'
+        if a=='horn':return age>=3.,'achieved'
         if a=='widen':return sc.gap>=sc.desired_gap-.8,'achieved'
         if a=='lateral':return abs(self.offset-self.target_offset)<.25 and age>=3.,'achieved'
         if a=='slow':return speed<=13. and age>=4.,'achieved'
@@ -291,7 +285,19 @@ class StudyRequests:
             if sc.profile=='yield' and b.pedestrian and not b.pedestrian.cleared():return 0.,self.offset
             ds=self.safe_bay['s']-b.ego_s
             if not path_to_bay_clear(b,self.safe_bay['offset']):
-                self.bay_blocked_s+=self.last_dt;return 0.,self.offset
+                self.bay_blocked_s+=self.last_dt
+                if sc.profile=='congestion':
+                    self.bay_waiting=True
+                    return min(speed,18.),self.offset
+                return 0.,self.offset
+            if self.bay_waiting:
+                # Reserve a fresh run-in after adjacent trucks have passed.
+                # The old stop point may already be beside or behind us.
+                bay=find_bay(b)
+                if not bay:return min(speed,18.),self.offset
+                self.safe_bay=bay;self.bay_start_s=b.ego_s
+                self.base_lateral=self.offset;self.bay_waiting=False
+                ds=bay['s']-b.ego_s
             self.bay_blocked_s=0.
             runway=max(16.,self.safe_bay['s']-self.bay_start_s)
             u=min(1.,max(0.,(runway-ds)/max(4.,runway-12.)));u=u*u*(3.-2.*u)
@@ -326,7 +332,7 @@ class StudyRequests:
             if self.status=='partial':return '안전하게 옮겨 설 공간을 확인하지 못했어요. 현재 위치에서 정지 상태를 유지해요.'
             return '확인한 정차 공간으로 이동해 멈췄어요.'+(' 이용을 마칠 수 있어요.' if a=='end_ride' else ' 주변 상황을 확인하고 있어요.')
         return {
-          'horn':'경적을 한 번 짧게 울렸어요. 앞차의 움직임을 살피며 주행했어요.',
+          'horn':'경적을 한 번 울렸어요. 앞차의 움직임을 살피며 주행했어요.',
           'widen':f'감속해 앞차와 약 {sc.desired_gap:g}m 간격을 확보했어요.',
           'lateral':'차로 안에서 옆 트럭과의 간격을 넓혔어요.',
           'merge':'왼쪽 차로의 공간을 확인하고 차로를 변경했어요.',
@@ -367,7 +373,7 @@ def rear_approach_clear(b):
         centre,yaw=b.route.sample(s)
         offset=(loc.x-centre[0])*-math.sin(yaw)+(loc.y-centre[1])*math.cos(yaw)
         if abs(offset+b.route.width)>item['extent'].y+1.35:continue
-        behind=b.ego_s-s;closing=actor.get_velocity().length()-ego_speed
+        behind=b.ego_s-s;closing=(item.get('render_speed',0.)/3.6 if item.get('guided_flow') else actor.get_velocity().length())-ego_speed
         if 0.<behind<120. and closing>.5 and behind/closing<5.:return False
     return True
 
@@ -399,11 +405,14 @@ def path_to_bay_clear(b,offset):
     """Only the local lateral corridor; a route request never overrides occupancy."""
     ego=b.ego.get_transform();yaw=math.radians(ego.rotation.yaw)
     offset-=getattr(getattr(b.scenario,'study',None),'offset',0.)
+    extents={v['actor'].id:v['extent'] for v in b.vehicles}
     for actor in b.world.get_actors():
         if actor.id==b.ego.id or not (actor.type_id.startswith('vehicle.') or actor.type_id.startswith('walker.')):continue
         loc=actor.get_location();dx,dy=loc.x-ego.location.x,loc.y-ego.location.y
         forward=dx*math.cos(yaw)+dy*math.sin(yaw);right=-dx*math.sin(yaw)+dy*math.cos(yaw)
-        if -7.<forward<16. and min(0.,offset)-1.4<right<max(0.,offset)+1.4:return False
+        extent=extents.get(actor.id)
+        if extent is None:extent=actor.bounding_box.extent
+        if -7.-extent.x<forward<16.+extent.x and min(0.,offset)-1.4-extent.y<right<max(0.,offset)+1.4+extent.y:return False
     return True
 
 

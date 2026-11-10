@@ -4,7 +4,7 @@ from pathlib import Path
 from launch_live import memory_state
 
 BASE='http://127.0.0.1:8774'
-CASES=[('congestion','study_lateral'),('fog','study_inspect'),('night','study_horn'),('yield','study_announce'),('carpool','study_relocate'),('rattle','study_slow')]
+CASES=[('congestion','study_horn'),('fog','study_inspect'),('night','study_horn'),('yield','study_announce'),('carpool','study_relocate'),('rattle','study_slow')]
 
 def call(path,body=None):
     request=urllib.request.Request(BASE+path,data=None if body is None else json.dumps(body).encode(),headers={'Content-Type':'application/json'})

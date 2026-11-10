@@ -11,7 +11,7 @@
  const duration=document.createElement('select');duration.id='nurec-duration';duration.hidden=true;bar.append(duration);
  let busy=false,audio=null,lastHorn=null,lastImpact=null,lastCargoHit=null,controlSession=null;
  document.addEventListener('pointerdown',()=>{if(!audio){const C=window.AudioContext||window.webkitAudioContext;if(C)audio=new C()}audio?.resume().catch(()=>{})});
- function horn(){if(!audio)return;const start=audio.currentTime;for(const hz of [340,425]){const o=audio.createOscillator(),g=audio.createGain();o.type='sawtooth';o.frequency.value=hz;g.gain.setValueAtTime(0,start);g.gain.linearRampToValueAtTime(.055,start+.025);g.gain.setValueAtTime(.055,start+.32);g.gain.linearRampToValueAtTime(0,start+.40);o.connect(g).connect(audio.destination);o.start(start);o.stop(start+.42)}}
+ function horn(duration=.4){if(!audio)return;const start=audio.currentTime;duration=Math.max(.4,Math.min(3,Number(duration)||.4));for(const hz of [340,425]){const o=audio.createOscillator(),g=audio.createGain();o.type='sawtooth';o.frequency.value=hz;g.gain.setValueAtTime(0,start);g.gain.linearRampToValueAtTime(.055,start+.025);g.gain.setValueAtTime(.055,start+duration-.08);g.gain.linearRampToValueAtTime(0,start+duration);o.connect(g).connect(audio.destination);o.start(start);o.stop(start+duration+.02)}}
  function impactSound(){if(!audio||audio.state!=='running')return;const b=audio.createBuffer(1,Math.floor(audio.sampleRate*.45),audio.sampleRate),a=b.getChannelData(0);for(let i=0;i<a.length;i++)a[i]=(Math.random()*2-1)*Math.exp(-i/(audio.sampleRate*.09));const source=audio.createBufferSource(),filter=audio.createBiquadFilter(),gain=audio.createGain();source.buffer=b;filter.type='lowpass';filter.frequency.value=1100;gain.gain.value=.14;source.connect(filter).connect(gain).connect(audio.destination);source.start()}
  async function control(body){if(busy)return;busy=true;try{const r=await fetch('/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(controlSession?{session_id:controlSession,...body}:body)});const data=r.status===204?{}:await r.json();if(!r.ok)throw Error(data.error||'요청을 반영하지 못했습니다.')}catch(e){$('nurec-status').textContent=e.message}finally{busy=false}}
  async function goHome(){window.dispatchEvent(new Event('nurec-exit'));try{const s=await(await fetch('/state')).json();if(!s.scenario?.completed)await control({mode:'paused'})}catch{}location.assign('http://127.0.0.1:8775/')}
@@ -22,7 +22,7 @@
  window.CockpitUpdate=data=>{
   previous?.(data);const n=data.nurec;if(!n)return;const s=n.scenario;controlSession=n.kind==='hongik-native-carla'?s.session:null;
   beam.hidden=!s.high_beam?.on;
-  if(lastHorn?.session===s.session&&s.horn_count>lastHorn.count&&document.visibilityState==='visible')horn();lastHorn={session:s.session,count:s.horn_count};
+  if(lastHorn?.session===s.session&&s.horn_count>lastHorn.count&&document.visibilityState==='visible')horn(s.horn_duration_s);lastHorn={session:s.session,count:s.horn_count};
   const key=s.session+':'+s.crash?.phase;if(lastImpact?.session===s.session&&lastImpact.key!==key&&s.crash?.primary_collision_verified&&['primary_impact','secondary_impact'].includes(s.crash.phase)&&document.visibilityState==='visible')impactSound();lastImpact={session:s.session,key};
   const cargoHit=s.cargo?.impact_count||0;
   if(lastCargoHit?.session===s.session&&cargoHit>lastCargoHit.count&&document.visibilityState==='visible')impactSound();

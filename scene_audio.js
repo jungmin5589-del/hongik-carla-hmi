@@ -51,7 +51,7 @@
    const fail=e=>{if(a!==this.outside)return;this.error=e?.name||'AudioLoadError';this.retryAt=performance.now()+1500;this.gate.retry(cue,this.elapsed);this.button.hidden=false};
    a.onerror=fail;a.play().then(()=>{if(a===this.outside){this.error=null;this.button.hidden=true}}).catch(fail);
   }
-  horn(){for(const freq of [340,425]){const o=this.ctx.createOscillator(),g=this.ctx.createGain();o.type='sawtooth';o.frequency.value=freq;g.gain.setValueAtTime(.035,this.ctx.currentTime);g.gain.exponentialRampToValueAtTime(.001,this.ctx.currentTime+.4);o.connect(g).connect(this.ctx.destination);o.start();o.stop(this.ctx.currentTime+.4)}}
+  horn(duration=.4){duration=Math.max(.4,Math.min(3,Number(duration)||.4));const start=this.ctx.currentTime;for(const freq of [340,425]){const o=this.ctx.createOscillator(),g=this.ctx.createGain();o.type='sawtooth';o.frequency.value=freq;g.gain.setValueAtTime(0,start);g.gain.linearRampToValueAtTime(.035,start+.025);g.gain.setValueAtTime(.035,start+duration-.08);g.gain.linearRampToValueAtTime(0,start+duration);o.connect(g).connect(this.ctx.destination);o.start(start);o.stop(start+duration+.02)}}
   update(data){
    const s=data.nurec?.scenario;if(!s){this.stop();return}const c=s.context,ex=c?.exterior;
    if(this.session!==s.session){this.stop();this.gate.reset();this.session=s.session;this.lastNotice=0;this.lastKnock=0;this.lastHorn=s.horn_count||0;this.lastEnd=-1000;this.error=null}
@@ -62,7 +62,7 @@
     this.lastKnock=ex?.knock_count||0;this.lastHorn=s.horn_count||0;this.stop();return;
    }
    const speaking=document.getElementById('research-sohee-audio')?.paused===false;if(speaking)this.lastEnd=performance.now();
-   if(s.horn_count>this.lastHorn&&(document.visibilityState!=='visible'||!document.getElementById('nurec-start')))this.horn();this.lastHorn=s.horn_count||0;
+   if(s.horn_count>this.lastHorn&&(document.visibilityState!=='visible'||!document.getElementById('nurec-start')))this.horn(s.horn_duration_s);this.lastHorn=s.horn_count||0;
    this.gate.offer(ex?.voice_cue,s.elapsed_s,!c?.actor_retreat);
    if(speaking||c?.actor_retreat)this.outside?.pause();
    const next=this.gate.take(s.elapsed_s,speaking||Boolean(this.outside&&!this.outside.paused&&!this.outside.ended)||performance.now()-this.lastEnd<800||performance.now()<this.retryAt);

@@ -1,7 +1,12 @@
-# Dense congestion and stop correction
+# 1번 정체 시나리오 · 밀도와 정차 동작
 
-- Congestion only: two right-hand lanes now each contain three HGVs (six total), 18 m between centers. Their 25–35 km/h targets follow the slow lead formation rather than the ego, so they can pass a stopping ego.
-- Passing lane: 18 cars instead of 14, center spacing 18 m instead of 23 m, following clearance target 10 m instead of 14 m. Initial flow starts in motion; 90 km/h is the straight-road target, with existing curve/following limits retained. It is not a promise that every car always maintains 90 km/h.
-- The previous congestion end-ride run contained physical contact while crossing toward the shoulder. When HGV columns occupy the adjacent corridor, stop/end-ride now preserves the current lane and brakes, instead of trying to cross both occupied lanes. This is a partial response (stopped, shoulder unavailable), never a verified safe service exit.
-- Actual local 1280×720 three-camera preview: 40 seconds driving, then fixed stop through completed outcome at approximately 61.6 seconds. 26 physical vehicles, ego collision count 0, final actual speed 0, lateral target effectively 0. Driving render rate around 20–21 fps on this laptop. Physical lab motion not tested.
-- 22 request/alignment unit checks passed. Actual evidence stays in ignored validation/dense-congestion-20261110-212959. Test final cleanup attempted to pause an already completed session and was rejected (400); the measured stop and outcome assertions had already passed. No participant was registered for this developer run.
+- 왼쪽 차량: 중심 간격 13m, 24대 순환. 직선 목표 90km/h이며 커브에서는 감속한다. 짧은 간격에서 물리 차량끼리 뒤엉키는 문제를 피하려고 이 배경 흐름만 지도 차로를 따라 이동하는 스크립트 방식으로 표현한다. 내비의 속도 출처에도 구분을 남긴다.
+- 오른쪽 대형차: 두 차로에 각각 3대, 중심 간격 15m. 25–35km/h 흐름. 우리 차·앞차·대형차는 물리 제어를 유지한다.
+- 앞차: 범퍼 사이 목표 5.5m. 다른 시나리오의 앞차 간격은 변경하지 않았다.
+- 첫 선택지는 ‘클락션’. 확정 후 경적을 한 번 약 2.2초 울린다. 한국어·영어·중국어 선택지, 내비와 장면 오디오에 같은 길이를 전달한다. 다른 시나리오 경적 길이는 유지한다.
+- 정차 요청: 트럭이 막고 있으면 먼저 멈추지 않고 감속하며 대기한다. 통과 공간이 생기면 현재 위치에서 갓길 진입 경로를 다시 잡고 이동한 뒤 최종 정차한다. 갓길 내 차량 전체의 실제 위치와 속도가 확인되어야 완료한다. 접근 공간이 없거나 접촉하면 성공으로 표시하지 않는다.
+- 접근 공간 검사에서 차량 크기는 캐시를 재사용해 제어 지연을 줄였다.
+
+## 확인 범위
+
+로컬 CARLA 3카메라 720p에서 감속 대기 → 갓길 이동 → 정차 → 결과 관찰·종료를 실제로 확인했다. 우리 차 접촉 기록은 없었고 갓길 진입 전까지 이동을 유지했다. 물리 연구실 장비나 모든 선택지의 전체 반복 검증을 뜻하지 않는다. 차량 밀도를 높여 이 노트북에서 30fps가 보장되지는 않는다. 상세 측정·이미지는 D의 비공개 validation 폴더에 보관하며 참가자 데이터와 분리했다.

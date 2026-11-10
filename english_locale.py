@@ -11,7 +11,7 @@ COPY={
  'cargo':('An object has fallen onto the road ahead','An object has fallen from the truck ahead and remains on the road.','We are slowing down before the object and checking for space to pass.')}
 
 OPTIONS={
- 'congestion':[('Move farther from the truck','Move within our lane to increase the space beside the truck.'),('Move into the leftmost lane','Wait for a safe opening, then move to the left.'),('Get out nearby','Find a suitable stopping area before ending the ride.')],
+ 'congestion':[('Sound the horn','Sound one long horn blast toward the car ahead.'),('Move into the leftmost lane','Wait for a safe opening, then move to the left.'),('Get out nearby','Find a suitable stopping area before ending the ride.')],
  'fog':[('View the surroundings','Review the positions of surrounding traffic and lane markings.'),('Drive more slowly','Reduce speed further and maintain space ahead.'),('Pull over','Check for a suitable stopping area, then move over slowly.')],
  'night':[('Sound the horn','Sound one short horn and monitor the car ahead.'),('Increase the following distance','Create a larger gap to the car ahead.'),('Overtake when safe','Overtake on the left only when there is a safe opening.'),('Wait at the roadside','Check for a stopping area and wait for the other car to move away.')],
  'yield':[('Ask the pedestrian to cross first','Use the external speaker to offer the pedestrian priority.'),('Proceed slowly','Proceed only after the pedestrian has cleared the crossing.'),('Get out here','Check for a suitable stopping area nearby first.')],
@@ -262,6 +262,7 @@ Sohee 음성을 준비하지 못했어요.\tThe Sohee recording is not available
  이용을 마칠 수 있어요.\t You may end the ride.
  주변 상황을 확인하고 있어요.\t We are checking the surroundings.
 경적을 한 번 짧게 울렸어요. 앞차의 움직임을 살피며 주행했어요.\tThe horn sounded once. We continued monitoring the car ahead.
+경적을 한 번 울렸어요. 앞차의 움직임을 살피며 주행했어요.\tThe horn sounded once. We continued monitoring the car ahead.
 차로 안에서 옆 트럭과의 간격을 넓혔어요.\tWe moved within our lane to increase the space beside the truck.
 왼쪽 차로의 공간을 확인하고 차로를 변경했어요.\tWe checked the available space and moved into the left lane.
 왼쪽 차로로 이동해 앞차를 지나갔어요.\tWe moved into the left lane and passed the car ahead.

@@ -48,7 +48,7 @@ class NativeScenario(Scenario2):
         self.profile = profile
         self.TYPE_ID = 'congestion_long' if profile == 'congestion' else 'dense_fog' if profile == 'fog' else 'drowsy_night'
         if profile == 'congestion':self.FAST_SPEED=25.
-        self.BASE_GAP = 8. if profile == 'fog' else 6.5 if profile == 'night' else 9.
+        self.BASE_GAP = 8. if profile == 'fog' else 6.5 if profile == 'night' else 5.5 if profile == 'congestion' else 9.
         self.WIDE_GAP = 36. if profile == 'fog' else 28.
         self.ONSET_SECONDS = 10.
         self.lock = threading.RLock()
@@ -114,6 +114,7 @@ class NativeScenario(Scenario2):
             result = dict(id=self.TYPE_ID, session=self.session, enabled=True, onset=self.onset,
                           elapsed_s=round(self.elapsed, 2), duration_s=300, remaining_s=max(0,300-self.elapsed),
                           gap_m=round(self.gap, 2), target_gap_m=self.desired_gap, horn_count=self.horn_count,
+                          horn_duration_s=2.2 if self.profile=='congestion' else .4,
                           collision_count=self.collision_count,
                           action=self.last_action, action_complete=self.action_complete, feedback=self.feedback,
                           completed=self.completed, completion_reason=self.completion_reason,
@@ -198,7 +199,8 @@ class NativeNavigation(NavigationAdapter):
             actors.append(dict(id=item['actor'].id,kind='vehicle',label='앞차' if item['role']=='lead' else '주변 차량',
                                role='lead' if item['role']=='lead' else 'context',vehicle_type='large' if extent.x>3 else 'car',
                                length_m=extent.x*2,width_m=extent.y*2,height_m=extent.z*2,
-                               speed_kmh=item['actor'].get_velocity().length()*3.6,
+                               speed_kmh=item.get('render_speed',0.) if item.get('guided_flow') else item['actor'].get_velocity().length()*3.6,
+                               motion_source='scripted mapped-lane flow' if item.get('guided_flow') else 'physical CARLA dynamics',
                                world_pose=dict(x=at.location.x,y=at.location.y,yaw=at.rotation.yaw),**p))
         profile=b.profile;outcome=sc['outcome'];active=sc['onset'] and not sc['completed']
         title={'congestion':'앞과 오른쪽은 느리고 왼쪽은 빠르게 흐르고 있습니다',
@@ -218,7 +220,7 @@ class NativeNavigation(NavigationAdapter):
         route_points=b.route.points[::3,:2].tolist()
         remain=max(0,round(300-sc['elapsed_s']))
         return dict(connected=b.state['phase']=='live',schema=2,map='CARLA Town04',
-                    source='CARLA RGB and actual physical actors; scripted trial',frame=b.state['frame'],timestamp=time.time(),
+                    source='CARLA RGB actors; physical ego and scripted traffic stimulus',frame=b.state['frame'],timestamp=time.time(),
                     ego=dict(id=b.ego.id,role='native_carla_ego',forward_m=0,right_m=0,up_m=-.4,yaw_deg=0,
                              speed_kmh=b.state['speed_kph'],lane_index=2,lane_count=4,lane_id=-2),
                     road=dict(id=4,lanes=lanes),lane_width_m=b.route.width,actors=actors,destinations=[],
@@ -378,11 +380,13 @@ class NativeBridge:
                 # Two abreast columns, each three HGVs long. Keep the same
                 # longitudinal wave within a column so trucks never converge.
                 for lane in (1,2):
-                    for relative_s in (-16.,2.,20.):
+                    for relative_s in (-13.,2.,17.):
                         truck=self.spawn('vehicle.carlamotors.european_hgv',self.ego_s+relative_s,lane*self.route.width,'truck',30)
                         truck['formation_s']=relative_s
-                for i in range(18):
-                    self.spawn('vehicle.audi.a2' if i%2 else 'vehicle.tesla.model3',-26+i*18.,-self.route.width,'fast',90,
+                # Enough cars to fill the off-camera recycling corridor without
+                # introducing a long empty gap between successive platoons.
+                for i in range(24):
+                    self.spawn('vehicle.tesla.model3',-65+i*13.,-self.route.width,'fast',90,
                                color=['185,189,193','45,49,55','214,216,219'][i%3])
             weather=carla.WeatherParameters(cloudiness=15,precipitation=0,sun_altitude_angle=sun_altitude(profile),
                                            fog_density=0,fog_distance=0,fog_falloff=.1,wetness=0)
@@ -402,6 +406,11 @@ class NativeBridge:
             for item in self.vehicles:
                 item['geometry']=steering_geometry(item['actor'])
                 item['rest_z']=item['actor'].get_location().z-self.route.sample(item['s'],item['offset'])[0][2]
+                if profile=='congestion' and item['role']=='fast':
+                    # Dense scripted passing traffic follows the mapped lane
+                    # directly; the ego, lead and HGVs keep physical dynamics.
+                    item['guided_flow']=True;item['render_speed']=0.
+                    item['actor'].set_simulate_physics(False)
             self.make_camera(self.state['quality'])
             sensor=self.world.get_blueprint_library().find('sensor.other.collision')
             self.collision=self.world.spawn_actor(sensor,carla.Transform(),attach_to=self.ego)
@@ -508,6 +517,7 @@ class NativeBridge:
                         self.update_context(dt,driving,snapshot,error)
                         continue
                     for item in self.vehicles[1:]:
+                        if item.get('guided_flow'):continue
                         tr=item['actor'].get_transform()
                         item['s'],_=self.route.project([tr.location.x,tr.location.y],item['s'])
                     projected_at=time.perf_counter()
@@ -534,46 +544,25 @@ class NativeBridge:
                         lead['offset']=ramp*(1.6+amplitude*math.sin((elapsed-10.)*2*math.pi/10.5))
                     controls=[];traffic_alignment=[]
                     planned_at=time.perf_counter()
+                    passing_speed=min((curve_speed_limit(self.route,v['s'],v['offset'],90.) for v in self.vehicles if v.get('guided_flow')),default=90.)
                     for j,item in enumerate(self.vehicles):
+                        if item.get('guided_flow'):
+                            kph=passing_speed if driving else 0.
+                            if getattr(sc,'study',None) and sc.study.action=='merge' and sc.study.phase in ('applying','observing'):
+                                if item['s']<ego['s']:sc.study.traffic_yield_ids.add(item['actor'].id)
+                                if item['actor'].id in sc.study.traffic_yield_ids:kph=min(kph,20.)
+                            if driving and item['s']-ego['s']>205.:
+                                item['s']=min(v['s'] for v in self.vehicles if v.get('guided_flow'))-13.
+                            item['s']+=kph/3.6*dt;item['render_speed']=kph
+                            xyz,a=self.route.sample(item['s'],item['offset'])
+                            controls.append(carla.command.ApplyTransform(item['actor'].id,carla.Transform(carla.Location(x=float(xyz[0]),y=float(xyz[1]),z=float(xyz[2]+item['rest_z'])),carla.Rotation(yaw=math.degrees(a)))))
+                            continue
                         if item['role']=='truck':
                             preferred=item['formation_s']
                             # Anchor to the slow lead, not the ego: a stop request
                             # must let the truck columns pass rather than trap us.
                             anchor=lead['s']-(sc.BASE_GAP+4.2)
                             item['speed']=max(25.,min(35.,target+.5*(anchor+preferred-item['s'])))
-                        if item['role']=='fast':item['speed']=90.
-                        if driving and item['role']=='fast' and not item.get('flow_started'):
-                            # The passing lane represents traffic already in
-                            # motion, not a queue accelerating from our stop.
-                            _,a=self.route.sample(item['s'],item['offset'])
-                            initial=curve_speed_limit(self.route,item['s'],item['offset'],90.)/3.6
-                            item['actor'].set_target_velocity(carla.Vector3D(x=initial*math.cos(a),y=initial*math.sin(a)))
-                            item['flow_started']=True
-                        if item['role']=='fast' and getattr(sc,'study',None) and sc.study.action=='merge' and sc.study.phase in ('applying','observing'):
-                            sc.study.traffic_yield_ids.update(v['actor'].id for v in self.vehicles if v['role']=='fast' and v['s']<ego['s'])
-                            item['speed']=20. if item['actor'].id in sc.study.traffic_yield_ids else 90.
-                        if driving and item['role']=='fast' and item['s']-ego['s']>205:
-                            # Recycle only beyond the front display range, behind the rear view.
-                            rear=min(min(v['s'] for v in self.vehicles if v['role']=='fast')-18.,ego['s']-90.)
-                            xyz,a=self.route.sample(rear,item['offset'])
-                            item['actor'].set_transform(carla.Transform(carla.Location(x=float(xyz[0]),y=float(xyz[1]),z=float(xyz[2]+item['rest_z'])),carla.Rotation(yaw=math.degrees(a))))
-                            recycled_speed=curve_speed_limit(self.route,rear,item['offset'],90.)/3.6
-                            item['actor'].set_target_velocity(carla.Vector3D(x=recycled_speed*math.cos(a),y=recycled_speed*math.sin(a)))
-                            item['actor'].set_target_angular_velocity(carla.Vector3D())
-                            item['s']=rear;item['steer']=item['acc']=0.
-                            controls.append(carla.command.ApplyVehicleControl(item['actor'].id,carla.VehicleControl()))
-                            # The client transform cache still describes the old front position
-                            # until the next snapshot. Never steer toward the rear from it.
-                            continue
-                        if item['role']=='fast':
-                            # Different car models accelerate differently. Preserve the
-                            # dense flow without allowing the faster model to rear-end it.
-                            ahead=[v for v in self.vehicles if v is not item and v['role']=='fast' and 0.<v['s']-item['s']<70.]
-                            if ahead:
-                                front=min(ahead,key=lambda v:v['s'])
-                                bumper=front['s']-item['s']-front['extent'].x-item['extent'].x
-                                cap=front['actor'].get_velocity().length()*3.6+1.6*(bumper-10.)
-                                item['speed']=max(0.,min(item['speed'],cap))
                         item['speed']=curve_speed_limit(self.route,item['s'],item['offset'],item['speed'])
                         actor=item['actor'];tr=actor.get_transform();v=actor.get_velocity().length()
                         traffic_alignment.append(tracking_alignment(self.route,item,tr))
@@ -593,6 +582,7 @@ class NativeBridge:
                     self.ego.set_light_state(carla.VehicleLightState(lights))
                     self.state.update(frame=snapshot.frame,speed_kph=round(speed,2),lane_error_m=round(error,3),
                                       profile=self.profile,physical_vehicles=len(self.vehicles),
+                                      guided_background_vehicles=sum(bool(v.get('guided_flow')) for v in self.vehicles),
                                       traffic_alignment=traffic_alignment,
                                       control_cycle_ms=round((time.perf_counter()-cycle_started)*1000,1),
                                       projection_ms=round((projected_at-cycle_started)*1000,1),

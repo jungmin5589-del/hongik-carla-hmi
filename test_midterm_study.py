@@ -32,6 +32,19 @@ class MidtermTests(unittest.TestCase):
         self.assertIn('study_horn',actions);self.assertIn('study_pass',actions)
         self.assertNotIn('study_support',actions);self.assertNotIn('study_overtake',actions)
 
+    def test_congestion_offers_horn_instead_of_truck_spacing(self):
+        actions={o['action'] for o in OPTIONS['congestion']}
+        self.assertIn('study_horn',actions);self.assertNotIn('study_lateral',actions)
+
+    def test_congestion_horn_executes_once_with_long_audio_duration(self):
+        self.sc.profile='congestion';self.b.profile='congestion'
+        self.select('study_horn');self.cmd('study_horn')
+        self.sc.tick(3.1,True,30,5.5);self.sc.study.tick(.1,True)
+        self.assertEqual(self.sc.horn_count,1)
+        self.assertEqual(self.sc.public()['horn_duration_s'],2.2)
+        self.assertFalse(self.sc.study._ready(30,2.2)[0])
+        self.assertTrue(self.sc.study._ready(30,3.)[0])
+
     def test_selection_does_not_act_and_countdown_cancel(self):
         self.select('study_horn');self.assertEqual(self.sc.horn_count,0)
         self.cmd('study_horn');self.sc.study.tick(.1,True)
@@ -66,15 +79,21 @@ class MidtermTests(unittest.TestCase):
         self.sc.study.status='partial'
         self.assertIn('확인하지 못했어요',self.sc.study.describe())
 
-    def test_blocked_congestion_stop_does_not_cross_truck_columns(self):
+    def test_blocked_congestion_stop_keeps_rolling_before_shoulder_entry(self):
         self.sc.profile='congestion';self.b.profile='congestion'
         self.b.ego_s=100.;self.b.vehicles=[dict(role='truck',s=102.)]
         study=self.sc.study;study.action='end_ride'
         with patch('midterm_study.find_bay',return_value=dict(s=180.,offset=10.5)):
             study._execute()
-        self.assertIsNone(study.safe_bay)
-        self.assertEqual(study.targets(30.,0.),(0.,0.))
-        self.assertEqual(study._ready(0.,6.),(True,'partial'))
+        with patch('midterm_study.path_to_bay_clear',return_value=False):
+            self.assertEqual(study.targets(30.,0.),(18.,0.))
+        self.assertTrue(study.bay_waiting)
+        self.b.ego_s=150.
+        with patch('midterm_study.path_to_bay_clear',return_value=True),patch('midterm_study.find_bay',return_value=dict(s=225.,offset=10.5)):
+            speed,offset=study.targets(30.,0.)
+        self.assertGreater(speed,0.);self.assertEqual(offset,0.)
+        self.assertEqual(study.safe_bay['s'],225.)
+        self.assertEqual(study.bay_start_s,150.)
 
     def test_inspection_requires_actual_view_exposure(self):
         self.sc.study.action='inspect'
