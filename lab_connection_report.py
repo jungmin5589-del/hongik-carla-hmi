@@ -17,7 +17,7 @@ def report():
                navigation=dict(connected=nav.get('connected'),map=nav.get('map'),ego_id=nav.get('ego',{}).get('id'),world_pose=nav.get('world_pose')),
                tablet=dict(gateway_ready=phone.get('kind')=='hongik-mobile',polling=phone.get('polling'),address=phone.get('address'),
                            pc_setup='http://127.0.0.1:8776/connect',source='http://127.0.0.1:8774/api/state',
-                           device_url=f"http://{phone['address']}:8776/m/" if phone.get('address') else None),warnings=[])
+                           device_url=f"http://{phone['address']}:8776/m/navigation" if phone.get('address') else None),warnings=[])
     if not phone:value['warnings'].append('Mobile gateway unavailable. Run the integrated launcher or open_mobile.py on this PC.')
     if not nav.get('connected'):value['warnings'].append('Navigation source is not live. A WebSocket connection alone does not supply this HMI API.')
     if value['ports']['2026']:
