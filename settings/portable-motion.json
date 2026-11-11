@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "environment": {
+    "HONGIK_MOTION_PROFILE": "A",
+    "HONGIK_MOTION_WS_PORT": "8765",
+    "SIXDOF_UDP_HOST": "127.0.0.1",
+    "SIXDOF_UDP_PORT": "10000",
+    "SIXDOF_BACKEND": "auto",
+    "SIXDOF_PACKET": "legacy",
+    "SIXDOF_ANGLE": "deg2rad",
+    "SIXDOF_HZ": "100",
+    "SIXDOF_INTERP": "1",
+    "SIXDOF_ACC_PREFILTER": "0",
+    "SIXDOF_HOLD": "0"
+  }
+}

@@ -113,3 +113,8 @@ an unmapped/forest segment may have no buildings.
 장면 음성은 내비를 뒤로 보내도 유지하며, 취객 발소리는 실제 신발 접촉 녹음을 사용합니다. [소리 활성화·출처·검증 범위](docs/SCENE-AUDIO-KO.md).
 
 [연구실 아이패드 연결·시나리오 정렬·현장 수정 보존](docs/LAB-IPAD-AND-ALIGNMENT-KO.md): 현재 PC의 QR로 모바일을 연결하고, 55번 읽기 전용 연결 보고서로 엔진·내비·게이트웨이 구성을 확인합니다. 주행 검사는 `validate_native_alignment.py`로 수행하며 현장 참가자 주행 중에는 실행하지 않습니다.
+# 노트북·연구실 공통 설정 (2026-11-11)
+
+노트북 실행은 `60_START_LAPTOP.bat`, 연구실 6축 실행은 `62_START_MOTION_PROFILE.bat`입니다.
+공통 설정 파일과 SSD·Drive·GitHub 사용법은 [설정 공유 안내](docs/LAPTOP-AND-LAB-SHARING-KO.md)를 확인하세요.
+

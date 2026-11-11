@@ -23,6 +23,10 @@ class RigTests(unittest.TestCase):
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             self.assertEqual(json.loads(z.read('frame.json'))['frame'],10);self.assertEqual(z.read('left.jpg'),b'L')
         self.assertIsNone(f.after(10,0)[1]);f.close();self.assertIsNone(f.after(-1,0)[1])
+    def test_1200_high_surround_keeps_calibrated_viewport(self):
+        self.assertEqual(surround_rect([[1920,0,5760,1200],[0,0,1920,1080]]),[1920,60,5760,1080])
+        self.assertEqual(surround_rect([[1920,-1200,5760,1200]]),[1920,-1140,5760,1080])
+        self.assertIsNone(surround_rect([[0,0,5760,1440]]))
     def test_missing_views_do_not_accumulate_frames(self):
         f=FrameBundle()
         for i in range(100):f.publish('left',i,b'L')

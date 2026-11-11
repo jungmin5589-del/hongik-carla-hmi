@@ -252,6 +252,13 @@ class NativeBridge:
         self.run_dir=ROOT/'native-runs'/time.strftime('%Y%m%d-%H%M%S')
         self.run_dir.mkdir(parents=True,exist_ok=True)
         self.trace=(self.run_dir/'telemetry.jsonl').open('a',encoding='utf-8',buffering=1)
+        # Optional 6DOF (HONGIK_MOTION=1): data-server-py collector follows each scenario's ego.
+        from motion_link import enabled as motion_enabled,MotionLink
+        self.motion=None;self.state['motion']=dict(enabled=False)
+        if motion_enabled():
+            try:self.motion=MotionLink(self.run_dir);self.state['motion']=self.motion.status
+            except Exception as exc:
+                print('6DOF link unavailable: '+str(exc),flush=True);self.state['motion']=dict(enabled=False,error=str(exc))
         threading.Thread(target=self.encode,daemon=True).start()
         threading.Thread(target=self.run,daemon=True).start()
 
@@ -296,6 +303,8 @@ class NativeBridge:
         self.route=CrossingRoute.build(self.road_map) if profile in ('yield','carpool') else HighwayRoute.build(self.road_map)
 
     def clear_actors(self):
+        # Preserve the existing neutral ramp before destroying the followed ego.
+        if self.motion:self.motion.detach()
         self.camera_generation+=1
         if self.rig:self.rig.close();self.rig=None;self.camera=None
         if self.cargo:self.cargo.destroy();self.cargo=None
@@ -415,6 +424,7 @@ class NativeBridge:
             sensor=self.world.get_blueprint_library().find('sensor.other.collision')
             self.collision=self.world.spawn_actor(sensor,carla.Transform(),attach_to=self.ego)
             self.collision.listen(self.on_collision)
+            if self.motion:self.motion.attach(self.world,self.ego,profile)
             self.state.update(phase='live',profile=profile,scene_id='native-'+target.lower(),route_length_m=round(self.route.length),
                               lane_count=len(self.route.lane_offsets) if profile in ('yield','carpool') else 4,
                               physical_pedestrians=1 if profile in ('yield','carpool') else 0,error=None,mode='paused',speed_kph=0)
@@ -594,6 +604,9 @@ class NativeBridge:
                 import traceback
                 traceback.print_exc()
                 self.state.update(phase='error',error=str(exc),mode='paused');self.command['mode']='paused'
+                if self.motion:
+                    try:self.motion.detach()
+                    except Exception:traceback.print_exc()
                 # Keep native actors braked on a controller error.
                 for v in self.vehicles:
                     try:v['actor'].apply_control(carla.VehicleControl(brake=1,hand_brake=True))
@@ -603,6 +616,7 @@ class NativeBridge:
                     except RuntimeError:pass
                 time.sleep(.5)
         self.clear_actors();self.trace.close()
+        if self.motion:self.motion.close()
 
     def update_cargo(self,dt,driving,snapshot,error):
         sc=self.scenario;ego=self.vehicles[0];truck=self.vehicles[1]

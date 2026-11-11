@@ -20,6 +20,16 @@
 !/settings/runtime-lock.json
 !/settings/scenarios.json
 !/settings/requirements.lock.txt
+!/settings/lab-shared.json
+!/settings/portable-motion.json
+!/data-server-py/
+!/data-server-py/collector/
+!/data-server-py/collector/*.py
+!/data-server-py/sender/
+!/data-server-py/sender/udp_sender.py
+!/data-server-py/sender/websocket_sender.py
+!/data-server-py/processing/
+!/data-server-py/processing/*.py
 !/course_ui/
 !/course_ui/*.js
 !/course_ui/*.cjs

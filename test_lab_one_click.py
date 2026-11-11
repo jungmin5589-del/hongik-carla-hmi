@@ -29,6 +29,15 @@ class OneClickTests(unittest.TestCase):
     def test_read_only_check_does_not_extract_or_launch(self):
         run(self.root,check=True,runner=self.runner)
         self.assertEqual(self.runner.call_count,1);self.assertEqual(Path(self.runner.call_args.args[0][1]).name,'lab_preflight.py')
+    def test_motion_flag_reaches_latest_welcome_launcher(self):
+        engine=self.bundle/'CARLA_0.9.16';engine.mkdir();(engine/'.hongik-engine-ready').write_text('ready')
+        run(self.root,runner=self.runner,motion=True)
+        self.assertIn('--motion',self.runner.call_args.args[0])
+        self.assertIn('--welcome',self.runner.call_args.args[0])
+    def test_check_with_motion_does_not_launch_or_arm(self):
+        run(self.root,check=True,runner=self.runner,motion=True)
+        self.assertEqual(self.runner.call_count,1)
+        self.assertEqual(Path(self.runner.call_args.args[0][1]).name,'lab_preflight.py')
     def test_native_stop_and_start_choose_the_same_portable_engine(self):
         from launch_native_carla import engine_path
         engine=self.bundle/'CARLA_0.9.16';engine.mkdir();(engine/'CarlaUE4.exe').write_bytes(b'fixture')

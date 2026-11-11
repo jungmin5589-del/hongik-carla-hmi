@@ -12,6 +12,8 @@ DEFAULTS=dict(carla_version='0.9.15',python_version='3.10',display=[5760,1080],
 
 def settings():
     cfg=dict(DEFAULTS)
+    shared=ROOT/'settings/lab-shared.json'
+    if shared.is_file():cfg.update(json.loads(shared.read_text(encoding='utf-8')))
     path=ROOT/'lab.local.json'
     if path.is_file():cfg.update(json.loads(path.read_text(encoding='utf-8')))
     if cfg['render'] not in ([960,540],[1280,720],[1920,1080]):raise ValueError('Unsupported lab render size')

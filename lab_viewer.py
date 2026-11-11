@@ -17,7 +17,11 @@ def monitors():
 
 def surround_rect(rects):
     # Never choose a normal monitor merely because it is closest in size.
-    return next((r for r in rects if r[2:]==[5760,1080]),None)
+    exact=next((r for r in rects if r[2:]==[5760,1080]),None)
+    if exact:return exact
+    # Preserve the calibrated viewport on this PC's three 1920x1200 panels.
+    taller=next((r for r in rects if r[2:]==[5760,1200]),None)
+    return [taller[0],taller[1]+60,5760,1080] if taller else None
 
 def main():
     cfg=settings();preview=os.environ.get('HONGIK_LAB_PREVIEW')=='1';rect=surround_rect(monitors())

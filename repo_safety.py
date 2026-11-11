@@ -11,7 +11,9 @@ def allowed(name):
     if len(path.parts)==1:
         return name in ('.gitignore','README.md','AGENTS.md','mobile-requirements.txt') or (path.suffix in TEXT and name!='serve-reference.py')
     if path.parts[0]=='docs':return len(path.parts)==2 and path.suffix=='.md'
-    if path.parts[0]=='settings':return name.replace('\\','/') in ('settings/runtime-lock.json','settings/scenarios.json','settings/requirements.lock.txt')
+    if path.parts[0]=='settings':return name.replace('\\','/') in ('settings/runtime-lock.json','settings/scenarios.json','settings/requirements.lock.txt','settings/lab-shared.json','settings/portable-motion.json')
+    if path.parts[0]=='data-server-py':
+        return len(path.parts)==3 and path.parts[1] in ('collector','sender','processing') and path.suffix=='.py'
     if path.parts[0]=='mobile':return name.replace('\\','/') in ('mobile/app.js','mobile/index.html')
     if path.parts[0]=='course_ui':
         return (len(path.parts)==2 and path.suffix in TEXT) or (len(path.parts)==3 and path.parts[1]=='vendor' and path.name in VENDOR)

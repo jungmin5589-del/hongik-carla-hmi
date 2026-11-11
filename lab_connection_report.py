@@ -12,8 +12,8 @@ def listening(port):
 def report():
     raw=fetch(8774,'/state') or {};nav=fetch(8774,'/api/state') or {};phone=fetch(8776,'/health') or {}
     value=dict(scope='Read-only local connection snapshot; no motion commands or pairing codes',
-               ports={str(p):listening(p) for p in (2000,2026,8766,8774,8776,8777)},
-               app={k:raw.get(k) for k in ('kind','phase','profile','error','lab_rig','departure_alignment','lane_error_m','rig')},
+               ports={str(p):listening(p) for p in (2000,2026,8765,8766,8774,8776,8777)},
+               app={k:raw.get(k) for k in ('kind','phase','profile','error','lab_rig','departure_alignment','lane_error_m','rig','motion')},
                navigation=dict(connected=nav.get('connected'),map=nav.get('map'),ego_id=nav.get('ego',{}).get('id'),world_pose=nav.get('world_pose')),
                tablet=dict(gateway_ready=phone.get('kind')=='hongik-mobile',polling=phone.get('polling'),address=phone.get('address'),
                            pc_setup='http://127.0.0.1:8776/connect',source='http://127.0.0.1:8774/api/state',

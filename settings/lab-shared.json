@@ -1,0 +1,38 @@
+{
+  "carla_version": "0.9.15",
+  "python_version": "3.10",
+  "display": [
+    5760,
+    1080
+  ],
+  "runtime_version": "0.9.16",
+  "runtime_python": "3.12.10",
+  "fallback_position": [
+    1920,
+    0
+  ],
+  "historical_position": [
+    1920,
+    -1080
+  ],
+  "render": [
+    1280,
+    720
+  ],
+  "fov": 72.0,
+  "yaw": 6.0,
+  "eye": [
+    0.0,
+    -0.35,
+    1.2
+  ],
+  "carpool_eye": [
+    0.9,
+    -0.35,
+    1.6
+  ],
+  "pitch": -4.0,
+  "fps": 30,
+  "source": "VLA-XAI-HMI-in-PiL_AutoUI26-v0.9.1: launch_viewer.py / viewer.py",
+  "motion_enabled": false
+}

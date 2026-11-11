@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parent
 
-def run(root=ROOT,preview=False,check=False,runner=subprocess.run):
+def run(root=ROOT,preview=False,check=False,runner=subprocess.run,motion=False):
     root=Path(root);bundle=root.parent
     if check:
         runner([sys.executable,str(root/'lab_preflight.py')],cwd=root,check=True)
@@ -19,10 +19,12 @@ def run(root=ROOT,preview=False,check=False,runner=subprocess.run):
         runner([sys.executable,str(root/'lab_preflight.py')],cwd=root,check=True)
     args=[sys.executable,str(root/'launch_lab.py'),'--welcome']
     if preview:args.append('--preview')
+    if motion:args.append('--motion')
     runner(args,cwd=root,check=True)
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--preview',action='store_true');parser.add_argument('--check',action='store_true')
-    args=parser.parse_args();run(preview=args.preview,check=args.check)
+    parser.add_argument('--motion',action='store_true',help='enable the existing PC motion and WebSocket integration')
+    args=parser.parse_args();run(preview=args.preview,check=args.check,motion=args.motion)
 
 if __name__=='__main__':main()
