@@ -35,6 +35,7 @@ from passenger_music import library as music_library, stream as stream_music
 from fallen_cargo import CargoScenario, CargoActor, OPTIONS as CARGO_OPTIONS, navigation_state as cargo_navigation_state, left_lane_clear, following_speed
 from lab_settings import sun_altitude
 from research_store import ResearchStore
+from passing_traffic import advance_passing
 
 ROOT = Path(__file__).resolve().parent
 PORT, RPC = 8774, 2026
@@ -395,7 +396,7 @@ class NativeBridge:
                 # Enough cars to fill the off-camera recycling corridor without
                 # introducing a long empty gap between successive platoons.
                 for i in range(24):
-                    self.spawn('vehicle.tesla.model3',-65+i*13.,-self.route.width,'fast',90,
+                    self.spawn('vehicle.tesla.model3',self.ego_s-65+i*13.,-self.route.width,'fast',90,
                                color=['185,189,193','45,49,55','214,216,219'][i%3])
             weather=carla.WeatherParameters(cloudiness=15,precipitation=0,sun_altitude_angle=sun_altitude(profile),
                                            fog_density=0,fog_distance=0,fog_falloff=.1,wetness=0)
@@ -509,12 +510,15 @@ class NativeBridge:
                 snapshot=self.world.wait_for_tick(2.)
                 stamp=snapshot.timestamp.elapsed_seconds
                 if previous is not None and stamp-previous<1/30:continue
-                dt=0 if previous is None else min(.15,max(0,stamp-previous));previous=stamp
+                sim_dt=0 if previous is None else max(0,stamp-previous)
+                dt=min(.15,sim_dt);previous=stamp
                 with self.lock:
                     if self.state['phase']!='live':continue
                     sc=self.scenario;driving=self.command['mode']=='auto' and not sc.completed
                     self.state['mode']='auto' if driving else 'paused'
-                    ego=self.vehicles[0];et=ego['actor'].get_transform()
+                    ego=self.vehicles[0];ego_snapshot=snapshot.find(ego['actor'].id)
+                    if ego_snapshot is None:raise RuntimeError('Scenario ego is no longer present')
+                    et=ego_snapshot.get_transform()
                     ego['s'],_=self.route.project([et.location.x,et.location.y],ego['s']);self.ego_s=ego['s']
                     error=tracking_alignment(self.route,ego,et)['position_error_m']
                     if self.profile=='cargo':
@@ -528,11 +532,11 @@ class NativeBridge:
                         continue
                     for item in self.vehicles[1:]:
                         if item.get('guided_flow'):continue
-                        tr=item['actor'].get_transform()
+                        tr=snapshot.find(item['actor'].id).get_transform()
                         item['s'],_=self.route.project([tr.location.x,tr.location.y],item['s'])
                     projected_at=time.perf_counter()
                     lead=self.vehicles[1];gap=max(0,lead['s']-ego['s']-lead['extent'].x-ego['extent'].x)
-                    speed=self.ego.get_velocity().length()*3.6
+                    speed=ego_snapshot.get_velocity().length()*3.6
                     sc.tick(dt,driving,speed,gap)
                     if getattr(sc,'study',None):sc.study.tick(dt,driving)
                     elapsed=sc.elapsed
@@ -543,7 +547,7 @@ class NativeBridge:
                     target=30.+(3.*math.sin(elapsed/5.5) if self.profile=='congestion' else 0.)
                     if fog:target=30.-15.*fog_density(elapsed)/99.
                     lead['speed']=target
-                    lead_speed=lead['actor'].get_velocity().length()*3.6
+                    lead_speed=snapshot.find(lead['actor'].id).get_velocity().length()*3.6
                     ego['speed']=max(0,min(35.,lead_speed+(gap-sc.desired_gap)*1.8))
                     if sc.outcome.phase in ('stopping','complete') or elapsed>=300:ego['speed']=0.
                     ego['offset']=0.
@@ -554,16 +558,15 @@ class NativeBridge:
                         lead['offset']=ramp*(1.6+amplitude*math.sin((elapsed-10.)*2*math.pi/10.5))
                     controls=[];traffic_alignment=[]
                     planned_at=time.perf_counter()
-                    passing_speed=min((curve_speed_limit(self.route,v['s'],v['offset'],90.) for v in self.vehicles if v.get('guided_flow')),default=90.)
+                    passing_count=sum(bool(v.get('guided_flow')) for v in self.vehicles)
                     for j,item in enumerate(self.vehicles):
                         if item.get('guided_flow'):
-                            kph=passing_speed if driving else 0.
+                            kph=90. if driving else 0.
                             if getattr(sc,'study',None) and sc.study.action=='merge' and sc.study.phase in ('applying','observing'):
                                 if item['s']<ego['s']:sc.study.traffic_yield_ids.add(item['actor'].id)
                                 if item['actor'].id in sc.study.traffic_yield_ids:kph=min(kph,20.)
-                            if driving and item['s']-ego['s']>205.:
-                                item['s']=min(v['s'] for v in self.vehicles if v.get('guided_flow'))-13.
-                            item['s']+=kph/3.6*dt;item['render_speed']=kph
+                            if driving:item['s']=advance_passing(item['s'],ego['s'],kph,sim_dt,passing_count)
+                            item['render_speed']=kph
                             xyz,a=self.route.sample(item['s'],item['offset'])
                             controls.append(carla.command.ApplyTransform(item['actor'].id,carla.Transform(carla.Location(x=float(xyz[0]),y=float(xyz[1]),z=float(xyz[2]+item['rest_z'])),carla.Rotation(yaw=math.degrees(a)))))
                             continue
@@ -574,7 +577,8 @@ class NativeBridge:
                             anchor=lead['s']-(sc.BASE_GAP+4.2)
                             item['speed']=max(25.,min(35.,target+.5*(anchor+preferred-item['s'])))
                         item['speed']=curve_speed_limit(self.route,item['s'],item['offset'],item['speed'])
-                        actor=item['actor'];tr=actor.get_transform();v=actor.get_velocity().length()
+                        actor=item['actor'];actor_snapshot=snapshot.find(actor.id)
+                        tr=actor_snapshot.get_transform();v=actor_snapshot.get_velocity().length()
                         traffic_alignment.append(tracking_alignment(self.route,item,tr))
                         steer=steering(self.route,item['s'],item['offset'],tr,v,item['geometry'])
                         item['steer']+=max(-dt*1.5,min(dt*1.5,steer-item['steer']))
@@ -842,6 +846,13 @@ def handler(bridge):
                         participant=bridge.research.participant(body.get('name'))
                     self.send(dict(participant=participant))
                 elif self.path=='/admin/api/sync':bridge.research.changed();self.send(dict(accepted=True))
+                elif self.path=='/admin/api/reset':
+                    with bridge.lock:
+                        if bridge.scenario and bridge.scenario.elapsed>0 and not bridge.scenario.completed:raise ValueError('현재 실험이 끝난 뒤 초기화해 주세요.')
+                        self.send(bridge.research.reset(body.get('confirmation'),body.get('expected_counts')))
+                elif self.path=='/admin/api/github':
+                    from research_github import start
+                    self.send(start(bridge.research,body.get('confirmation')))
                 elif self.path=='/api/select':
                     profile=body.get('profile')
                     if profile not in PROFILES:raise ValueError('시나리오를 선택해 주세요.')

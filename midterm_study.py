@@ -15,7 +15,7 @@ def option(key, label, detail):
 OPTIONS = {
  'congestion':[
   option('horn','클락션','앞차에 경적을 길게 한 번 울려요.'),
-  option('merge','1차로로 진입하기','안전한 틈이 확보되면 왼쪽 차로로 이동해요.'),
+  option('merge','1차로로 진입하기','오늘 실험에서는 요청을 기록하고 현재 차로에서 주행을 종료해요.'),
   option('end_ride','근처에서 내리기','안전하게 정차할 장소를 확인하고 이용을 마쳐요.')],
  'fog':[
   option('inspect','주변 인식 화면 보기','차량 주변의 위치와 차로 표시를 자세히 살펴봐요.'),
@@ -151,6 +151,13 @@ class StudyRequests:
         self.phase='applying';self.started_at=sc.elapsed;self.original_action=action
         self.base_lateral=self.offset
         sc.action_complete=False;sc.last_action=action;sc.feedback='요청을 반영하고 있어요.'
+        if profile=='congestion' and action=='merge':
+            self.stop_in_lane=True;self.stop_offset=self.offset;self.phase='stopping';self.status='cancelled'
+            self.summary='1차로 진입 요청을 기록하고 현재 차로에서 주행을 종료했어요.'
+            self.feedback='현재 차로에서 감속하고 주행을 마치고 있어요.'
+            sc.outcome.phase='stopping';sc.outcome.status=self.status;sc.feedback=self.feedback
+            sc.log('request_ended_without_lane_change',action=action,status=self.status,reason='stop_in_current_lane')
+            return
         self.dispatching=True
         try:
             native=profile in ('congestion','night','fog')
@@ -230,7 +237,7 @@ class StudyRequests:
         elif self.phase=='stopping':
             self.stopped=self.stopped+dt if speed<.5 else 0.
             if self.stopped>=1.:
-                self.phase='complete';sc.completed=True;sc.completion_reason='action_outcome'
+                self.phase='complete';sc.completed=True;sc.completion_reason='request_stop' if getattr(self,'stop_in_lane',False) else 'action_outcome'
                 sc.outcome.phase='complete';sc.outcome.summary=self.summary or self.feedback
                 if hasattr(sc,'phase'):sc.phase='complete'
                 self.service_end=self.action=='end_ride' and self.status=='achieved'
@@ -275,6 +282,7 @@ class StudyRequests:
         return age>=8.,'achieved'
 
     def targets(self,speed,offset):
+        if getattr(self,'stop_in_lane',False):return 0.,self.stop_offset
         if self.phase in ('idle','queued'):return speed,offset
         b=self.bridge;sc=self.sc;a=self.action
         if self.phase in ('stopping','complete') or self.status in ('unfulfilled','collision'):

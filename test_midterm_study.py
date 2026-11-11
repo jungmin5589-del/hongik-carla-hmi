@@ -48,6 +48,15 @@ class MidtermTests(unittest.TestCase):
     def test_congestion_offers_horn_instead_of_truck_spacing(self):
         actions={o['action'] for o in OPTIONS['congestion']}
         self.assertIn('study_horn',actions);self.assertNotIn('study_lateral',actions)
+    def test_congestion_merge_ends_without_lateral_target(self):
+        self.sc.profile='congestion';self.b.profile='congestion'
+        self.select('study_merge');self.cmd('study_merge')
+        self.sc.tick(3.1,True,30,5.5);self.sc.study.tick(.1,True)
+        self.assertEqual(self.sc.study.phase,'stopping')
+        self.assertEqual(self.sc.study.targets(30.,0.),(0.,0.))
+        for _ in range(12):self.sc.study.tick(.1,True)
+        self.assertTrue(self.sc.completed);self.assertEqual(self.sc.completion_reason,'request_stop')
+        self.assertNotEqual(self.sc.study.status,'achieved')
 
     def test_congestion_horn_executes_once_with_long_audio_duration(self):
         self.sc.profile='congestion';self.b.profile='congestion'

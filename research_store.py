@@ -1,7 +1,7 @@
 """Participant records live on the internal disk, outside the public code repo."""
 import csv,io,json,os,shutil,sqlite3,threading,time,uuid
 from contextlib import contextmanager,closing
-from datetime import datetime,timezone
+from datetime import datetime,timezone,timedelta
 from pathlib import Path
 
 PROFILES={'congestion':'4차로 정체','night':'졸음운전 앞차','fog':'짙은 안개',
@@ -10,6 +10,9 @@ DEFAULT_ROOT=Path(os.environ.get('LOCALAPPDATA',Path.home()/'.local/share'))/'Ho
 FOLDER_NAME='홍익 주행 실험 기록'
 MARKER='.hongik-research-target.json'
 def utc():return datetime.now(timezone.utc).isoformat()
+def experiment_date(value):
+    if not value:return ''
+    return datetime.fromisoformat(value.replace('Z','+00:00')).astimezone(timezone(timedelta(hours=9))).date().isoformat()
 def safe_csv(value):
     value='' if value is None else str(value)
     return "'"+value if value.startswith(('=','+','-','@','\t','\r')) else value
@@ -20,6 +23,7 @@ class ResearchStore:
         self.path=self.root/'research.sqlite3';self.config_path=self.root/'drive-config.json'
         self.lock=threading.RLock();self.wake=threading.Event();self.stop=threading.Event()
         self.dirty=True;self.current=None;self.error='';self.sync_info={};self.heartbeat={}
+        self.github_status={'state':'idle'}
         with self.db() as db:db.executescript('''
 CREATE TABLE IF NOT EXISTS participants(id TEXT PRIMARY KEY,name TEXT NOT NULL,created_utc TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS trials(id TEXT PRIMARY KEY,participant_id TEXT NOT NULL,profile TEXT NOT NULL,
@@ -107,23 +111,43 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
  FROM trials t JOIN participants p ON t.participant_id=p.id
  WHERE p.name LIKE ? OR t.profile LIKE ? ORDER BY t.created_utc DESC LIMIT 500''',('%'+search+'%','%'+search+'%'))]
             counts=dict(participants=db.execute('SELECT COUNT(*) FROM participants').fetchone()[0],trials=db.execute('SELECT COUNT(*) FROM trials').fetchone()[0],events=db.execute('SELECT COUNT(*) FROM events').fetchone()[0])
-        for row in trials:row['scenario_name']=PROFILES.get(row['profile'],row['profile'])
-        return dict(trials=trials,counts=counts,sync=self.sync_status(),recording_error=self.error)
+        for row in trials:
+            row['scenario_name']=PROFILES.get(row['profile'],row['profile'])
+            row['experiment_date']=experiment_date(row['started_utc'] or row['created_utc'])
+        return dict(trials=trials,counts=counts,sync=self.sync_status(),recording_error=self.error,github=self.github_status)
     def detail(self,trial):
         with self.lock,self.db() as db:
             return [dict(row) for row in db.execute('SELECT * FROM events WHERE trial_id=? ORDER BY id',(trial,))]
-    def export_csv(self,kind='trials'):
+    def export_csv(self,kind='trials',date=None):
         if kind not in ('trials','events'):raise ValueError('Unknown export')
         with self.lock,self.db() as db:
-            if kind=='trials':cursor=db.execute('''SELECT p.name participant,t.id trial,t.profile scenario,t.condition,t.language,
+            if kind=='trials':cursor=db.execute('''SELECT COALESCE(t.started_utc,t.created_utc) _experiment_utc,p.name participant,t.id trial,t.profile scenario,t.condition,t.language,
  t.started_utc,t.onset_s,t.selected_s selected_after_start_s,t.selected_s-t.onset_s selected_after_onset_s,
  t.executed_s executed_after_start_s,t.last_action,t.result,t.finished_utc,t.completed
  FROM trials t JOIN participants p ON p.id=t.participant_id ORDER BY t.created_utc''')
-            else:cursor=db.execute('''SELECT p.name participant,t.profile scenario,t.condition,t.language,e.*
+            else:cursor=db.execute('''SELECT COALESCE(t.started_utc,t.created_utc) _experiment_utc,p.name participant,t.profile scenario,t.condition,t.language,e.*
  FROM events e JOIN trials t ON t.id=e.trial_id JOIN participants p ON p.id=t.participant_id ORDER BY e.id''')
             headers=[v[0] for v in cursor.description];rows=cursor.fetchall()
-        output=io.StringIO(newline='');writer=csv.writer(output);writer.writerow(headers)
-        writer.writerows([[safe_csv(v) for v in row] for row in rows]);return output.getvalue().encode('utf-8-sig')
+        output=io.StringIO(newline='');writer=csv.writer(output);writer.writerow(['experiment_date']+headers[1:])
+        for row in rows:
+            day=experiment_date(row[0])
+            if date is None or day==date:writer.writerow([day]+[safe_csv(v) for v in row[1:]])
+        return output.getvalue().encode('utf-8-sig')
+    def reset(self,confirmation,expected):
+        if confirmation!='초기화':raise ValueError('초기화를 입력해 주세요.')
+        with self.lock:
+            if self.github_status.get('state')=='uploading':raise ValueError('GitHub 업로드가 끝난 뒤 초기화해 주세요.')
+            counts=self.list()['counts']
+            if counts!=expected:raise ValueError('기록 수가 변경됐습니다. 새로고침 후 다시 확인해 주세요.')
+            backup=self.root/'reset-backups'/(datetime.now().strftime('%Y%m%d-%H%M%S')+'-'+uuid.uuid4().hex[:8])
+            backup.mkdir(parents=True)
+            with self.db() as source,closing(sqlite3.connect(backup/'research.sqlite3')) as dest:source.backup(dest)
+            for kind in ('trials','events'):(backup/(kind+'.csv')).write_bytes(self.export_csv(kind))
+            with self.db() as db:
+                db.execute('DELETE FROM events');db.execute('DELETE FROM trials');db.execute('DELETE FROM participants')
+            self.current=None;self.heartbeat.clear();self.error='';self.changed()
+            self.export()
+            return dict(reset=True,backup=str(backup),previous_counts=counts)
     def sync_status(self):
         config=json.loads(self.config_path.read_text('utf-8')) if self.config_path.exists() else {}
         return dict(self.sync_info,configured=bool(config),folder_url=config.get('folder_url'),local_path=str(self.path))

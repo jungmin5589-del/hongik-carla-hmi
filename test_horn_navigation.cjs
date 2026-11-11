@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict');
+const {SceneAudio}=require('./scene_audio.js');
+let oscillators=[],gain=[];
+const ctx={state:'running',currentTime:0,destination:{},createGain:()=>({gain:{setValueAtTime:(v,t)=>gain.push(v),linearRampToValueAtTime:(v,t)=>gain.push(v)},connect(){return this},disconnect(){}}),createBiquadFilter:()=>({frequency:{},connect(){return this},disconnect(){}}),createOscillator:()=>{const o={frequency:{},connect(){},start(){},stop(){},disconnect(){}};oscillators.push(o);return o;}};
+global.document={visibilityState:'visible',getElementById:id=>id==='nurec-start'?{}:null};
+const sound=Object.create(SceneAudio.prototype);Object.assign(sound,{session:'test',ctx,hits:new Set(),gate:{offer(){},take(){return null}},lease:{owns:()=>true},button:{},steps:{stop(){}},lastHorn:0,lastKnock:0,lastNotice:0});
+const data={nurec:{mode:'auto',scenario:{session:'test',id:'congestion_long',horn_count:1,horn_duration_s:2.2,elapsed_s:20,context:{rattle_active:true}}}};
+sound.update(data);sound.update(data);
+assert.equal(sound.hornPlayed,1,'Visible navigation plays each horn exactly once');
+assert.deepEqual(oscillators.map(o=>o.frequency.value),[350,440]);assert.ok(gain.includes(.17));assert.equal(sound.mechanical,undefined,'Congestion must not use the mechanical rattle effect');
+console.log('PASS audible dual-tone horn in visible navigation, no duplicate and no mechanical rattle');
