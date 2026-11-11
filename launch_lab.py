@@ -2,6 +2,12 @@
 import argparse,json,os,sys,time,urllib.request
 from pathlib import Path
 
+def restart_required(state,motion):
+    old=state.get('runtime_revision')!='20261111-r3'
+    if old and state.get('mode')=='auto' and not (state.get('scenario') or {}).get('completed'):
+        raise RuntimeError('현재 주행을 먼저 종료해 주세요. 주행이 끝나면 시작 파일이 새 버전으로 다시 실행합니다.')
+    return old or not state.get('lab_rig') or bool((state.get('motion') or {}).get('enabled'))!=motion
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--preview',action='store_true');parser.add_argument('--check',action='store_true');parser.add_argument('--welcome',action='store_true');parser.add_argument('--carla-root',type=Path)
     parser.add_argument('--motion',action='store_true',help='use the existing data-server-py 6DOF and WebSocket link')
@@ -37,9 +43,7 @@ def main():
     if launcher.listening(8774):
         with urllib.request.urlopen('http://127.0.0.1:8774/state',timeout=3) as response:state=json.load(response)
         if state.get('kind')!='hongik-native-carla':raise RuntimeError('Another app is using 8774; left unchanged')
-        if state.get('runtime_revision')!='20261111-r3':
-            raise RuntimeError('An older driving app is still running. End the rig session, close it with Stop-CARLA-Native.bat, then start again to load the updated traffic and horn code.')
-        if not state.get('lab_rig') or bool((state.get('motion') or {}).get('enabled'))!=args.motion:
+        if restart_required(state,args.motion):
             launcher.stop_native()
             deadline=time.monotonic()+8.
             while (launcher.listening(8774) or launcher.listening(2026)) and time.monotonic()<deadline:time.sleep(.2)
