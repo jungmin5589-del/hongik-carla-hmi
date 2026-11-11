@@ -11,3 +11,18 @@ class PassingTests(unittest.TestCase):
             self.assertTrue(all(-80<=s-ego<232 for s in cars))
     def test_far_behind_vehicles_rejoin_the_stream(self):
         s=advance_passing(-1000,500,90,.5,24);self.assertTrue(420<=s<732)
+
+
+class PhysicalPassingTests(unittest.TestCase):
+    def test_visible_traffic_is_never_repositioned(self):
+        from passing_traffic import recycle_destination
+        for relative in (-100.,-20.,0.,20.,100.,232.):
+            self.assertIsNone(recycle_destination(100+relative,100,24,[]))
+
+    def test_forward_exit_recycles_behind_preserving_overshoot(self):
+        from passing_traffic import recycle_destination
+        self.assertAlmostEqual(recycle_destination(333.,100.,24,[]),21.)
+
+    def test_occupied_rear_slot_defers_recycle(self):
+        from passing_traffic import recycle_destination
+        self.assertIsNone(recycle_destination(333.,100.,24,[25.]))

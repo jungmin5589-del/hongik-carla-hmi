@@ -35,7 +35,7 @@ from passenger_music import library as music_library, stream as stream_music
 from fallen_cargo import CargoScenario, CargoActor, OPTIONS as CARGO_OPTIONS, navigation_state as cargo_navigation_state, left_lane_clear, following_speed
 from lab_settings import sun_altitude
 from research_store import ResearchStore
-from passing_traffic import advance_passing
+from passing_traffic import recycle_destination
 
 ROOT = Path(__file__).resolve().parent
 PORT, RPC = 8774, 2026
@@ -250,7 +250,7 @@ class NativeBridge:
         self.state=dict(kind='hongik-native-carla',phase='choose',renderer_backend='carla',error=None,lab_rig=enabled(),
                         mode='paused',quality=quality,width=SIZES[quality][0],height=SIZES[quality][1],
                         speed_kph=0,frames=0,frame=0,target_fps=30,measured_fps=0)
-        self.state['runtime_revision']='20261111-r3'
+        self.state['runtime_revision']='20261112-physical-passing'
         self.presentation='midterm';self.condition='B'
         self.language='ko';self.research=ResearchStore()
         self.command={'mode':'paused'};self.profile=None;self.scenario=None;self.ego=None
@@ -423,10 +423,8 @@ class NativeBridge:
                 item['geometry']=steering_geometry(item['actor'])
                 item['rest_z']=item['actor'].get_location().z-self.route.sample(item['s'],item['offset'])[0][2]
                 if profile=='congestion' and item['role']=='fast':
-                    # Dense scripted passing traffic follows the mapped lane
-                    # directly; the ego, lead and HGVs keep physical dynamics.
-                    item['guided_flow']=True;item['render_speed']=0.
-                    item['actor'].set_simulate_physics(False)
+                    # Use ordinary vehicle physics between rare off-screen resets.
+                    item['passing_flow']=True
             self.make_camera(self.state['quality'])
             sensor=self.world.get_blueprint_library().find('sensor.other.collision')
             self.collision=self.world.spawn_actor(sensor,carla.Transform(),attach_to=self.ego)
@@ -537,7 +535,6 @@ class NativeBridge:
                         self.update_context(dt,driving,snapshot,error)
                         continue
                     for item in self.vehicles[1:]:
-                        if item.get('guided_flow'):continue
                         tr=snapshot.find(item['actor'].id).get_transform()
                         item['s'],_=self.route.project([tr.location.x,tr.location.y],item['s'])
                     projected_at=time.perf_counter()
@@ -564,18 +561,24 @@ class NativeBridge:
                         lead['offset']=ramp*(1.6+amplitude*math.sin((elapsed-10.)*2*math.pi/10.5))
                     controls=[];traffic_alignment=[]
                     planned_at=time.perf_counter()
-                    passing_count=sum(bool(v.get('guided_flow')) for v in self.vehicles)
+                    passing_count=sum(bool(v.get('passing_flow')) for v in self.vehicles)
                     for j,item in enumerate(self.vehicles):
-                        if item.get('guided_flow'):
-                            kph=90. if driving else 0.
+                        if item.get('passing_flow'):
+                            kph=90.
                             if getattr(sc,'study',None) and sc.study.action=='merge' and sc.study.phase in ('applying','observing'):
                                 if item['s']<ego['s']:sc.study.traffic_yield_ids.add(item['actor'].id)
-                                if item['actor'].id in sc.study.traffic_yield_ids:kph=min(kph,20.)
-                            if driving:item['s']=advance_passing(item['s'],ego['s'],kph,sim_dt,passing_count)
-                            item['render_speed']=kph
-                            xyz,a=self.route.sample(item['s'],item['offset'])
-                            controls.append(carla.command.ApplyTransform(item['actor'].id,carla.Transform(carla.Location(x=float(xyz[0]),y=float(xyz[1]),z=float(xyz[2]+item['rest_z'])),carla.Rotation(yaw=math.degrees(a)))))
-                            continue
+                                if item['actor'].id in sc.study.traffic_yield_ids:kph=20.
+                            item['speed']=kph
+                            if driving:
+                                others=[v['s'] for v in self.vehicles if v is not item and v.get('passing_flow')]
+                                destination=recycle_destination(item['s'],ego['s'],passing_count,others)
+                                if destination is not None:
+                                    xyz,a=self.route.sample(destination,item['offset'])
+                                    pose=carla.Transform(carla.Location(x=float(xyz[0]),y=float(xyz[1]),z=float(xyz[2]+item['rest_z'])),carla.Rotation(yaw=math.degrees(a)))
+                                    item['actor'].set_transform(pose)
+                                    item['actor'].set_target_velocity(carla.Vector3D(x=math.cos(a)*kph/3.6,y=math.sin(a)*kph/3.6))
+                                    item['s']=destination;item['steer']=0.;item['acc']=0.
+                                    continue
                         if item['role']=='truck':
                             preferred=item['formation_s']
                             # Anchor to the slow lead, not the ego: a stop request
@@ -602,7 +605,8 @@ class NativeBridge:
                     self.ego.set_light_state(carla.VehicleLightState(lights))
                     self.state.update(frame=snapshot.frame,speed_kph=round(speed,2),lane_error_m=round(error,3),
                                       profile=self.profile,physical_vehicles=len(self.vehicles),
-                                      guided_background_vehicles=sum(bool(v.get('guided_flow')) for v in self.vehicles),
+                                      guided_background_vehicles=0,
+                                      physical_passing_vehicles=sum(bool(v.get('passing_flow')) for v in self.vehicles),
                                       traffic_alignment=traffic_alignment,
                                       control_cycle_ms=round((time.perf_counter()-cycle_started)*1000,1),
                                       projection_ms=round((projected_at-cycle_started)*1000,1),
