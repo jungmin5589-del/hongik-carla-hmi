@@ -8,4 +8,5 @@ const data={nurec:{mode:'auto',scenario:{session:'test',id:'congestion_long',hor
 sound.update(data);sound.update(data);
 assert.equal(sound.hornPlayed,1,'Visible navigation plays each horn exactly once');
 assert.deepEqual(oscillators.map(o=>o.frequency.value),[350,440]);assert.ok(gain.includes(.17));assert.equal(sound.mechanical,undefined,'Congestion must not use the mechanical rattle effect');
+sound.anticipatedHorn=2;data.nurec.scenario.horn_count=2;sound.update(data);assert.equal(sound.hornPlayed,1,'A locally started click horn is not replayed by the next server frame');
 console.log('PASS audible dual-tone horn in visible navigation, no duplicate and no mechanical rattle');

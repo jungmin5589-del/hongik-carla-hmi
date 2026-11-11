@@ -3,7 +3,7 @@
 All clocks advance with the owned CARLA scenario. No perception or remote-agent
 claims are derived from this scripted passenger study controller.
 """
-import math
+import math,time
 
 from action_outcome import ActionOutcome
 
@@ -14,7 +14,7 @@ def option(key, label, detail):
 
 OPTIONS = {
  'congestion':[
-  option('horn','클락션','앞차에 경적을 길게 한 번 울려요.'),
+  option('horn','클락션','내비에서 빠앙 소리를 한 번 재생하고 바로 주행을 마쳐요.'),
   option('merge','1차로로 진입하기','오늘 실험에서는 요청을 기록하고 현재 차로에서 주행을 종료해요.'),
   option('end_ride','근처에서 내리기','안전하게 정차할 장소를 확인하고 이용을 마쳐요.')],
  'fog':[
@@ -99,6 +99,7 @@ class StudyRequests:
         self.lane_started=False;self.lane_clear=False;self.safe_stable=0.;self.offset=0.
         self.repeat_count=0;self.service_end=False;self.traffic_yield_ids=set()
         self.original_action=None;self.base_lateral=None;self.last_dt=.04;self.last_level=None
+        self.finish_after_horn=False;self.horn_started_wall=None
         self.bay_start_s=0.;self.bay_blocked_s=0.;self.bay_waiting=False
 
     def bind(self,bridge,condition):
@@ -119,7 +120,9 @@ class StudyRequests:
         self.feedback='요청을 준비했어요. 3초 안에 취소할 수 있어요.'
         self.summary='';self.status=None;self.cancelled=False;self.view_seen=False
         self.safe_checked=False;self.safe_bay=None;self.lane_started=False;self.safe_stable=0.;self.stopped=0.;self.observed=0.
-        sc.log('request_queued',action=action,countdown_s=3,condition=self.condition,fixed_button=fixed)
+        immediate=sc.profile=='congestion' and action=='horn'
+        sc.log('request_queued',action=action,countdown_s=0 if immediate else 3,condition=self.condition,fixed_button=fixed)
+        if immediate:self._execute()
         return sc.public()
 
     def cancel(self):
@@ -132,6 +135,10 @@ class StudyRequests:
         return self.feedback
 
     def handle(self,action,details):
+        if action=='study_horn_finished':
+            if not self.finish_after_horn or self.action!='horn':raise ValueError('재생 중인 경적이 없습니다.')
+            if not self.sc.completed:self.finish_horn()
+            return self.feedback
         if action=='study_cancel_pending':return self.cancel()
         if action=='study_view_opened':
             self.view_seen=True;self.sc.log('requested_view_exposed',action=self.action,measurement='UI exposure; not gaze')
@@ -202,9 +209,23 @@ class StudyRequests:
           'stop':'낙하물 앞에서 간격을 두고 멈추고 있어요.',
           'delegate':'정지 후 주변 공간이 확보되면 회피해요.'}[action]
         sc.feedback=self.feedback;sc.log('request_execution_started',action=action,repeat_count=self.repeat_count)
+        if profile=='congestion' and action=='horn':
+            self.finish_after_horn=True;self.horn_started_wall=time.monotonic();self.horn_stop_offset=self.offset
+            self.feedback='빠앙 소리를 재생하고 주행을 마치고 있어요.';sc.feedback=self.feedback
+
+    def finish_horn(self,confirmed=True):
+        sc=self.sc;self.phase='complete';self.status='achieved' if confirmed else 'unfulfilled'
+        if self.bridge and hasattr(self.bridge,'command'):self.bridge.command['mode']='paused'
+        self.summary='클락션을 한 번 울리고 주행을 종료했어요.' if confirmed else '경적 재생 완료를 확인하지 못해 주행을 종료했어요.'
+        self.feedback=self.summary;sc.completed=True;sc.completion_reason='horn_audio_finished' if confirmed else 'horn_audio_timeout'
+        sc.action_complete=confirmed;sc.feedback=self.summary;sc.outcome.phase='complete';sc.outcome.status=self.status;sc.outcome.summary=self.summary
+        sc.log('request_completed',action='horn',status=self.status,reason=sc.completion_reason)
 
     def tick(self,dt,driving):
         sc=self.sc;b=self.bridge
+        if self.finish_after_horn:
+            if not sc.completed and time.monotonic()-self.horn_started_wall>10.:self.finish_horn(False)
+            return
         self.last_dt=min(.15,max(0.,dt)) if driving else 0.
         elapsed=sc.elapsed-(getattr(sc,'onset_elapsed',None) or (10. if sc.profile in ('congestion','night','fog','cargo') else 0.))
         level=1 if elapsed<15. else 2 if elapsed<30. else 3
@@ -282,6 +303,7 @@ class StudyRequests:
         return age>=8.,'achieved'
 
     def targets(self,speed,offset):
+        if self.finish_after_horn:return 0.,self.horn_stop_offset
         if getattr(self,'stop_in_lane',False):return 0.,self.stop_offset
         if self.phase in ('idle','queued'):return speed,offset
         b=self.bridge;sc=self.sc;a=self.action
@@ -358,14 +380,14 @@ class StudyRequests:
 
     def outcome(self):
         return dict(action=self.action,phase='applying' if self.phase=='queued' else self.phase,status=self.status,
-                    summary=self.summary,observed_s=round(self.observed,2),observe_s=12.,
-                    message='주변 상황을 확인했어요.' if self.phase=='complete' else self.feedback)
+                    summary=self.summary,observed_s=round(self.observed,2),observe_s=0. if self.finish_after_horn else 12.,
+                    message=('주행이 끝났어요.' if self.finish_after_horn else '주변 상황을 확인했어요.') if self.phase=='complete' else self.feedback)
 
     def public(self):
         sc=self.sc
         elapsed=sc.elapsed-self.pending_at if self.pending_at is not None else 0.
         return dict(phase=self.phase,action=self.action,countdown_s=round(max(0.,3.-elapsed),2) if self.phase=='queued' else None,
-                    condition=self.condition,cancellable=self.phase in ('queued','applying','observing'),
+                    condition=self.condition,cancellable=not self.finish_after_horn and self.phase in ('queued','applying','observing'),
                     repeatable=self.phase=='observing' and self.action in ('horn','widen','lateral','inspect'),
                     repeat_count=self.repeat_count,view_seen=self.view_seen,service_end=self.service_end,
                     safe_bay=self.safe_bay,offset_m=self.offset,request_elapsed_s=round(max(0.,sc.elapsed-(self.started_at or sc.elapsed)),2),

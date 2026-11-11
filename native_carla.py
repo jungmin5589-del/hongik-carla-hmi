@@ -82,7 +82,7 @@ class NativeScenario(Scenario2):
             if self.last_action in ('widen', 'stop_request') and gap >= self.desired_gap-.5:
                 self.action_complete = True
             self.outcome.tick(dt, driving, speed, self)
-            if self.outcome.phase == 'complete':
+            if self.outcome.phase == 'complete' and not self.completed:
                 self.completed, self.completion_reason = True, 'action_outcome'
                 self.feedback = self.outcome.summary
             if self.elapsed >= 300 and not self.outcome.active and speed < .5 and not self.completed:
@@ -178,7 +178,10 @@ class NativeNavigation(NavigationAdapter):
         if b.profile=='cargo':return cargo_navigation_state(b,self.options())
         if b.profile=='yield':return yield_navigation_state(b,self.options())
         if b.profile in CONTEXT_OPTIONS:return context_navigation_state(b,self.options())
-        tr, sc = b.ego.get_transform(), b.scenario.public()
+        snapshot=b.world.get_snapshot()
+        ego_snapshot=snapshot.find(b.ego.id)
+        if ego_snapshot is None:return dict(connected=False,reason='ego snapshot unavailable')
+        tr, sc = ego_snapshot.get_transform(), b.scenario.public()
         yaw = math.radians(tr.rotation.yaw)
         def local(x,y,angle=0):
             dx,dy=x-tr.location.x,y-tr.location.y
@@ -194,13 +197,15 @@ class NativeNavigation(NavigationAdapter):
             lanes.append(dict(id=i+1,points=samples))
         actors=[]
         for item in b.vehicles[1:]:
-            at=item['actor'].get_transform();p=local(at.location.x,at.location.y,at.rotation.yaw)
+            actor_snapshot=snapshot.find(item['actor'].id)
+            if actor_snapshot is None:continue
+            at=actor_snapshot.get_transform();p=local(at.location.x,at.location.y,at.rotation.yaw)
             if not -45<p['forward_m']<180 or abs(p['right_m'])>25:continue
             extent=item['extent']
             actors.append(dict(id=item['actor'].id,kind='vehicle',label='앞차' if item['role']=='lead' else '주변 차량',
                                role='lead' if item['role']=='lead' else 'context',vehicle_type='large' if extent.x>3 else 'car',
                                length_m=extent.x*2,width_m=extent.y*2,height_m=extent.z*2,
-                               speed_kmh=item.get('render_speed',0.) if item.get('guided_flow') else item['actor'].get_velocity().length()*3.6,
+                               speed_kmh=item.get('render_speed',0.) if item.get('guided_flow') else actor_snapshot.get_velocity().length()*3.6,
                                motion_source='scripted mapped-lane flow' if item.get('guided_flow') else 'physical CARLA dynamics',
                                world_pose=dict(x=at.location.x,y=at.location.y,yaw=at.rotation.yaw),**p))
         profile=b.profile;outcome=sc['outcome'];active=sc['onset'] and not sc['completed']
@@ -245,6 +250,7 @@ class NativeBridge:
         self.state=dict(kind='hongik-native-carla',phase='choose',renderer_backend='carla',error=None,lab_rig=enabled(),
                         mode='paused',quality=quality,width=SIZES[quality][0],height=SIZES[quality][1],
                         speed_kph=0,frames=0,frame=0,target_fps=30,measured_fps=0)
+        self.state['runtime_revision']='20261111-r3'
         self.presentation='midterm';self.condition='B'
         self.language='ko';self.research=ResearchStore()
         self.command={'mode':'paused'};self.profile=None;self.scenario=None;self.ego=None

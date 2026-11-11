@@ -61,11 +61,20 @@ class MidtermTests(unittest.TestCase):
     def test_congestion_horn_executes_once_with_long_audio_duration(self):
         self.sc.profile='congestion';self.b.profile='congestion'
         self.select('study_horn');self.cmd('study_horn')
-        self.sc.tick(3.1,True,30,5.5);self.sc.study.tick(.1,True)
         self.assertEqual(self.sc.horn_count,1)
         self.assertEqual(self.sc.public()['horn_duration_s'],2.2)
-        self.assertFalse(self.sc.study._ready(30,2.2)[0])
-        self.assertTrue(self.sc.study._ready(30,3.)[0])
+        self.assertEqual(self.sc.study.phase,'applying')
+        self.assertEqual(self.sc.study.targets(30.,0.),(0.,0.))
+        self.sc.study.tick(.1,True);self.assertFalse(self.sc.completed)
+        self.cmd('study_horn_finished');self.assertTrue(self.sc.completed)
+        self.assertEqual(self.sc.completion_reason,'horn_audio_finished')
+        self.assertEqual(self.sc.study.outcome()['observe_s'],0.)
+        self.cmd('study_horn_finished');self.assertEqual(self.sc.horn_count,1)
+    def test_opening_ai_does_not_end_or_pause_congestion(self):
+        self.sc.profile='congestion';self.b.profile='congestion';self.b.command={'mode':'auto'}
+        self.cmd('study_open',options_visible=True)
+        self.assertFalse(self.sc.completed);self.assertEqual(self.sc.study.phase,'idle')
+        self.assertEqual(self.b.command['mode'],'auto')
 
     def test_selection_does_not_act_and_countdown_cancel(self):
         self.select('study_horn');self.assertEqual(self.sc.horn_count,0)

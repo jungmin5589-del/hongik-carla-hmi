@@ -38,7 +38,10 @@
    (document.querySelector('.top-right')||document.querySelector('#settings-sheet')||document.body).append(this.button);
    this.channel=typeof BroadcastChannel==='function'?new BroadcastChannel('nurec-hongik-sohee'):null;if(this.channel)this.channel.onmessage=()=>this.outside?.pause();
    addEventListener('pagehide',()=>{this.stop();this.lease.dispose();this.ctx?.close();this.channel?.close()});
-   root.HongikSceneAudio={enable:this.arm,getState:()=>this.diagnostics()};
+   root.HongikSceneAudio={enable:this.arm,getState:()=>this.diagnostics(),playHornOnce:duration=>{
+    this.arm();const play=()=>{this.lease.claim();this.anticipatedHorn=this.lastHorn+1;this.horn(duration)};
+    if(this.ctx?.state==='running')play();else this.ctx?.resume().then(play).catch(()=>{this.button.hidden=false});
+   }};
   }
   stopVoice(){this.outside?.pause();this.outside?.remove();this.outside=null;for(const n of this.nodes)try{n.disconnect()}catch{}this.nodes=[];this.meter=null}
   stop(){this.stopVoice();this.steps?.stop();this.mechanical?.dispose();this.mechanical=null;for(const h of this.hits)try{h.stop()}catch{}this.hits.clear();this.lease.release()}
@@ -52,12 +55,12 @@
    a.onerror=fail;a.play().then(()=>{if(a===this.outside){this.error=null;this.button.hidden=true}}).catch(fail);
   }
   horn(duration=.4){
-   duration=Math.max(.4,Math.min(3,Number(duration)||.4));const start=this.ctx.currentTime;
+   duration=Math.max(.4,Math.min(3,Number(duration)||.4));const start=this.ctx.currentTime,session=this.session;
    const mix=this.ctx.createGain(),filter=this.ctx.createBiquadFilter();filter.type='lowpass';filter.frequency.value=1800;
    mix.gain.setValueAtTime(0,start);mix.gain.linearRampToValueAtTime(.17,start+.035);mix.gain.setValueAtTime(.17,start+duration-.1);mix.gain.linearRampToValueAtTime(0,start+duration);
    mix.connect(filter).connect(this.ctx.destination);let active=2;
    for(const freq of [350,440]){const o=this.ctx.createOscillator();o.type='triangle';o.frequency.value=freq;o.connect(mix);this.hits.add(o);
-    o.onended=()=>{this.hits.delete(o);o.disconnect();if(--active===0){mix.disconnect();filter.disconnect()}};o.start(start);o.stop(start+duration+.02)}
+    o.onended=()=>{this.hits.delete(o);o.disconnect();if(--active===0){mix.disconnect();filter.disconnect();if(this.session===session&&this.ctx.currentTime>=start+duration-.03)root.dispatchEvent?.(new CustomEvent('hongik-horn-ended',{detail:{session}}))}};o.start(start);o.stop(start+duration+.02)}
    this.hornPlayed=(this.hornPlayed||0)+1;
   }
   update(data){
@@ -70,7 +73,7 @@
     this.lastKnock=ex?.knock_count||0;this.lastHorn=s.horn_count||0;this.stop();return;
    }
    const speaking=document.getElementById('research-sohee-audio')?.paused===false;if(speaking)this.lastEnd=performance.now();
-   if(s.horn_count>this.lastHorn)this.horn(s.horn_duration_s);this.lastHorn=s.horn_count||0;
+   if(s.horn_count>this.lastHorn){if(this.anticipatedHorn!==s.horn_count)this.horn(s.horn_duration_s);this.anticipatedHorn=null}this.lastHorn=s.horn_count||0;
    this.gate.offer(ex?.voice_cue,s.elapsed_s,!c?.actor_retreat);
    if(speaking||c?.actor_retreat)this.outside?.pause();
    const next=this.gate.take(s.elapsed_s,speaking||Boolean(this.outside&&!this.outside.paused&&!this.outside.ended)||performance.now()-this.lastEnd<800||performance.now()<this.retryAt);

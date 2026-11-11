@@ -94,8 +94,8 @@ function feedback(text){$('research-feedback').textContent=text;$('research-feed
 function showError(error){localFeedback=error.message||'요청을 확인하지 못했습니다.';feedbackBaseline=event?.feedback||'';render()}
 function isCurrent(token){return token===generation&&!dialog.hidden}
 function scenarioComplete(){return latestData?.nurec?.scenario?.completed===true||event?.outcome?.phase==='complete'}
-function returnToSelection(){
- if(!scenarioComplete())return;
+function returnToSelection(confirmedHorn=false){
+ if(confirmedHorn!==true&&!scenarioComplete())return;
  stopSpeech();
  const target=new URL('/',location.href);
  if(['A','B'].includes(event?.condition))target.searchParams.set('condition',event.condition);
@@ -112,6 +112,7 @@ function render(){
  $('research-fixed-help').hidden=complete;$('research-fixed-stop').hidden=complete;
  $('research-ending-message').textContent=outcome.message||(complete?'주행이 끝났어요. 다른 상황을 선택할 수 있어요.':'');
  $('research-ending-summary').textContent=outcome.summary||'';
+ $('research-ending').querySelector('h2').textContent=latestData?.nurec?.scenario?.completion_reason==='horn_audio_finished'?'주행 종료':'주변 상황을 확인했어요';
  const stages={applying:'요청한 대응을 진행하고 있어요',observing:'주변의 반응을 확인하고 있어요',stopping:'서서히 정차하고 있어요',complete:'주변 확인 완료'};
  $('research-title').textContent=event.title;
  $('research-description').textContent=event.situation||event.description;
@@ -190,10 +191,16 @@ function close(){
 async function choose(option){
  if(busy||!optionsReady||!event?.active||event.pending||option.disabled)return;
  stopSpeech();
+ const immediateHorn=option.action==='study_horn'&&latestData?.nurec?.scenario?.id==='congestion_long';
+ if(immediateHorn)window.HongikSceneAudio?.playHornOnce?.(latestData.nurec.scenario.horn_duration_s||2.2);
  const token=generation;busy=true;render();
  try{
   await post('study_choice',{choice:option.action});if(!isCurrent(token))return;
-  selected=option;phase='confirm';$('research-confirm-copy').textContent=option.label+' 요청을 실행할까요? '+option.detail;
+  selected=option;
+  if(immediateHorn){
+   phase='result';busy=false;await execute();return;
+  }
+  phase='confirm';$('research-confirm-copy').textContent=option.label+' 요청을 실행할까요? '+option.detail;
  window.HongikFeedback?.say('choice');
  }catch(error){if(isCurrent(token))showError(error)}
  finally{if(isCurrent(token)){busy=false;render();if(phase==='confirm')$('research-execute').focus()}}
@@ -237,6 +244,10 @@ $('research-options-open').onclick=()=>{explanationFinished=true;revealOptions()
 $('research-direct-done').onclick=async()=>{if(busy||!event?.direct_pending)return;const token=generation;busy=true;render();try{await post('study_direct_done')}catch(error){if(isCurrent(token))showError(error)}finally{if(isCurrent(token)){busy=false;render()}}};
 $('research-read').onclick=()=>player?stopSpeech():readExplanation();
 $('research-ending-home').onclick=returnToSelection;returnHome.onclick=returnToSelection;
+window.addEventListener('hongik-horn-ended',e=>{
+ if(e.detail?.session!==session?.session_id||latestData?.nurec?.scenario?.id!=='congestion_long')return;
+ stopSpeech();post('study_horn_finished').then(()=>returnToSelection(true)).catch(showError);
+});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dialog.hidden){e.preventDefault();close()}});
 function notify(){
  if(event?.active&&seen!==current.id&&document.visibilityState==='visible'){

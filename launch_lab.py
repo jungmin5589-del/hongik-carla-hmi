@@ -37,6 +37,8 @@ def main():
     if launcher.listening(8774):
         with urllib.request.urlopen('http://127.0.0.1:8774/state',timeout=3) as response:state=json.load(response)
         if state.get('kind')!='hongik-native-carla':raise RuntimeError('Another app is using 8774; left unchanged')
+        if state.get('runtime_revision')!='20261111-r3':
+            raise RuntimeError('An older driving app is still running. End the rig session, close it with Stop-CARLA-Native.bat, then start again to load the updated traffic and horn code.')
         if not state.get('lab_rig') or bool((state.get('motion') or {}).get('enabled'))!=args.motion:
             launcher.stop_native()
             deadline=time.monotonic()+8.

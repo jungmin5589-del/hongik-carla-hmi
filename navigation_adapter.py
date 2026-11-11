@@ -289,7 +289,7 @@ class NavigationAdapter:
                 message = result['feedback']
                 self.options_open = False
                 self.choice = None
-            elif getattr(sc,'study',None) and action in ('study_fixed_help','study_fixed_stop','study_cancel_pending','study_view_opened','study_repeat'):
+            elif getattr(sc,'study',None) and action in ('study_fixed_help','study_fixed_stop','study_cancel_pending','study_view_opened','study_repeat','study_horn_finished'):
                 message=sc.study.handle(action,details)
                 sc.log('navigation_'+action,client_event=details)
             elif action=='study_direct_done' and hasattr(sc,'complete_direct'):
