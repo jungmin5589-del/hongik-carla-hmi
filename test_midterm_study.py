@@ -15,6 +15,21 @@ class MidtermTests(unittest.TestCase):
         self.assertFalse(bay_run_in_clear(route,0.,0.,65.,10.5,[(40.,9.)]))
         self.assertTrue(bay_run_in_clear(route,0.,0.,65.,10.5,[(40.,20.)]))
 
+    def test_shoulder_steering_previews_the_approach_instead_of_current_offset(self):
+        study=self.sc.study;study.phase='applying';study.action='safe_stop'
+        study.safe_bay={'s':65.,'offset':10.5};study.base_lateral=0.;study.bay_start_s=0.
+        self.assertGreater(study.steering_offset(25.,0.),study.steering_offset(20.,0.))
+        self.assertEqual(study.steering_offset(65.,0.),10.5)
+        study.bay_waiting=True;self.assertEqual(study.steering_offset(25.,.2),.2)
+
+    def test_blocked_shoulder_creeps_slower_and_holds_one_lane_target(self):
+        study=self.sc.study;study.phase='applying';study.action='safe_stop'
+        study.safe_bay={'s':100.,'offset':10.5};study.offset=.2;self.b.ego_s=20.
+        with patch('midterm_study.path_to_bay_clear',return_value=False):
+            self.assertEqual(study.raw_targets(15.,0.),(6.,.2))
+            study.offset=.3
+            self.assertEqual(study.raw_targets(15.,0.),(6.,.2))
+
     def test_parking_relocation_fits_corners_not_just_vehicle_center(self):
         import carla
         road=SimpleNamespace(get_waypoint=lambda q,**kwargs:SimpleNamespace(lane_type=carla.LaneType.Parking) if 1.5<q.y<4.5 else None)
@@ -115,9 +130,23 @@ class MidtermTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.select('study_horn')
         self.cmd('study_fixed_help');self.assertEqual(self.sc.study.action,'support')
 
+    def test_requested_slowdown_is_gradual_but_collision_stop_is_not_delayed(self):
+        study=self.sc.study;study.phase='applying';study.action='slow';study.last_dt=.1
+        self.b.state={'speed_kph':30.}
+        self.assertAlmostEqual(study.targets(30.,0.)[0],29.568)
+        study.status='collision'
+        self.assertEqual(study.targets(30.,0.)[0],0.)
+
+    def test_execution_uses_prepared_voice_metadata_without_disk_io(self):
+        self.sc.study.ack_delays={('zh','horn'):6.}
+        self.select('study_horn')
+        with patch('research_voice.intent_delay',side_effect=AssertionError('No disk reads while moving')):
+            self.cmd('study_horn',language='zh')
+        self.assertEqual(self.sc.study.request_delay,6.)
+
     def test_widen_requires_measured_gap(self):
         self.select('study_widen');self.cmd('study_widen');self.sc.tick(self.sc.study.request_delay+.1,True,30,6.5);self.sc.study.tick(.1,True)
-        self.assertEqual(self.sc.desired_gap,28)
+        self.assertEqual(self.sc.study.gap_goal,28);self.assertLess(self.sc.desired_gap,28)
         self.assertFalse(self.sc.study._ready(20,10)[0]);self.sc.gap=28
         self.assertTrue(self.sc.study._ready(20,10)[0])
 
@@ -134,7 +163,7 @@ class MidtermTests(unittest.TestCase):
                 study=self.sc.study;study.phase='applying';study.action='safe_stop'
                 study.safe_bay={'s':180.,'offset':10.5};study.offset=0.;self.b.ego_s=100.
                 with patch('midterm_study.path_to_bay_clear',return_value=False):
-                    self.assertEqual(study.targets(30.,0.),(12.,0.))
+                    target,offset=study.targets(30.,0.);self.assertGreater(target,0.);self.assertLess(target,10.);self.assertEqual(offset,0.)
 
     def test_blocked_congestion_stop_keeps_rolling_before_shoulder_entry(self):
         self.sc.profile='congestion';self.b.profile='congestion'
@@ -143,7 +172,7 @@ class MidtermTests(unittest.TestCase):
         with patch('midterm_study.find_bay',return_value=dict(s=180.,offset=10.5)):
             study._execute()
         with patch('midterm_study.path_to_bay_clear',return_value=False):
-            self.assertEqual(study.targets(30.,0.),(18.,0.))
+            target,offset=study.targets(30.,0.);self.assertGreater(target,0.);self.assertLess(target,10.);self.assertEqual(offset,0.)
         self.assertTrue(study.bay_waiting)
         self.b.ego_s=150.
         with patch('midterm_study.path_to_bay_clear',return_value=True),patch('midterm_study.find_bay',return_value=dict(s=225.,offset=10.5)):

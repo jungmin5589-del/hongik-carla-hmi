@@ -78,3 +78,12 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(ego_lane(lanes),(1,4))
 
 if __name__=='__main__':unittest.main()
+
+
+class MapCacheTests(unittest.TestCase):
+    def test_prepared_map_avoids_world_rpc_during_requests(self):
+        from native_alignment import cached_map
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        prepared=object();world=SimpleNamespace(get_map=Mock(side_effect=AssertionError('Unexpected map RPC')))
+        self.assertIs(cached_map(SimpleNamespace(road_map=prepared,world=world)),prepared)

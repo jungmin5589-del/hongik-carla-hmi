@@ -1,4 +1,6 @@
-# DRAFT — driving control audit
+# Historical draft — driving control audit
+
+This describes the failed diagnostic snapshot before the rebuild. See [the subsequent control repair and live validation](DRIVE-CONTROL-REBUILD-20261114.md) for the current checked scope and remaining lab/hardware work.
 
 Do not use this branch as a participant-test or motion-platform release. Live congestion driving reproduced lane departure and then another collision after the projection optimization. Passing source/UI tests is not evidence of safe or correct driving.
 

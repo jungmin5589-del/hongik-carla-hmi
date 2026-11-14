@@ -1,3 +1,5 @@
+from native_alignment import cached_map
+from event_writer import open_events
 """One physical dropped box; scripted uncertainty, not a perception benchmark."""
 import math
 import threading
@@ -39,7 +41,7 @@ class CargoScenario(Scenario2):
 
     def __init__(self, event_path):
         self.lock = threading.RLock()
-        self.events = open(event_path, 'a', encoding='utf-8', buffering=1)
+        self.events = open_events(event_path)
         self.enabled = True
         self.reset()
 
@@ -102,7 +104,7 @@ class CargoScenario(Scenario2):
             self.cargo_right, self.cargo_height = right, height
             if not driving or self.completed:
                 return
-            dt = min(.15, max(0., dt))
+            dt = max(0., dt)
             self.elapsed += dt
             if self.outcome.active:self.outcome.elapsed += dt
             if not self.onset:
@@ -283,11 +285,11 @@ class CargoActor:
 def left_lane_clear(bridge):
     """Check current mapped lane and nearby physical vehicles, not elapsed time."""
     p,_ = bridge.route.sample(bridge.ego_s,-bridge.route.width)
-    wp=bridge.world.get_map().get_waypoint(carla.Location(x=float(p[0]),y=float(p[1]),z=float(p[2])),
+    wp=cached_map(bridge).get_waypoint(carla.Location(x=float(p[0]),y=float(p[1]),z=float(p[2])),
                                          project_to_road=False,lane_type=carla.LaneType.Driving)
     if wp is None or wp.is_junction:
         return False
-    ego_wp=bridge.world.get_map().get_waypoint(bridge.ego.get_location())
+    ego_wp=cached_map(bridge).get_waypoint(bridge.ego.get_location())
     if ego_wp is None or wp.lane_id*ego_wp.lane_id<=0:
         return False
     extents={item['actor'].id:item.get('extent') for item in bridge.vehicles}

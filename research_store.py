@@ -1,5 +1,5 @@
 """Participant records live on the internal disk, outside the public code repo."""
-import csv,io,json,os,shutil,sqlite3,threading,time,uuid
+import csv,io,json,os,shutil,sqlite3,threading,time,uuid,queue
 from contextlib import contextmanager,closing
 from datetime import datetime,timezone,timedelta
 from pathlib import Path
@@ -21,7 +21,7 @@ class ResearchStore:
     def __init__(self,root=DEFAULT_ROOT,start_worker=True):
         self.root=Path(root);self.root.mkdir(parents=True,exist_ok=True)
         self.path=self.root/'research.sqlite3';self.config_path=self.root/'drive-config.json'
-        self.lock=threading.RLock();self.wake=threading.Event();self.stop=threading.Event()
+        self.lock=threading.RLock();self.export_lock=threading.Lock();self.wake=threading.Event();self.stop=threading.Event()
         self.dirty=True;self.current=None;self.error='';self.sync_info={};self.heartbeat={}
         self.github_status={'state':'idle'}
         with self.db() as db:db.executescript('''
@@ -36,8 +36,9 @@ CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,trial_id 
  FOREIGN KEY(trial_id) REFERENCES trials(id));
 CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
 ''')
-        self.worker=None
+        self.worker=None;self.event_worker=None;self.event_queue=queue.Queue()
         if start_worker:
+            self.event_worker=threading.Thread(target=self._events_loop,daemon=True);self.event_worker.start()
             self.worker=threading.Thread(target=self._loop,daemon=True);self.worker.start()
     @contextmanager
     def db(self):
@@ -69,7 +70,13 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
         original=scenario.log
         def logged(event,**extra):
             original(event,**extra)
-            try:self.event(scenario.session,event,scenario.elapsed,extra,labels)
+            try:
+                occurred=(utc(),time.monotonic())
+                if self.event_worker is not None:
+                    frozen=dict(extra)
+                    if isinstance(extra.get('client_event'),dict):frozen['client_event']=dict(extra['client_event'])
+                    self.event_queue.put_nowait((scenario.session,event,scenario.elapsed,frozen,labels,occurred))
+                else:self.event(scenario.session,event,scenario.elapsed,extra,labels,occurred)
             except (OSError,sqlite3.Error) as error:self.error='기록 오류: '+type(error).__name__
         scenario.log=logged;self.changed()
     def start(self,session):
@@ -78,7 +85,8 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
             if row and not row['started_utc']:
                 db.execute('UPDATE trials SET started_utc=? WHERE id=?',(utc(),session))
                 self.heartbeat[session]=time.monotonic();self.changed()
-    def event(self,session,event,elapsed,extra,labels=None):
+    def event(self,session,event,elapsed,extra,labels=None,occurred=None):
+        recorded_utc,recorded_monotonic=occurred or (utc(),time.monotonic())
         labels=labels or {};details=extra.get('client_event') or {}
         action=extra.get('action') or details.get('choice')
         # Store only study meaning, not tokens, browser/device IDs or world coordinates.
@@ -93,13 +101,13 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
                 onset=float(elapsed);db.execute('UPDATE trials SET onset_s=? WHERE id=?',(onset,session))
             canonical=action if action and action.startswith('study_') else 'study_'+action if action else None
             label=labels.get(canonical,canonical or '')
-            wall=time.monotonic()-self.heartbeat[session] if session in self.heartbeat else None
+            wall=recorded_monotonic-self.heartbeat[session] if session in self.heartbeat else None
             db.execute('INSERT INTO events(trial_id,utc,elapsed_s,since_onset_s,wall_since_start_s,event,action,label,details) VALUES(?,?,?,?,?,?,?,?,?)',
-                (session,utc(),float(elapsed),None if onset is None else float(elapsed)-onset,wall,event,canonical,label,json.dumps(approved,ensure_ascii=False)))
+                (session,recorded_utc,float(elapsed),None if onset is None else float(elapsed)-onset,wall,event,canonical,label,json.dumps(approved,ensure_ascii=False)))
             if event=='navigation_study_choice':db.execute('UPDATE trials SET selected_s=COALESCE(selected_s,?),last_action=? WHERE id=?',(elapsed,canonical,session))
             if event=='navigation_execution_confirmed':db.execute('UPDATE trials SET executed_s=COALESCE(executed_s,?),last_action=? WHERE id=?',(elapsed,canonical,session))
             if event in ('request_completed','outcome_trial_completed','trial_completed'):
-                db.execute('UPDATE trials SET completed=1,finished_utc=?,result=? WHERE id=?',(utc(),extra.get('status') or extra.get('reason') or 'complete',session))
+                db.execute('UPDATE trials SET completed=1,finished_utc=?,result=? WHERE id=?',(recorded_utc,extra.get('status') or extra.get('reason') or 'complete',session))
             self.changed()
     def list(self,search=''):
         search=str(search)[:100]
@@ -135,6 +143,7 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
         return output.getvalue().encode('utf-8-sig')
     def reset(self,confirmation,expected):
         if confirmation!='초기화':raise ValueError('초기화를 입력해 주세요.')
+        self.flush_events()
         with self.lock:
             if self.github_status.get('state')=='uploading':raise ValueError('GitHub 업로드가 끝난 뒤 초기화해 주세요.')
             counts=self.list()['counts']
@@ -146,11 +155,11 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
             with self.db() as db:
                 db.execute('DELETE FROM events');db.execute('DELETE FROM trials');db.execute('DELETE FROM participants')
             self.current=None;self.heartbeat.clear();self.error='';self.changed()
-            self.export()
-            return dict(reset=True,backup=str(backup),previous_counts=counts)
+        self.export()
+        return dict(reset=True,backup=str(backup),previous_counts=counts)
     def sync_status(self):
         config=json.loads(self.config_path.read_text('utf-8')) if self.config_path.exists() else {}
-        return dict(self.sync_info,configured=bool(config),folder_url=config.get('folder_url'),local_path=str(self.path))
+        return dict(self.sync_info,pending_records=self.event_queue.unfinished_tasks,configured=bool(config),folder_url=config.get('folder_url'),local_path=str(self.path))
     def find_target(self,config):
         candidates=[]
         if config.get('directory'):candidates.append(Path(config['directory']))
@@ -166,14 +175,17 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
             except (OSError,ValueError):continue
         return None
     def export(self):
+        with self.export_lock:self._export()
+    def _export(self):
+        self.flush_events()
         folder=self.root/'exports';folder.mkdir(exist_ok=True)
-        with self.lock:
-            for kind in ('trials','events'):
-                temp=folder/(kind+'.tmp');temp.write_bytes(self.export_csv(kind));os.replace(temp,folder/(kind+'.csv'))
-            temporary=folder/'research.tmp.sqlite3'
-            with self.db() as source,closing(sqlite3.connect(temporary)) as target:source.backup(target)
-            os.replace(temporary,folder/'research.sqlite3')
-            self.dirty=False
+        with self.lock:self.dirty=False
+        # CSV encoding and filesystem/Drive work must not hold the record lock.
+        for kind in ('trials','events'):
+            temp=folder/(kind+'.tmp');temp.write_bytes(self.export_csv(kind));os.replace(temp,folder/(kind+'.csv'))
+        temporary=folder/'research.tmp.sqlite3'
+        with self.lock,self.db() as source,closing(sqlite3.connect(temporary)) as target:source.backup(target)
+        os.replace(temporary,folder/'research.sqlite3')
         self.sync_info.update(exported_utc=utc(),error=None)
         if not self.config_path.exists():self.sync_info['state']='local-only';return
         config=json.loads(self.config_path.read_text('utf-8'));target=self.find_target(config)
@@ -189,4 +201,16 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
             if not self.dirty and self.sync_info.get('state') not in ('waiting-for-drive-desktop','error'):continue
             try:self.export()
             except (OSError,ValueError,sqlite3.Error) as error:self.sync_info.update(state='error',error=type(error).__name__)
-    def close(self):self.stop.set();self.wake.set()
+    def _events_loop(self):
+        while True:
+            entry=self.event_queue.get()
+            try:
+                if entry is None:return
+                self.event(*entry)
+            except (OSError,sqlite3.Error) as error:self.error='기록 오류: '+type(error).__name__
+            finally:self.event_queue.task_done()
+    def flush_events(self):self.event_queue.join()
+    def close(self):
+        if self.event_worker:
+            self.event_queue.put(None);self.event_worker.join(5)
+        self.stop.set();self.wake.set()

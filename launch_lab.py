@@ -1,9 +1,10 @@
 """Lab entry: own isolated CARLA port, original navigation, calibrated three views."""
 import argparse,json,os,sys,time,urllib.request
 from pathlib import Path
+from runtime_version import REVISION
 
 def restart_required(state,motion):
-    old=state.get('runtime_revision')!='20261111-r3'
+    old=state.get('runtime_revision')!=REVISION
     if old and state.get('mode')=='auto' and not (state.get('scenario') or {}).get('completed'):
         raise RuntimeError('현재 주행을 먼저 종료해 주세요. 주행이 끝나면 시작 파일이 새 버전으로 다시 실행합니다.')
     return old or not state.get('lab_rig') or bool((state.get('motion') or {}).get('enabled'))!=motion
@@ -11,6 +12,7 @@ def restart_required(state,motion):
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--preview',action='store_true');parser.add_argument('--check',action='store_true');parser.add_argument('--welcome',action='store_true');parser.add_argument('--carla-root',type=Path)
     parser.add_argument('--motion',action='store_true',help='use the existing data-server-py 6DOF and WebSocket link')
+    parser.add_argument('--no-browser',action='store_true')
     args=parser.parse_args()
     from lab_settings import settings
     cfg=settings()
@@ -48,7 +50,7 @@ def main():
             deadline=time.monotonic()+8.
             while (launcher.listening(8774) or launcher.listening(2026)) and time.monotonic()<deadline:time.sleep(.2)
     # Prevent this launcher's flags from being interpreted by the native launcher.
-    sys.argv=[sys.argv[0]]
+    sys.argv=[sys.argv[0]]+(['--no-browser'] if args.no_browser else [])
     launcher.main(start_path='/lab' if args.welcome else '/')
 
 if __name__=='__main__':main()

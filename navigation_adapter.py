@@ -253,6 +253,9 @@ class NavigationAdapter:
     def command(self, body):
         b = self.bridge
         sc = b.scenario
+        if sc is None:raise ValueError('시나리오를 먼저 준비해 주세요.')
+        if getattr(b,'state',{}).get('drive_guard') and body.get('action') not in ('study_open','study_close','study_presented','study_cancel_pending','emergency_stop'):
+            raise ValueError('주행 이상이 기록됐어요. 시나리오를 다시 준비한 뒤 출발해 주세요.')
         with self.lock, sc.lock:
             session = body.get('session_id')
             if session != sc.session or body.get('navigation_id') != sc.session+'-weaving':

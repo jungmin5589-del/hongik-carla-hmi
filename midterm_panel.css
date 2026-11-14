@@ -40,3 +40,5 @@ body.midterm-study #research-launch.has-update{animation:study-double-glow 3s ea
 body.midterm-study #research-launch.has-update::after{animation:study-arrow 3s ease-in-out infinite}
 @keyframes study-arrow{18%,42%{transform:translateX(3px);color:#174bc7}0%,60%,100%{transform:translateX(0)}}
 @media(prefers-reduced-motion:reduce){body.midterm-study #research-launch.has-update,body.midterm-study #research-launch.has-update::after{animation:none!important}body.midterm-study #research-launch.has-update{background:#dfebff!important;border-color:#224fc4!important}}
+
+#research-ui[data-fault="true"] #research-launch{border-color:#be4b4b!important;background:#fff4f3!important}

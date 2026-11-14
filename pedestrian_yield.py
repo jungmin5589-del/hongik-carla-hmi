@@ -1,4 +1,5 @@
 """Repeatable pedestrian/vehicle mutual yielding, not gesture recognition."""
+from event_writer import open_events
 import math
 import threading
 import time
@@ -97,7 +98,7 @@ class YieldScenario(Scenario2):
     ONSET_SECONDS=0.
     def __init__(self,event_path,route):
         self.lock=threading.RLock();self.enabled=True
-        self.events=open(event_path,'a',encoding='utf-8',buffering=1)
+        self.events=open_events(event_path)
         self.cross_s=route.cross_s;self.curb_right=route.curb_right;self.curb_left=route.curb_left
         self.reset()
 
@@ -148,7 +149,7 @@ class YieldScenario(Scenario2):
             self.last_ego_s=ego_s;self.gap=max(0.,self.cross_s-ego_s-2.4)
             if actual_offset is not None:self.offset=actual_offset
             if not driving or self.completed:return
-            dt=min(.15,max(0.,dt));self.elapsed+=dt;self.phase_elapsed+=dt
+            dt=max(0.,dt);self.elapsed+=dt;self.phase_elapsed+=dt
             if self.phase=='approach' and self.gap<=9. and speed<.5:
                 self.phase='mutual_wait';self.phase_elapsed=0.;self.onset=True
                 self.onset_monotonic=time.monotonic();self.log('scenario_onset',stimulus='pedestrian_waves_vehicle_first')

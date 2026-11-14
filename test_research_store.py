@@ -19,6 +19,13 @@ class ResearchTests(unittest.TestCase):
   self.assertEqual(row['participant_name'],'P001');self.assertEqual(row['selected_s'],17.25);self.assertEqual(row['selected_after_onset_s'],7.25)
   self.assertEqual(row['selection_count'],2);self.assertEqual(row['executed_s'],21);self.assertEqual(row['result'],'achieved');self.assertEqual(row['language'],'zh')
   events=self.store.detail(sc.session);self.assertIn('navigation_study_cancel',[e['event'] for e in events]);self.assertNotIn('must-not-export',json.dumps(events))
+ def test_reset_exports_after_releasing_record_lock(self):
+  from unittest.mock import patch
+  self.trial();counts=self.store.list()['counts']
+  def unlocked_export():self.assertFalse(self.store.lock._is_owned())
+  with patch.object(self.store,'export',side_effect=unlocked_export):
+   result=self.store.reset('초기화',counts)
+  self.assertTrue(result['reset']);self.assertEqual(self.store.list()['counts']['trials'],0)
  def test_unregistered_development_sessions_are_not_participant_records(self):
   self.store.attach(SimpleNamespace(session='dev'),'night','B');self.assertEqual(self.store.list()['counts']['trials'],0)
  def test_unicode_names_survive_restart_and_csv_is_excel_safe(self):
@@ -38,5 +45,27 @@ class ResearchTests(unittest.TestCase):
  def test_names_cannot_be_empty_or_control_text(self):
   for name in ('','   ','a\nb','x'*81):
    with self.assertRaises(ValueError):self.store.participant(name)
+
+class AsyncResearchTests(unittest.TestCase):
+ def test_recording_queue_does_not_wait_for_export_lock_and_keeps_event_time(self):
+  import threading,time
+  from unittest.mock import patch
+  with tempfile.TemporaryDirectory() as folder:
+   store=ResearchStore(Path(folder))
+   try:
+    store.participant('QA');sc=SimpleNamespace(session='async1',elapsed=0.,log=lambda *args,**kwargs:None)
+    store.attach(sc,'night','B');store.start(sc.session);store.heartbeat[sc.session]=100.
+    store.lock.acquire()
+    returned=threading.Event()
+    def emit():
+     with patch('research_store.time.monotonic',return_value=111.):
+      sc.elapsed=10.;sc.log('scenario_onset')
+     returned.set()
+    thread=threading.Thread(target=emit);thread.start()
+    try:self.assertTrue(returned.wait(.5),'controller event emission must not wait on DB/export lock')
+    finally:store.lock.release()
+    thread.join();store.flush_events();row=store.detail(sc.session)[0]
+    self.assertEqual(row['elapsed_s'],10.);self.assertEqual(row['wall_since_start_s'],11.)
+   finally:store.close()
 
 if __name__=='__main__':unittest.main()

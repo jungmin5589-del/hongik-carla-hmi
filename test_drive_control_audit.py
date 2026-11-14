@@ -21,7 +21,7 @@ class ControlAuditTests(unittest.TestCase):
   with self.assertRaisesRegex(ValueError,'다시 준비'):b.control({'mode':'auto'})
   self.assertEqual(b.command['mode'],'paused')
  def test_collision_latches_pause_before_another_request(self):
-  b=NativeBridge.__new__(NativeBridge);b.scenario=S(log=lambda *args,**kw:None);b.command={'mode':'auto'};b.state={};b.profile='congestion'
+  b=NativeBridge.__new__(NativeBridge);b.scenario=S(log=lambda *args,**kw:None);b.command={'mode':'auto'};b.state={'phase':'live'};b.profile='congestion'
   e=S(normal_impulse=S(length=lambda:10.),other_actor=S(type_id='vehicle.test',id=1),frame=1)
   b.on_collision(e)
   self.assertEqual(b.command['mode'],'paused');self.assertTrue(b.state['drive_guard']);self.assertEqual(b.scenario.collision_count,1)

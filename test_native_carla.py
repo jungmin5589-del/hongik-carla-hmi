@@ -22,6 +22,11 @@ class NativeTests(unittest.TestCase):
         return self.nav.command(dict(action=action,session_id=sid,navigation_id=sid+'-weaving',
                                      request_id=request or action,client_event=details or {}))
 
+    def test_fault_rejects_stale_execution_before_it_changes_targets(self):
+        self.b.state={'drive_guard':'collision'}
+        with self.assertRaisesRegex(ValueError,'다시 준비'):self.command('study_distance')
+        self.assertEqual(self.sc.desired_gap,self.sc.BASE_GAP)
+
     def test_no_execution_before_explicit_choice(self):
         self.sc.tick(11,True,25,6.5)
         with self.assertRaises(ValueError):self.command('study_distance')

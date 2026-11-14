@@ -36,6 +36,14 @@ def process_command(pid):
 
 def stop_native():
     owned=json.loads(OWNED.read_text(encoding='utf-8-sig')) if OWNED.is_file() else {}
+    app_command=process_command(owned.get('app'))
+    if str(ROOT/'native_carla.py').lower() in app_command.lower() and listening(8774):
+        try:
+            request=urllib.request.Request('http://127.0.0.1:8774/api/shutdown',data=b'{"confirm":"stop-owned-app"}',headers={'Content-Type':'application/json'})
+            with urllib.request.urlopen(request,timeout=4) as response:response.read()
+            deadline=time.monotonic()+10.
+            while listening(8774) and time.monotonic()<deadline:time.sleep(.1)
+        except (OSError,ValueError):pass
     for role in ('display','app','carla'):
         pid=owned.get(role);cmd=process_command(pid)
         expected={'display':'native_drive_window.py','app':'native_carla.py','carla':str(CARLA/'CarlaUE4.exe')}[role]
@@ -45,6 +53,7 @@ def stop_native():
 
 
 def main(start_path='/'):
+    open_ui='--no-browser' not in sys.argv
     if start_path not in ('/','/lab'):raise ValueError('Unknown local startup page')
     if '--stop' in sys.argv:
         stop_native();return
@@ -54,7 +63,8 @@ def main(start_path='/'):
         except Exception as exc:raise RuntimeError('Port 8774 belongs to another app; leave it untouched.') from exc
         if state.get('kind')=='hongik-native-carla':
             ensure_phone()
-            webbrowser.open('http://127.0.0.1:8774'+start_path);return
+            if open_ui:webbrowser.open('http://127.0.0.1:8774'+start_path)
+            return
         # The existing NuRec stop script verifies recorded process identities.
         if not (ROOT/'owned-processes.json').is_file():
             raise RuntimeError('Another untracked driving session is running on 8774.')
@@ -92,7 +102,8 @@ def main(start_path='/'):
         if p.poll() is not None:raise RuntimeError('Native app startup failed. Check native-runs logs.')
         if listening(8774):
             ensure_phone()
-            webbrowser.open('http://127.0.0.1:8774'+start_path);return
+            if open_ui:webbrowser.open('http://127.0.0.1:8774'+start_path)
+            return
         time.sleep(.25)
     raise RuntimeError('Native app did not become ready.')
 

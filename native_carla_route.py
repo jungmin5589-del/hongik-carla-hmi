@@ -63,13 +63,11 @@ class HighwayRoute:
         raise RuntimeError('No continuous four-lane Town04 ring route was found.')
 
     def sample(self, s, offset=0.):
-        s = float(s % self.length)
-        i = min(len(self.delta)-1, max(0, int(np.searchsorted(self.arc, s, side='right')-1)))
-        u = (s-self.arc[i])/self.segment_length[i]
-        xyz = (1-u)*self.points[i]+u*self.points[i+1]
-        direction = self.delta[i]/self.segment_length[i]
-        xyz[:2] += np.array([-direction[1], direction[0]])*offset
-        return xyz, math.atan2(direction[1], direction[0])
+        s=float(s%self.length)
+        i=max(0,min(len(self._segments)-1,bisect_right(self._arc_scalar,s)-1))
+        x,y,dx,dy,length,at=self._segments[i];u=(s-at)/length
+        z=float(self.points[i,2])+(float(self.points[i+1,2])-float(self.points[i,2]))*u
+        return np.array((x+dx*u-dy/length*offset,y+dy*u+dx/length*offset,z)),math.atan2(dy,dx)
 
     def project(self, xy, previous=None):
         # Small local scalar search: array operations over the full ring release
@@ -96,10 +94,17 @@ class HighwayRoute:
 
 
 
-def steering(route, distance, offset, transform, speed, geometry=None):
+def linear_value(points,x):
+    if x<=points[0][0]:return points[0][1]
+    for (xa,ya),(xb,yb) in zip(points,points[1:]):
+        if x<=xb:return ya+(yb-ya)*(x-xa)/max(1e-9,xb-xa)
+    return points[-1][1]
+
+
+def steering(route, distance, offset, transform, speed, geometry=None, offset_profile=None):
     """Pure pursuit in CARLA's left-handed XY coordinate system."""
-    lookahead = max(6., min(17., 5.+speed*.65))
-    point, _ = route.sample(distance+lookahead, offset)
+    lookahead = max(5., min(12., 4.5+speed*.5))
+    point, _ = route.sample(distance+lookahead, offset_profile(distance+lookahead) if offset_profile else offset)
     yaw = math.radians(transform.rotation.yaw)
     geometry=geometry or dict(wheelbase=2.85,rear_offset=0.,max_steer=.58)
     rear=geometry['rear_offset']
@@ -110,7 +115,7 @@ def steering(route, distance, offset, transform, speed, geometry=None):
     wheel_angle = math.atan2(2.*geometry['wheelbase']*math.sin(angle), max(1.,math.hypot(dx,dy)))
     curve=geometry.get('steering_curve',[])
     # The UE4 PhysX steering table uses km/h (verified in the local engine source).
-    scale=float(np.interp(speed*3.6,[p[0] for p in curve],[p[1] for p in curve])) if curve else 1.
+    scale=linear_value(curve,speed*3.6) if curve else 1.
     return max(-.75, min(.75, wheel_angle/(geometry['max_steer']*max(.1,scale))))
 
 
@@ -120,9 +125,9 @@ def curve_speed_limit(route,distance,offset,preferred):
     for ahead in (0.,20.,40.,60.,90.,120.):
         a,ya=route.sample(distance+ahead-3.,offset);b,yb=route.sample(distance+ahead+3.,offset)
         change=abs((yb-ya+math.pi)%(2*math.pi)-math.pi)
-        curvature=change/max(.1,float(np.linalg.norm(b[:2]-a[:2])))
+        curvature=change/max(.1,math.hypot(b[0]-a[0],b[1]-a[1]))
         if curvature>1e-5:
-            future=math.sqrt(3./curvature)
+            future=math.sqrt(2./curvature)
             limit=min(limit,math.sqrt(future*future+2.*2.3*ahead))
     return limit*3.6
 

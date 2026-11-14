@@ -269,7 +269,8 @@ window.CockpitUpdate=data=>{
   for(const button of [...$('research-options').children,$('research-execute'),$('research-fixed-help'),$('research-fixed-stop')])button.disabled=true;
   feedback('차량 연결이 끊겼어요. 다시 연결된 뒤 선택해 주세요.');return;
  }
- $('research-fixed-help').disabled=false;$('research-fixed-stop').disabled=false;
+ const fault=Boolean(data.nurec?.drive_guard);root.dataset.fault=String(fault);
+ $('research-fixed-help').disabled=fault;$('research-fixed-stop').disabled=fault;
  root.hidden=!live;document.body.classList.toggle('research-driving',live);
  if(!live){stopSpeech();generation++;dialog.hidden=true;seen=null;session=null;current=null;event=null;busy=false;opening=false;dialogReady=false;optionsReady=false;return}
  if(session?.session_id!==data.session.session_id){
@@ -284,6 +285,6 @@ window.CockpitUpdate=data=>{
  if(event.study?.phase==='queued')viewAcknowledged=false;
  if(!event.active&&!selected?.fixed){unread=false;if(!event.staged_options||dialog.hidden)phase='options';selected=null;optionsReady=false}
  if(event.pending||scenarioComplete()){unread=false;stopSpeech()}
- notify();prepareOptions();
+ notify();prepareOptions();if(fault)$('research-badge').textContent='주행 중단 · 다시 준비해 주세요';
 };
 })();

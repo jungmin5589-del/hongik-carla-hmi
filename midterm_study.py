@@ -3,6 +3,7 @@
 All clocks advance with the owned CARLA scenario. No perception or remote-agent
 claims are derived from this scripted passenger study controller.
 """
+from native_alignment import cached_map
 import math,time
 
 from action_outcome import ActionOutcome
@@ -99,7 +100,7 @@ class StudyRequests:
         self.lane_started=False;self.lane_clear=False;self.safe_stable=0.;self.offset=0.
         self.repeat_count=0;self.service_end=False;self.traffic_yield_ids=set()
         self.original_action=None;self.base_lateral=None;self.last_dt=.04;self.last_level=None
-        self.finish_after_horn=False;self.horn_started_wall=None;self.request_delay=3.
+        self.finish_after_horn=False;self.horn_started_wall=None;self.request_delay=3.;self.ack_delays={}
         self.bay_start_s=0.;self.bay_blocked_s=0.;self.bay_waiting=False
 
     def bind(self,bridge,condition):
@@ -118,7 +119,8 @@ class StudyRequests:
         if action not in allowed:raise ValueError('이 상황에서 제공하는 요청을 선택해 주세요.')
         self.action=action;self.phase='queued';self.pending_at=sc.elapsed
         from research_voice import intent_delay,INTENT_ACTIONS,INTENT_LINES
-        self.request_delay=intent_delay(action,getattr(self,'voice_language',getattr(self.bridge,'language','ko')))
+        language=getattr(self,'voice_language',getattr(self.bridge,'language','ko'))
+        self.request_delay=self.ack_delays[(language,action)] if (language,action) in self.ack_delays else intent_delay(action,language)
         self.feedback=INTENT_LINES[INTENT_ACTIONS[action]][0]+' 실행 전까지 취소할 수 있어요.'
         self.summary='';self.status=None;self.cancelled=False;self.view_seen=False
         self.safe_checked=False;self.safe_bay=None;self.lane_started=False;self.safe_stable=0.;self.stopped=0.;self.observed=0.
@@ -157,6 +159,7 @@ class StudyRequests:
         sc=self.sc;action=self.action;profile=sc.profile
         self.phase='applying';self.started_at=sc.elapsed;self.original_action=action
         self.base_lateral=self.offset
+        previous_gap=getattr(sc,'desired_gap',None)
         sc.action_complete=False;sc.last_action=action;sc.feedback='요청을 반영하고 있어요.'
         self.dispatching=True
         try:
@@ -173,6 +176,8 @@ class StudyRequests:
                 if action=='widen':sc.desired_gap=max(sc.desired_gap+8.,sc.WIDE_GAP)
             sc.outcome.phase='managed'
         finally:self.dispatching=False
+        if action=='widen' and previous_gap is not None:
+            self.gap_goal=sc.desired_gap;sc.desired_gap=previous_gap
         if action=='lateral':self.target_offset=max(-.65,self.offset-.5)
         if action in ('merge','pass','avoid'):self.target_offset=-float(getattr(self.bridge.route,'width',3.5)) if self.bridge else -3.5
         if action in ('safe_stop','end_ride'):
@@ -216,7 +221,7 @@ class StudyRequests:
         if self.finish_after_horn:
             if not sc.completed and time.monotonic()-self.horn_started_wall>10.:self.finish_horn(False)
             return
-        self.last_dt=min(.15,max(0.,dt)) if driving else 0.
+        self.last_dt=max(0.,dt) if driving else 0.
         elapsed=sc.elapsed-(getattr(sc,'onset_elapsed',None) or (10. if sc.profile in ('congestion','night','fog','cargo') else 0.))
         level=1 if elapsed<15. else 2 if elapsed<30. else 3
         if sc.onset and self.last_level!=level:
@@ -230,8 +235,10 @@ class StudyRequests:
         if self.phase=='queued':
             if sc.elapsed-self.pending_at>=self.request_delay:self._execute()
             return
-        dt=min(.15,max(0.,dt));speed=b.ego.get_velocity().length()*3.6 if b and b.ego else 0.
+        dt=max(0.,dt);speed=b.ego.get_velocity().length()*3.6 if b and b.ego else 0.
         age=sc.elapsed-self.started_at if self.started_at is not None else 0.
+        if self.action=='widen' and hasattr(self,'gap_goal'):
+            sc.desired_gap=min(self.gap_goal,sc.desired_gap+1.5*dt)
         if self.phase=='applying':
             ready,status=self._ready(speed,age)
             timeout=120. if self.action in ('safe_stop','end_ride') and self.safe_bay else 50.
@@ -258,7 +265,7 @@ class StudyRequests:
         sc=self.sc;b=self.bridge;a=self.action
         if getattr(sc,'collision_count',0):return speed<.5,'collision'
         if a=='horn':return age>=3.,'achieved'
-        if a=='widen':return sc.gap>=sc.desired_gap-.8,'achieved'
+        if a=='widen':return sc.gap>=getattr(self,'gap_goal',sc.desired_gap)-.8,'achieved'
         if a=='lateral':return abs(self.offset-self.target_offset)<.25 and age>=3.,'achieved'
         if a=='slow':return speed<=13. and age>=4.,'achieved'
         if a=='inspect':
@@ -273,14 +280,14 @@ class StudyRequests:
             if not self.safe_bay:return speed<.5 and age>=5.,'partial'
             if self.bay_blocked_s>=10. and speed<.5:return True,'partial'
             import carla
-            loc=b.ego.get_location();wp=b.world.get_map().get_waypoint(loc,project_to_road=False,lane_type=carla.LaneType.Any)
+            loc=b.ego.get_location();wp=cached_map(b).get_waypoint(loc,project_to_road=False,lane_type=carla.LaneType.Any)
             parked=wp and wp.lane_type in (carla.LaneType.Shoulder,carla.LaneType.Parking)
             if parked and speed<.5:
                 tr=b.ego.get_transform();yaw=math.radians(tr.rotation.yaw);extent=b.vehicles[0]['extent']
                 for forward in (-extent.x,extent.x):
                     for right in (-extent.y,extent.y):
                         corner=carla.Location(x=loc.x+forward*math.cos(yaw)-right*math.sin(yaw),y=loc.y+forward*math.sin(yaw)+right*math.cos(yaw),z=loc.z)
-                        cp=b.world.get_map().get_waypoint(corner,project_to_road=False,lane_type=carla.LaneType.Any)
+                        cp=cached_map(b).get_waypoint(corner,project_to_road=False,lane_type=carla.LaneType.Any)
                         if not cp or cp.lane_type not in (carla.LaneType.Shoulder,carla.LaneType.Parking):parked=False
             return bool(parked and abs(self.offset-self.safe_bay['offset'])<.65 and speed<.5),'achieved'
         if a in ('announce','creep'):
@@ -293,6 +300,21 @@ class StudyRequests:
         return age>=8.,'achieved'
 
     def targets(self,speed,offset):
+        target,lateral=self.raw_targets(speed,offset)
+        b=self.bridge
+        comfort=(self.phase in ('applying','observing') and self.action in ('slow','safe_stop','end_ride')) or self.phase=='stopping'
+        if b and self.sc.profile in ('congestion','night','fog','rattle') and comfort and self.status!='collision' and not getattr(self.sc,'collision_count',0):
+            measured=getattr(b,'state',{}).get('speed_kph')
+            if measured is not None:target=max(target,max(0.,measured-1.2*3.6*self.last_dt))
+        return target,lateral
+
+    def steering_offset(self,distance,default):
+        if self.action not in ('safe_stop','end_ride') or self.phase not in ('applying','observing') or not self.safe_bay or self.bay_waiting:return default
+        runway=max(16.,self.safe_bay['s']-self.bay_start_s)
+        u=min(1.,max(0.,(distance-self.bay_start_s)/max(4.,runway-12.)));u=u*u*(3.-2.*u)
+        return self.base_lateral+(self.safe_bay['offset']-self.base_lateral)*u
+
+    def raw_targets(self,speed,offset):
         if self.finish_after_horn:return 0.,self.horn_stop_offset
         if getattr(self,'stop_in_lane',False):return 0.,self.stop_offset
         if self.phase in ('idle','queued'):return speed,offset
@@ -307,21 +329,22 @@ class StudyRequests:
             if not path_to_bay_clear(b,self.safe_bay['offset']):
                 self.bay_blocked_s+=self.last_dt
                 if sc.profile in ('congestion','night','fog','rattle'):
+                    if not self.bay_waiting:self.bay_hold_offset=self.offset
                     self.bay_waiting=True
-                    return min(speed,18. if sc.profile=='congestion' else 12.),self.offset
+                    # Crawl below the lead/adjacent flow so a real opening grows.
+                    # Reusing the measured offset every tick makes the path drift.
+                    return min(speed,6.),self.bay_hold_offset
                 return 0.,self.offset
             if self.bay_waiting:
                 # Reserve a fresh run-in after adjacent trucks have passed.
                 # The old stop point may already be beside or behind us.
                 bay=find_bay(b)
-                if not bay:return min(speed,18. if sc.profile=='congestion' else 12.),self.offset
+                if not bay:return min(speed,6.),self.bay_hold_offset
                 self.safe_bay=bay;self.bay_start_s=b.ego_s
                 self.base_lateral=self.offset;self.bay_waiting=False
                 ds=bay['s']-b.ego_s
             self.bay_blocked_s=0.
-            runway=max(16.,self.safe_bay['s']-self.bay_start_s)
-            u=min(1.,max(0.,(runway-ds)/max(4.,runway-12.)));u=u*u*(3.-2.*u)
-            lateral=self.base_lateral+(self.safe_bay['offset']-self.base_lateral)*u
+            lateral=self.steering_offset(b.ego_s,self.offset)
             # Never continue at the minimum crawl speed after passing the stop
             # point; actual full-vehicle parking containment gates success.
             if ds<=(.25 if sc.profile=='carpool' else 2.5):
@@ -329,7 +352,8 @@ class StudyRequests:
                 # boundary. Stop if alignment cannot be reached within 5 m.
                 if abs(self.offset-self.safe_bay['offset'])>.10 and ds>-5.:return 1.5,lateral
                 return 0.,lateral
-            return max(3.,min(12.,max(0.,ds)*1.5)),lateral
+            approach_kph=6. if sc.profile in ('congestion','night','fog','rattle') else 12.
+            return max(3.,min(approach_kph,max(0.,ds)*1.5)),lateral
         if a=='lateral':return speed,self.target_offset
         if a in ('merge','pass'):
             from fallen_cargo import left_lane_clear
@@ -342,7 +366,7 @@ class StudyRequests:
             if not clear and abs(self.offset-self.target_offset)>.8:return 0.,self.offset
             u=min(1.,max(0.,(sc.elapsed-self.lane_start_elapsed)/5.));u=u*u*(3.-2.*u)
             lateral=self.lane_start_offset+(self.target_offset-self.lane_start_offset)*u
-            return min(40. if a=='pass' else 36.,speed+2.),lateral
+            return (40. if a=='pass' else 36.),lateral
         if a=='slow':return min(12.,speed),offset
         if a=='support':return (0. if sc.profile in ('carpool','yield') else min(speed,12.)),offset
         return speed,offset
@@ -404,7 +428,7 @@ def rear_approach_clear(b):
 def find_nearby_parking(b):
     """Choose a full-footprint parking stop and check its final approach."""
     import carla
-    sc=b.scenario;extent=b.vehicles[0]['extent'];road_map=b.world.get_map()
+    sc=b.scenario;extent=b.vehicles[0]['extent'];road_map=cached_map(b)
     for travel in (3.,4.,6.,9.,12.,15.,18.):
       if sc.start_s+travel+extent.x>=b.route.length:continue
       for shift in (0.,-.25,-.5,-.75,-1.):
@@ -438,7 +462,7 @@ def find_bay(b):
     import carla
     small=b.profile in ('yield','carpool')
     offsets=(3.2,3.5,3.8) if small else (9.6,9.9,10.2,10.5)
-    road_map=b.world.get_map()
+    road_map=cached_map(b)
     obstacles=[]
     for actor in b.world.get_actors():
         if actor.type_id.startswith(('traffic.traffic_light','traffic.stop','traffic.yield','static.prop.')):

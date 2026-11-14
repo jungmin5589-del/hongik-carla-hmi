@@ -35,14 +35,15 @@ def route_atlas(route,map_name):
     return dict(map=map_name,coordinate_frame='carla_xy',roads=roads,destinations=[],buildings=[],context_source=None)
 
 
-def start_alignment(route,vehicles):
+def start_alignment(route,vehicles,snapshot=None):
     """Check actual settled actors against their assigned path before departure."""
     rows=[]
     for item in vehicles:
-        tr=item['actor'].get_transform();point,yaw=route.sample(item['s'],item['offset'])
+        state=snapshot.find(item['actor'].id) if snapshot else item['actor']
+        tr=state.get_transform();point,yaw=route.sample(item['s'],item['offset'])
         distance=math.hypot(tr.location.x-point[0],tr.location.y-point[1])
         heading=abs((tr.rotation.yaw-math.degrees(yaw)+180)%360-180)
-        speed=item['actor'].get_velocity().length()*3.6
+        speed=state.get_velocity().length()*3.6
         valid=distance<=.75 and heading<=10. and speed<.6
         rows.append(dict(id=item['actor'].id,role=item['role'],position_error_m=round(distance,3),heading_error_deg=round(heading,2),speed_kph=round(speed,2),valid=valid))
     return dict(ready=bool(rows) and all(r['valid'] for r in rows),vehicles=rows)
@@ -83,3 +84,10 @@ def ego_lane(lanes):
         point=min(lane['points'],key=lambda p:abs(p['forward_m']))
         return abs(point['right_m'])
     return 1+min(range(len(driving)),key=lambda i:distance(driving[i])),len(driving)
+
+
+def cached_map(bridge):
+    value=getattr(bridge,'road_map',None)
+    if value is None:
+        value=bridge.world.get_map();bridge.road_map=value
+    return value

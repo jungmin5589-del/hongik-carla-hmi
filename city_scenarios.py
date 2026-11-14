@@ -1,4 +1,5 @@
 """Carpool exterior disturbance and mechanical-noise experiment conditions."""
+from event_writer import open_events
 import math
 import threading
 import time
@@ -29,7 +30,7 @@ class ContextScenario(Scenario2):
  def __init__(self,profile,event_path,start_s,offset=0.):
   self.profile=profile;self.TYPE_ID='city_'+profile;self.start_s=start_s;self.base_offset=offset
   self.lock=threading.RLock();self.enabled=True
-  self.events=open(event_path,'a',encoding='utf-8',buffering=1);self.reset()
+  self.events=open_events(event_path);self.reset()
 
  def reset(self,enabled=None):
   super().reset(enabled)
@@ -84,7 +85,7 @@ class ContextScenario(Scenario2):
   with self.lock:
    self.actual_s=s;self.actual_offset=offset;self.actor_clear=actor_clear;self.safe_location=safe_location
    if not driving or self.completed:return
-   dt=min(.15,max(0.,dt));self.elapsed+=dt
+   dt=max(0.,dt);self.elapsed+=dt
    start=self.exterior.get('dialogue_started_s')
    ready=(start is not None and self.elapsed>=start+.2) if self.profile=='carpool' else self.elapsed>=8.
    if not self.onset and ready:
