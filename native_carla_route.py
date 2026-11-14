@@ -1,5 +1,6 @@
 """CARLA road geometry and physical path following; no neural assets required."""
 import math
+from bisect import bisect_left,bisect_right
 import numpy as np
 
 
@@ -31,6 +32,8 @@ class HighwayRoute:
         self.arc = np.r_[0., np.cumsum(self.segment_length)]
         self.length = float(self.arc[-1])
         self.width = float(waypoints[0].lane_width)
+        self._arc_scalar=tuple(float(x) for x in self.arc)
+        self._segments=tuple((float(p[0]),float(p[1]),float(d[0]),float(d[1]),float(length),float(at)) for p,d,length,at in zip(self.points,self.delta,self.segment_length,self.arc))
 
     @classmethod
     def build(cls, road_map):
@@ -69,19 +72,28 @@ class HighwayRoute:
         return xyz, math.atan2(direction[1], direction[0])
 
     def project(self, xy, previous=None):
-        xy = np.asarray(xy)
-        u = np.clip(np.sum((xy-self.points[:-1,:2])*self.delta, axis=1)/self.segment_length**2, 0, 1)
-        points = self.points[:-1,:2]+self.delta*u[:,None]
-        distances = np.linalg.norm(points-xy, axis=1)
-        if previous is not None:
-            # Prevent nearest-segment jumps where roads pass close to one another.
-            ds = (self.arc[:-1]-previous+self.length/2)%self.length-self.length/2
-            distances[np.abs(ds)>80] = np.inf
-        i = int(np.argmin(distances))
-        s = float(self.arc[i]+u[i]*self.segment_length[i])
-        if previous is not None:
-            s = previous+(s-previous+self.length/2)%self.length-self.length/2
-        return s, float(distances[i])
+        # Small local scalar search: array operations over the full ring release
+        # the GIL repeatedly and can starve the controller under RGB callbacks.
+        # Preserve the original 80 m continuity window and unwrapped lap count.
+        x,y=float(xy[0]),float(xy[1]);arc=self._arc_scalar
+        if previous is None:
+            ranges=[range(len(self._segments))]
+        else:
+            centre=float(previous%self.length);lo=centre-80.;hi=centre+80.
+            ranges=[]
+            if lo<0:ranges.append(range(bisect_left(arc,self.length+lo),len(self._segments)))
+            if hi>=self.length:ranges.append(range(0,bisect_right(arc,hi-self.length)))
+            ranges.append(range(bisect_left(arc,max(0.,lo)),min(len(self._segments),bisect_right(arc,min(self.length,hi)))))
+        best=float('inf');best_s=0.
+        for candidates in ranges:
+            for i in candidates:
+                px,py,dx,dy,length,at=self._segments[i]
+                u=max(0.,min(1.,((x-px)*dx+(y-py)*dy)/(length*length)))
+                ex=px+dx*u-x;ey=py+dy*u-y;distance=ex*ex+ey*ey
+                if distance<best:best=distance;best_s=at+u*length
+        if previous is not None:best_s=previous+(best_s-previous+self.length/2)%self.length-self.length/2
+        return float(best_s),math.sqrt(best)
+
 
 
 def steering(route, distance, offset, transform, speed, geometry=None):

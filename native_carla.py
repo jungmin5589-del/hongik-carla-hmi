@@ -169,7 +169,14 @@ class NativeNavigation(NavigationAdapter):
             data['ego'].update(lane_index=index,lane_count=count)
             wp=self.bridge.road_map.get_waypoint(self.bridge.ego.get_location(),project_to_road=False,lane_type=carla.LaneType.Any)
             if wp:data['ego']['lane_type']=str(wp.lane_type)
-        return enrich_navigation(data,self.bridge)
+        data=enrich_navigation(data,self.bridge)
+        guard=self.bridge.state.get('drive_guard')
+        if guard and data.get('session'):
+            event=data['session']['navigation']['research_event']
+            event.update(active=False,pending=False,title='주행을 중단했어요',situation=guard,description=guard,vehicle_action='차량을 멈추고 있어요. 다시 출발하기 전에 시나리오를 다시 준비해 주세요.',options=[])
+            data['session']['navigation'].update(title=event['title'],body=guard)
+            data['passive']=dict(title=event['title'],body=guard)
+        return data
 
     def raw_state(self):
         b = self.bridge
@@ -250,7 +257,7 @@ class NativeBridge:
         self.state=dict(kind='hongik-native-carla',phase='choose',renderer_backend='carla',error=None,lab_rig=enabled(),
                         mode='paused',quality=quality,width=SIZES[quality][0],height=SIZES[quality][1],
                         speed_kph=0,frames=0,frame=0,target_fps=30,measured_fps=0)
-        self.state['runtime_revision']='20261114-action-voice'
+        self.state['runtime_revision']='20261114-wall-diagnostic'
         self.presentation='midterm';self.condition='B'
         self.language='ko';self.research=ResearchStore()
         self.command={'mode':'paused'};self.profile=None;self.scenario=None;self.ego=None
@@ -355,7 +362,7 @@ class NativeBridge:
 
     def setup(self, profile):
         with self.lock:
-            self.state.update(phase='preparing',error=None,mode='paused');self.command['mode']='paused'
+            self.state.update(phase='preparing',error=None,mode='paused',drive_guard=None);self.command['mode']='paused'
             self.clear_actors()
             target='Town03' if profile in ('yield','carpool') else 'Town04'
             if self.world is None or not self.world.get_map().name.endswith('/'+target):self.connect(profile)
@@ -441,6 +448,8 @@ class NativeBridge:
         if self.scenario:
             self.scenario.collision_count=getattr(self.scenario,'collision_count',0)+1
             impulse=event.normal_impulse.length()
+            self.command['mode']='paused'
+            self.state['drive_guard']='접촉이 감지되어 주행을 중단했어요. 시나리오를 다시 준비해 주세요.'
             if self.profile=='cargo' and self.cargo and self.cargo.actor and event.other_actor.id==self.cargo.actor.id:
                 self.scenario.impact_count+=1;self.scenario.impact_impulse=max(self.scenario.impact_impulse,impulse)
             self.scenario.log('collision',other_type=event.other_actor.type_id,other_id=event.other_actor.id,frame=event.frame,impulse_ns=impulse)
@@ -483,6 +492,8 @@ class NativeBridge:
                 if not self.profile:raise ValueError('시나리오를 먼저 선택해 주세요.')
                 self.pending.put(('profile',self.profile))
             if 'mode' in body:
+                if body['mode']=='auto' and self.state.get('drive_guard'):
+                    raise ValueError('주행 이상이 기록됐어요. 시나리오를 다시 준비한 뒤 출발해 주세요.')
                 if body['mode'] not in ('auto','paused'):raise ValueError('Invalid mode')
                 if self.state['phase']!='live' or not self.scenario or self.scenario.completed:raise ValueError('시나리오를 먼저 준비해 주세요.')
                 if body['mode']=='auto' and self.scenario.elapsed==0:
@@ -512,11 +523,13 @@ class NativeBridge:
                 if self.scenario is None:continue
                 cycle_started=time.perf_counter()
                 snapshot=self.world.wait_for_tick(2.)
+                snapshot_at=time.perf_counter()
                 stamp=snapshot.timestamp.elapsed_seconds
                 if previous is not None and stamp-previous<1/30:continue
                 sim_dt=0 if previous is None else max(0,stamp-previous)
                 dt=min(.15,sim_dt);previous=stamp
                 with self.lock:
+                    lock_at=time.perf_counter()
                     if self.state['phase']!='live':continue
                     sc=self.scenario;driving=self.command['mode']=='auto' and not sc.completed
                     self.state['mode']='auto' if driving else 'paused'
@@ -525,6 +538,11 @@ class NativeBridge:
                     et=ego_snapshot.get_transform()
                     ego['s'],_=self.route.project([et.location.x,et.location.y],ego['s']);self.ego_s=ego['s']
                     error=tracking_alignment(self.route,ego,et)['position_error_m']
+                    if driving and sim_dt>1.:
+                        self.state['drive_guard']='제어 갱신이 지연되어 주행을 중단했어요. 다시 준비해 주세요.'
+                    if self.state.get('drive_guard'):
+                        driving=False;self.command['mode']='paused';self.state['mode']='paused'
+                        self.client.apply_batch([carla.command.ApplyVehicleControl(v['actor'].id,carla.VehicleControl(throttle=0.,brake=1.,hand_brake=False)) for v in self.vehicles])
                     if self.profile=='cargo':
                         self.update_cargo(dt,driving,snapshot,error)
                         continue
@@ -534,11 +552,18 @@ class NativeBridge:
                     if self.profile in CONTEXT_OPTIONS:
                         self.update_context(dt,driving,snapshot,error)
                         continue
+                    projection_started=time.perf_counter();project_timings=[]
                     for item in self.vehicles[1:]:
                         if snapshot.frame<=item.get('recycle_until_frame',-1):continue
+                        before_lookup=time.perf_counter()
                         tr=snapshot.find(item['actor'].id).get_transform()
+                        before_project=time.perf_counter()
                         item['s'],_=self.route.project([tr.location.x,tr.location.y],item['s'])
+                        project_timings.append([item['role'],round((before_project-before_lookup)*1000,2),round((time.perf_counter()-before_project)*1000,2)])
                     projected_at=time.perf_counter()
+                    if driving and (error>1.5 or getattr(sc,'collision_count',0)>0):
+                        self.command['mode']='paused';driving=False;self.state['mode']='paused'
+                        self.state['drive_guard']='차로 이탈 또는 접촉으로 주행을 중단했어요. 다시 준비해 주세요.'
                     lead=self.vehicles[1];gap=max(0,lead['s']-ego['s']-lead['extent'].x-ego['extent'].x)
                     speed=ego_snapshot.get_velocity().length()*3.6
                     sc.tick(dt,driving,speed,gap)
@@ -613,6 +638,10 @@ class NativeBridge:
                                       traffic_alignment=traffic_alignment,
                                       control_cycle_ms=round((time.perf_counter()-cycle_started)*1000,1),
                                       projection_ms=round((projected_at-cycle_started)*1000,1),
+                                      tick_wait_ms=round((snapshot_at-cycle_started)*1000,1),
+                                      lock_wait_ms=round((lock_at-snapshot_at)*1000,1),
+                                      actor_projection_ms=round((projected_at-projection_started)*1000,1),
+                                      project_timings=project_timings,
                                       planning_ms=round((planned_at-projected_at)*1000,1))
                     if elapsed-last_trace>=.5:
                         self.trace.write(json.dumps(dict(self.state,scenario=sc.public()),ensure_ascii=False)+'\n');last_trace=elapsed
