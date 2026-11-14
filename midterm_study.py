@@ -99,7 +99,7 @@ class StudyRequests:
         self.lane_started=False;self.lane_clear=False;self.safe_stable=0.;self.offset=0.
         self.repeat_count=0;self.service_end=False;self.traffic_yield_ids=set()
         self.original_action=None;self.base_lateral=None;self.last_dt=.04;self.last_level=None
-        self.finish_after_horn=False;self.horn_started_wall=None
+        self.finish_after_horn=False;self.horn_started_wall=None;self.request_delay=3.
         self.bay_start_s=0.;self.bay_blocked_s=0.;self.bay_waiting=False
 
     def bind(self,bridge,condition):
@@ -117,10 +117,12 @@ class StudyRequests:
         if fixed:allowed|={'support','safe_stop'}
         if action not in allowed:raise ValueError('이 상황에서 제공하는 요청을 선택해 주세요.')
         self.action=action;self.phase='queued';self.pending_at=sc.elapsed
-        self.feedback='요청을 준비했어요. 3초 안에 취소할 수 있어요.'
+        from research_voice import intent_delay,INTENT_ACTIONS,INTENT_LINES
+        self.request_delay=intent_delay(action,getattr(self,'voice_language',getattr(self.bridge,'language','ko')))
+        self.feedback=INTENT_LINES[INTENT_ACTIONS[action]][0]+' 실행 전까지 취소할 수 있어요.'
         self.summary='';self.status=None;self.cancelled=False;self.view_seen=False
         self.safe_checked=False;self.safe_bay=None;self.lane_started=False;self.safe_stable=0.;self.stopped=0.;self.observed=0.
-        sc.log('request_queued',action=action,countdown_s=3,condition=self.condition,fixed_button=fixed)
+        sc.log('request_queued',action=action,countdown_s=self.request_delay,condition=self.condition,fixed_button=fixed)
         return sc.public()
 
     def cancel(self):
@@ -226,7 +228,7 @@ class StudyRequests:
         # finish after the physical actor has actually remained stationary.
         if self.phase in ('idle','complete') or (not driving and (self.phase!='stopping' or not b or not b.ego)):return
         if self.phase=='queued':
-            if sc.elapsed-self.pending_at>=3.:self._execute()
+            if sc.elapsed-self.pending_at>=self.request_delay:self._execute()
             return
         dt=min(.15,max(0.,dt));speed=b.ego.get_velocity().length()*3.6 if b and b.ego else 0.
         age=sc.elapsed-self.started_at if self.started_at is not None else 0.
@@ -377,7 +379,7 @@ class StudyRequests:
     def public(self):
         sc=self.sc
         elapsed=sc.elapsed-self.pending_at if self.pending_at is not None else 0.
-        return dict(phase=self.phase,action=self.action,countdown_s=round(max(0.,3.-elapsed),2) if self.phase=='queued' else None,
+        return dict(phase=self.phase,action=self.action,countdown_s=round(max(0.,self.request_delay-elapsed),2) if self.phase=='queued' else None,
                     condition=self.condition,cancellable=not self.finish_after_horn and self.phase in ('queued','applying','observing'),
                     repeatable=self.phase=='observing' and self.action in ('horn','widen','lateral','inspect'),
                     repeat_count=self.repeat_count,view_seen=self.view_seen,service_end=self.service_end,

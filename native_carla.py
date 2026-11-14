@@ -250,7 +250,7 @@ class NativeBridge:
         self.state=dict(kind='hongik-native-carla',phase='choose',renderer_backend='carla',error=None,lab_rig=enabled(),
                         mode='paused',quality=quality,width=SIZES[quality][0],height=SIZES[quality][1],
                         speed_kph=0,frames=0,frame=0,target_fps=30,measured_fps=0)
-        self.state['runtime_revision']='20261114-pilot-feedback'
+        self.state['runtime_revision']='20261114-action-voice'
         self.presentation='midterm';self.condition='B'
         self.language='ko';self.research=ResearchStore()
         self.command={'mode':'paused'};self.profile=None;self.scenario=None;self.ego=None

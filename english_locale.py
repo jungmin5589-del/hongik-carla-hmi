@@ -421,4 +421,7 @@ def catalog():
             key=canonical(key)
             if key in EN_VOICE:strings[value[0] if isinstance(value,tuple) else value]=EN_VOICE[key][0]
     strings.update({'상황 확인 · 대응 선택': 'Situation & response', '눌러서 상황·대응 보기': 'Tap to review situation and choices', '새 상황 · 눌러서 대응 선택': 'New situation · tap for choices', '요청을 받았어요.': 'Request received.', '요청을 반영하고 있어요.': 'Applying your request.', '지원 요청을 기록하며, 실제 상담원 연결은 보장되지 않아요.': 'The assistance request is recorded; connection to a live agent is not guaranteed.', '정차할 공간을 확인한 뒤 서서히 이동해요.': 'We will check for a stopping area and move over gradually.'})
+    strings.update({'실행 전까지 취소할 수 있어요.': 'You can cancel before execution.', '요청한 대응을 안내하고 있어요. 실행 전까지 취소할 수 있어요.': 'I am explaining the requested response. You can cancel before execution.'})
+    from research_voice import INTENT_LINES
+    strings.update({row[0]:row[1] for row in INTENT_LINES.values()})
     return dict(language='en',strings=strings,voices=voice_catalog())

@@ -19,7 +19,7 @@ for(const [lang,pack] of Object.entries(JSON.parse(generated.stdout)))fs.writeFi
    page.on('pageerror',e=>errors.push(e.message));
    await page.route('https://pilot.test/**',async route=>{
     const url=new URL(route.request().url());
-    if(url.pathname==='/')return route.fulfill({contentType:'text/html',body:'<!doctype html><html><head><meta charset="utf-8"><script src="/language.js"></script><style>[hidden]{display:none!important}</style></head><body><div id="route-card"></div><button id="music" aria-label="번역없는 노래">Music</button><div id="music-menu" hidden></div><script>document.getElementById("music").onclick=()=>{const n=document.getElementById("music-menu");n.hidden=!n.hidden;n.setAttribute("title","번역없는 노래");n.textContent="음악을 선택하세요"}</script><script src="/midterm_panel.js"></script></body></html>'});
+    if(url.pathname==='/')return route.fulfill({contentType:'text/html',body:'<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/midterm_panel.css"><script src="/language.js"></script><style>[hidden]{display:none!important}</style></head><body><div id="route-card"></div><button id="music" aria-label="번역없는 노래">Music</button><div id="music-menu" hidden></div><script>document.getElementById("music").onclick=()=>{const n=document.getElementById("music-menu");n.hidden=!n.hidden;n.setAttribute("title","번역없는 노래");n.textContent="음악을 선택하세요"}</script><script src="/midterm_panel.js"></script></body></html>'});
     if(url.pathname==='/api/language/'+lang)return route.fulfill({contentType:'application/json',body:fs.readFileSync(path.join(__dirname,'validation/pilot-feedback',lang+'.json'))});
     if(url.pathname==='/api/state')return route.fulfill({json:fixture()});
     if(url.pathname==='/api/command'){sent.push(route.request().postDataJSON());return route.fulfill({json:{accepted:true,session_id:'qa',command_id:'q'}})}
@@ -29,6 +29,8 @@ for(const [lang,pack] of Object.entries(JSON.parse(generated.stdout)))fs.writeFi
    });
    const refresh=()=>page.evaluate(async()=>window.CockpitUpdate(await(await fetch('/api/state')).json()));
    await page.goto('https://pilot.test/?lang='+lang);await page.evaluate(()=>HongikLocale.ready);await refresh();
+   assert.equal(await page.locator('#research-launch').evaluate(e=>getComputedStyle(e).animationName),'study-double-glow');
+   await page.emulateMedia({reducedMotion:'reduce'});assert.equal(await page.locator('#research-launch').evaluate(e=>getComputedStyle(e).animationName),'none');await page.emulateMedia({reducedMotion:'no-preference'});
    // Unknown Korean attributes must not create an unbounded observer loop.
    for(let i=0;i<5;i++){await page.locator('#music').click();await page.waitForTimeout(40)}
    assert.equal(await page.evaluate(()=>1+1),2);

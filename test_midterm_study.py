@@ -52,7 +52,7 @@ class MidtermTests(unittest.TestCase):
         self.sc.profile='congestion';self.b.profile='congestion'
         self.b.route=SimpleNamespace(width=3.5)
         self.select('study_merge');self.cmd('study_merge')
-        self.sc.tick(3.1,True,30,5.5);self.sc.study.tick(.1,True)
+        self.sc.tick(self.sc.study.request_delay+.1,True,30,5.5);self.sc.study.tick(.1,True)
         self.assertEqual(self.sc.study.phase,'applying')
         self.assertFalse(self.sc.completed)
 
@@ -61,7 +61,7 @@ class MidtermTests(unittest.TestCase):
         self.select('study_horn');self.cmd('study_horn')
         self.assertEqual(self.sc.horn_count,0)
         self.assertEqual(self.sc.study.phase,'queued')
-        self.sc.tick(3.1,True,30,5.5);self.sc.study.tick(.1,True)
+        self.sc.tick(self.sc.study.request_delay+.1,True,30,5.5);self.sc.study.tick(.1,True)
         self.assertEqual(self.sc.horn_count,1)
         self.assertEqual(self.sc.public()['horn_duration_s'],2.2)
         self.assertEqual(self.sc.study.targets(30.,0.),(30.,0.))
@@ -80,6 +80,13 @@ class MidtermTests(unittest.TestCase):
             self.sc.elapsed+=2.5
             self.assertEqual(study.targets(30.,0.)[1],-3.5)
 
+    def test_acknowledgement_delay_uses_current_interface_language(self):
+        self.select('study_horn')
+        with patch('research_voice.intent_delay',return_value=6.) as delay:
+            self.cmd('study_horn',language='zh')
+            delay.assert_called_once_with('horn','zh')
+        self.assertEqual(self.sc.study.request_delay,6.)
+
     def test_opening_ai_does_not_end_or_pause_congestion(self):
         self.sc.profile='congestion';self.b.profile='congestion';self.b.command={'mode':'auto'}
         self.cmd('study_open',options_visible=True)
@@ -97,7 +104,7 @@ class MidtermTests(unittest.TestCase):
         self.select('study_horn');self.cmd('study_horn')
         for _ in range(50):self.sc.tick(.1,False,0,6.5);self.sc.study.tick(.1,False)
         self.assertEqual(self.sc.horn_count,0)
-        self.sc.tick(3.01,True,30,6.5);self.sc.study.tick(.1,True)
+        self.sc.tick(self.sc.study.request_delay+.01,True,30,6.5);self.sc.study.tick(.1,True)
         self.assertEqual(self.sc.horn_count,1)
         for _ in range(10):self.sc.study.tick(.1,True)
         self.assertEqual(self.sc.horn_count,1)
@@ -109,7 +116,7 @@ class MidtermTests(unittest.TestCase):
         self.cmd('study_fixed_help');self.assertEqual(self.sc.study.action,'support')
 
     def test_widen_requires_measured_gap(self):
-        self.select('study_widen');self.cmd('study_widen');self.sc.tick(3.1,True,30,6.5);self.sc.study.tick(.1,True)
+        self.select('study_widen');self.cmd('study_widen');self.sc.tick(self.sc.study.request_delay+.1,True,30,6.5);self.sc.study.tick(.1,True)
         self.assertEqual(self.sc.desired_gap,28)
         self.assertFalse(self.sc.study._ready(20,10)[0]);self.sc.gap=28
         self.assertTrue(self.sc.study._ready(20,10)[0])

@@ -271,6 +271,8 @@ class NavigationAdapter:
                 return previous['queued']
             action = body.get('action')
             details = body.get('client_event') or {}
+            if getattr(sc,'study',None) and isinstance(details,dict) and details.get('language') in ('ko','en','zh'):
+                sc.study.voice_language=details['language']
             if not isinstance(details, dict):
                 raise ValueError('Invalid client event')
             if action in {option['action'] for option in self.options()}:

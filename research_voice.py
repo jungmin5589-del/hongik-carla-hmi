@@ -26,6 +26,37 @@ LINES={
  'unfulfilled':('요청한 대응을 완료하지 못했어요. 현재 상태를 확인해 주세요.','We could not complete the request. Please review the current status.','未能完成您的请求，请查看当前状态。'),
  'complete':('주변 확인을 마치고 차량을 정차했어요.','We have finished monitoring the surroundings and stopped.','已完成周围情况确认，车辆已停车。'),
  'cancelled':('요청을 취소했어요.','The request was cancelled.','已取消请求。')}
+# Prospective acknowledgements: describe the requested action, never claim success.
+INTENT_LINES={
+ 'intent_gap':('앞차와 거리를 넓힐게요.','I will increase the gap ahead.','我会拉大与前车的距离。'),
+ 'intent_left':('왼쪽의 안전한 틈을 기다릴게요.','I will wait for a safe gap on the left.','我会等候左侧的安全空隙。'),
+ 'intent_safe_stop':('안전한 정차 공간을 찾아볼게요.','I will look for a safe place to stop.','我会寻找安全的停车位置。'),
+ 'intent_end_ride':('안전하게 세운 뒤 이용을 마칠게요.','I will find a safe stop to end the ride.','我会安全停车后结束行程。'),
+ 'intent_stop':('앞의 물체와 거리를 두고 멈출게요.','I will stop before the object ahead.','我会在前方物体前保持距离停车。'),
+ 'intent_inspect':('차량과 주변 상태를 보여드릴게요.','I will show the vehicle and surroundings.','我会显示车辆和周围的状态。'),
+ 'intent_slow':('속도를 서서히 낮출게요.','I will gradually slow down.','我会逐渐降低车速。'),
+ 'intent_horn':('경적을 울려 앞차 반응을 살필게요.','I will sound the horn and check the response.','我会鸣笛并观察前车反应。'),
+ 'intent_announce':('스피커로 먼저 건너시라고 알릴게요.','I will use the speaker to invite them to cross.','我会通过扬声器示意行人先过街。'),
+ 'intent_creep':('보행자가 지나간 뒤 천천히 갈게요.','I will proceed slowly after the pedestrian clears.','行人通过后，我会缓慢前进。'),
+ 'intent_support':('지원을 요청할게요. 연결되면 알려드릴게요.','I will request assistance and check the connection.','我会请求支援并确认连接状态。'),
+ 'intent_relocate':('사람이 물러나면 대기 장소를 옮길게요.','I will move once the person is clear.','等周围的人离开后，我会更换等候位置。'),
+ 'intent_avoid':('옆 공간을 확인하고 물체를 피할게요.','I will check the adjacent space before passing the object.','我会确认旁边空间后绕过物体。'),
+ 'intent_maintain':('지금의 대응을 유지할게요.','I will maintain the current response.','我会保持当前的应对方式。')}
+LINES.update(INTENT_LINES)
+INTENT_ACTIONS={'lateral':'intent_gap','widen':'intent_gap','merge':'intent_left','pass':'intent_left',
+ 'safe_stop':'intent_safe_stop','end_ride':'intent_end_ride','stop':'intent_stop','inspect':'intent_inspect',
+ 'slow':'intent_slow','horn':'intent_horn','announce':'intent_announce','creep':'intent_creep',
+ 'support':'intent_support','relocate':'intent_relocate','avoid':'intent_avoid','delegate':'intent_avoid','maintain':'intent_maintain'}
+
+def intent_delay(action,lang='ko'):
+    """Allow the verified cached acknowledgement to finish before actuation."""
+    key=INTENT_ACTIONS.get(action)
+    if not key:return 3.
+    try:
+        with wave.open(str(audio_path(lang+'_'+key))) as w:
+            return max(3.,min(15.,w.getnframes()/w.getframerate()+.4))
+    except (OSError,ValueError,KeyError,wave.Error):return 3.
+
 ACTION_KEY={'lateral':'gap','widen':'gap','merge':'left','pass':'left','end_ride':'stop',
  'safe_stop':'stop','stop':'stop','inspect':'inspect','slow':'slow','horn':'horn',
  'announce':'announce','creep':'creep','support':'support','relocate':'relocate',
@@ -83,7 +114,7 @@ def catalog(lang='ko'):
         try:audio_path(key);cached=True
         except (OSError,ValueError,KeyError,wave.Error):cached=False
         result[key[len(lang)+1:]]=dict(entry,cached=cached,url='/api/research-audio/'+key+'.wav' if cached else None)
-    return dict(language=lang,voices=result,actions=ACTION_KEY)
+    return dict(language=lang,voices=result,actions=ACTION_KEY,intent_actions=INTENT_ACTIONS)
 
 def chinese_voices():
     voices={key[len('scene_'):]:v for key,v in catalog('zh')['voices'].items() if key.startswith('scene_')}

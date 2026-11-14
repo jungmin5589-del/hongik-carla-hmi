@@ -33,3 +33,10 @@ body.midterm-study #research-launch.has-update{background:#edf3ff!important;anim
 @keyframes study-invitation{50%{box-shadow:0 0 0 5px #3e6ae127}}
 body.midterm-study #research-launch:focus-visible{outline:4px solid #ffbf47;outline-offset:4px}
 @media(prefers-reduced-motion:reduce){body.midterm-study #research-launch.has-update{animation:none!important}}
+
+/* Slow double glow marks a new situation; acknowledgement stops it. */
+body.midterm-study #research-launch.has-update{animation:study-double-glow 3s ease-in-out infinite!important}
+@keyframes study-double-glow{0%,60%,100%{box-shadow:0 5px 18px #1e3f6a28;background:#fff}18%,42%{box-shadow:0 0 0 6px #3e6ae126,0 0 24px #3e6ae14d;background:#dfebff;border-color:#224fc4}30%{box-shadow:0 0 0 2px #3e6ae118;background:#f4f8ff}}
+body.midterm-study #research-launch.has-update::after{animation:study-arrow 3s ease-in-out infinite}
+@keyframes study-arrow{18%,42%{transform:translateX(3px);color:#174bc7}0%,60%,100%{transform:translateX(0)}}
+@media(prefers-reduced-motion:reduce){body.midterm-study #research-launch.has-update,body.midterm-study #research-launch.has-update::after{animation:none!important}body.midterm-study #research-launch.has-update{background:#dfebff!important;border-color:#224fc4!important}}

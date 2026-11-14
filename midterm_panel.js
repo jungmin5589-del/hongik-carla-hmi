@@ -32,7 +32,7 @@ const vehicle=document.createElement('section');vehicle.className='midterm-info-
 left.append($('research-feedback'));left.insertAdjacentHTML('beforeend','<section id="research-inspect-view" hidden><small>현재 차량 주변 위치</small><canvas id="research-surroundings" width="360" height="180" aria-label="실제 CARLA 주변 차량 위치"></canvas></section><img id="research-result-frame" alt="실제 주행 결과 화면" hidden>');
 right.append($('research-direct-done'),$('research-options-open'),$('research-options-label'),$('research-options'));
 right.insertAdjacentHTML('beforeend','<button id="research-maintain" type="button">그냥 둘게요</button>');right.append($('research-confirmation'));
-right.insertAdjacentHTML('beforeend','<div id="research-countdown" hidden><strong id="research-countdown-number">3</strong><p>초 뒤 실행합니다</p><button id="research-pending-cancel" type="button">요청 취소</button></div><button id="research-repeat" type="button" hidden>한 번 더</button>');
+right.insertAdjacentHTML('beforeend','<div id="research-countdown" hidden><p id="research-request-name"></p><strong id="research-countdown-number">3</strong><p>초 뒤 실행합니다</p><button id="research-pending-cancel" type="button">요청 취소</button></div><button id="research-repeat" type="button" hidden>한 번 더</button>');
 content.replaceChildren(left,right);
 root.insertAdjacentHTML('beforeend','<button id="research-fixed-help" class="midterm-fixed" type="button">도움 요청</button><button id="research-fixed-stop" class="midterm-fixed" type="button">정차 요청</button>');
 const passive=document.createElement('div');passive.id='midterm-passive';passive.innerHTML='<small>차량 상태</small><strong id="midterm-passive-title"></strong><p id="midterm-passive-body"></p>';$('route-card').append(passive);
@@ -81,7 +81,7 @@ function post(action,details={}){
  if(!linkLive||!snapshot||!nav)return Promise.reject(Error('주행 연결을 확인해 주세요.'));
  const body={session_id:snapshot.session_id,navigation_id:nav.id,action,request_id:crypto.randomUUID(),
   client_event:{phase,client_ms:performance.now(),event_visible:event?.active===true,
-   source:'hongik_click_panel',...details}};
+   source:'hongik_click_panel',language:window.HongikLocale?.lang||'ko',...details}};
  const task=sendTail.catch(()=>{}).then(async()=>{
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),4000);
   try{
@@ -152,7 +152,7 @@ function render(){
   }
  }
  $('research-maintain').hidden=!showOptions;
- const study=event.study||{};const queued=study.phase==='queued';$('research-countdown').hidden=!queued;$('research-countdown-number').textContent=Math.max(1,Math.ceil(study.countdown_s||0));$('research-repeat').hidden=!study.repeatable;
+ const study=event.study||{};const requested=(event.options||[]).find(o=>o.action==='study_'+study.action);$('research-request-name').textContent=requested?.label||(study.action==='support'?'도움 요청':study.action==='safe_stop'?'정차 요청':'');const queued=study.phase==='queued';$('research-countdown').hidden=!queued;$('research-countdown-number').textContent=Math.max(1,Math.ceil(study.countdown_s||0));$('research-repeat').hidden=!study.repeatable;
  const inspecting=study.action==='inspect'&&['applying','observing'].includes(study.phase)&&!dialog.hidden;
  $('research-inspect-view').hidden=!inspecting;if(inspecting){drawSurroundings();if(!viewAcknowledged){viewAcknowledged=true;post('study_view_opened').catch(()=>{viewAcknowledged=false})}}
  $('research-result-frame').hidden=inspecting||!['observing','complete'].includes(study.phase)||dialog.hidden;
@@ -201,7 +201,7 @@ async function choose(option){
   await post('study_choice',{choice:option.action});if(!isCurrent(token))return;
   selected=option;
   phase='confirm';$('research-confirm-copy').textContent=option.label+' 요청을 실행할까요? '+option.detail;
- window.HongikFeedback?.say('choice');
+ // The execution acknowledgement names the action when the request is queued.
  }catch(error){if(isCurrent(token))showError(error)}
  finally{if(isCurrent(token)){busy=false;render();if(phase==='confirm')$('research-execute').focus()}}
 }
@@ -230,7 +230,7 @@ async function execute(){
  }catch(error){if(isCurrent(token)){phase='options';selected=null;showError(error)}}
  finally{if(isCurrent(token)){busy=false;render()}}
 }
-function fixedRequest(action,label){if(busy||!event||event.pending)return;selected={action,label,fixed:true};phase='confirm';dialogReady=true;optionsReady=false;dialog.hidden=false;endingDismissed=true;$('research-confirm-copy').textContent=label+'을 실행할까요? '+(action==='study_fixed_help'?'지원 요청을 기록하며, 실제 상담원 연결은 보장되지 않아요.':'정차할 공간을 확인한 뒤 서서히 이동해요.')+' 실행 후에도 3초 안에 취소할 수 있어요.';render();}
+function fixedRequest(action,label){if(busy||!event||event.pending)return;selected={action,label,fixed:true};phase='confirm';dialogReady=true;optionsReady=false;dialog.hidden=false;endingDismissed=true;$('research-confirm-copy').textContent=label+'을 실행할까요? '+(action==='study_fixed_help'?'지원 요청을 기록하며, 실제 상담원 연결은 보장되지 않아요.':'정차할 공간을 확인한 뒤 서서히 이동해요.')+' 실행 전까지 취소할 수 있어요.';render();}
 $('research-fixed-help').onclick=()=>fixedRequest('study_fixed_help','도움 요청');$('research-fixed-stop').onclick=()=>fixedRequest('study_fixed_stop','정차 요청');
 $('research-maintain').onclick=()=>choose((event?.options||[]).find(o=>o.action==='study_maintain'));
 $('research-pending-cancel').onclick=async()=>{try{await post('study_cancel_pending');close();}catch(error){showError(error)}};
