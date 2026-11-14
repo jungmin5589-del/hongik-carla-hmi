@@ -18,6 +18,8 @@ def recycle_destination(distance, ego_distance, count, occupied, spacing=13., re
     if distance-ego_distance <= cycle-rear:
         return None
     destination=ego_distance-rear+(distance-ego_distance+rear)%cycle
+    # A delayed sample must not wrap a car back into the visible front corridor.
+    if destination > ego_distance-60.:return None
     if any(abs(other-destination)<9. for other in occupied):
         return None
     return destination

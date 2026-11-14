@@ -14,8 +14,8 @@ def option(key, label, detail):
 
 OPTIONS = {
  'congestion':[
-  option('horn','클락션','내비에서 빠앙 소리를 한 번 재생하고 바로 주행을 마쳐요.'),
-  option('merge','1차로로 진입하기','오늘 실험에서는 요청을 기록하고 현재 차로에서 주행을 종료해요.'),
+  option('horn','클락션','경적을 길게 한 번 울리고 주변 차량의 반응을 확인해요.'),
+  option('merge','1차로로 진입하기','왼쪽에 안전한 틈이 생길 때까지 기다린 뒤 천천히 진입해요.'),
   option('end_ride','근처에서 내리기','안전하게 정차할 장소를 확인하고 이용을 마쳐요.')],
  'fog':[
   option('inspect','주변 인식 화면 보기','차량 주변의 위치와 차로 표시를 자세히 살펴봐요.'),
@@ -120,9 +120,7 @@ class StudyRequests:
         self.feedback='요청을 준비했어요. 3초 안에 취소할 수 있어요.'
         self.summary='';self.status=None;self.cancelled=False;self.view_seen=False
         self.safe_checked=False;self.safe_bay=None;self.lane_started=False;self.safe_stable=0.;self.stopped=0.;self.observed=0.
-        immediate=sc.profile=='congestion' and action=='horn'
-        sc.log('request_queued',action=action,countdown_s=0 if immediate else 3,condition=self.condition,fixed_button=fixed)
-        if immediate:self._execute()
+        sc.log('request_queued',action=action,countdown_s=3,condition=self.condition,fixed_button=fixed)
         return sc.public()
 
     def cancel(self):
@@ -158,13 +156,6 @@ class StudyRequests:
         self.phase='applying';self.started_at=sc.elapsed;self.original_action=action
         self.base_lateral=self.offset
         sc.action_complete=False;sc.last_action=action;sc.feedback='요청을 반영하고 있어요.'
-        if profile=='congestion' and action=='merge':
-            self.stop_in_lane=True;self.stop_offset=self.offset;self.phase='stopping';self.status='cancelled'
-            self.summary='1차로 진입 요청을 기록하고 현재 차로에서 주행을 종료했어요.'
-            self.feedback='현재 차로에서 감속하고 주행을 마치고 있어요.'
-            sc.outcome.phase='stopping';sc.outcome.status=self.status;sc.feedback=self.feedback
-            sc.log('request_ended_without_lane_change',action=action,status=self.status,reason='stop_in_current_lane')
-            return
         self.dispatching=True
         try:
             native=profile in ('congestion','night','fog')
@@ -209,9 +200,6 @@ class StudyRequests:
           'stop':'낙하물 앞에서 간격을 두고 멈추고 있어요.',
           'delegate':'정지 후 주변 공간이 확보되면 회피해요.'}[action]
         sc.feedback=self.feedback;sc.log('request_execution_started',action=action,repeat_count=self.repeat_count)
-        if profile=='congestion' and action=='horn':
-            self.finish_after_horn=True;self.horn_started_wall=time.monotonic();self.horn_stop_offset=self.offset
-            self.feedback='빠앙 소리를 재생하고 주행을 마치고 있어요.';sc.feedback=self.feedback
 
     def finish_horn(self,confirmed=True):
         sc=self.sc;self.phase='complete';self.status='achieved' if confirmed else 'unfulfilled'
@@ -252,7 +240,7 @@ class StudyRequests:
                 sc.log('request_result_observation',action=self.action,status=self.status,summary=self.summary)
         elif self.phase=='observing':
             self.observed+=dt
-            if self.observed>=12.:
+            if self.observed>=20.:
                 self.phase='stopping';sc.outcome.phase='stopping'
                 if hasattr(sc,'phase'):sc.phase='finishing'
         elif self.phase=='stopping':
@@ -346,10 +334,13 @@ class StudyRequests:
             clear=left_lane_clear(b) and rear_approach_clear(b)
             if clear:self.safe_stable+=self.last_dt
             else:self.safe_stable=0.
-            if self.safe_stable>=.5:self.lane_started=True
+            if self.safe_stable>=1.5 and not self.lane_started:
+                self.lane_started=True;self.lane_start_elapsed=sc.elapsed;self.lane_start_offset=self.offset
             if not self.lane_started:return speed,offset
             if not clear and abs(self.offset-self.target_offset)>.8:return 0.,self.offset
-            return (40. if a=='pass' else 36.),self.target_offset
+            u=min(1.,max(0.,(sc.elapsed-self.lane_start_elapsed)/5.));u=u*u*(3.-2.*u)
+            lateral=self.lane_start_offset+(self.target_offset-self.lane_start_offset)*u
+            return min(40. if a=='pass' else 36.,speed+2.),lateral
         if a=='slow':return min(12.,speed),offset
         if a=='support':return (0. if sc.profile in ('carpool','yield') else min(speed,12.)),offset
         return speed,offset
@@ -380,7 +371,7 @@ class StudyRequests:
 
     def outcome(self):
         return dict(action=self.action,phase='applying' if self.phase=='queued' else self.phase,status=self.status,
-                    summary=self.summary,observed_s=round(self.observed,2),observe_s=0. if self.finish_after_horn else 12.,
+                    summary=self.summary,observed_s=round(self.observed,2),observe_s=20.,
                     message=('주행이 끝났어요.' if self.finish_after_horn else '주변 상황을 확인했어요.') if self.phase=='complete' else self.feedback)
 
     def public(self):

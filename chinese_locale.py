@@ -218,4 +218,6 @@ def catalog():
     for profile,copy in KO_COPY.items():strings.update(zip(copy,COPY[profile]))
     for profile,options in KO_OPTIONS.items():
         for original,(label,detail) in zip(options,OPTIONS[profile]):strings[original['label']]=label;strings[original['detail']]=detail
+    strings.update({'차량 연결을 확인하고 있어요.': '正在检查车辆连接。', '차량 연결이 끊겼어요. 다시 연결된 뒤 선택해 주세요.': '车辆连接已断开，请重新连接后再选择。'})
+    strings.update({'상황 확인 · 대응 선택': '查看情况 · 选择应对', '눌러서 상황·대응 보기': '点击查看情况与应对选项', '새 상황 · 눌러서 대응 선택': '新情况 · 点击选择应对', '요청을 받았어요.': '已收到您的请求。', '요청을 반영하고 있어요.': '正在处理您的请求。', '지원 요청을 기록하며, 실제 상담원 연결은 보장되지 않아요.': '已记录支援请求，但不保证能与工作人员接通。', '정차할 공간을 확인한 뒤 서서히 이동해요.': '确认停车空间后将缓慢移动。'})
     return dict(language='zh',strings=strings,voices=chinese_voices())

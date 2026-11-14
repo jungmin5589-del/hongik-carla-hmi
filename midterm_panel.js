@@ -5,7 +5,7 @@
 'use strict';
 const root=document.createElement('div');root.id='research-ui';root.hidden=true;
 root.innerHTML=`<button id="research-launch" type="button" aria-label="홍익 AI 상황 살펴보기" aria-expanded="false" aria-controls="research-dialog">
- <span class="hongik-orb" aria-hidden="true"></span><span><strong>홍익 AI</strong><small id="research-badge">상황 살펴보기</small></span><i id="research-unread" hidden></i></button>
+ <span class="hongik-orb" aria-hidden="true"></span><span><strong>상황 확인 · 대응 선택</strong><small id="research-badge">상황 살펴보기</small></span><i id="research-unread" hidden></i></button>
  <section id="research-dialog" hidden role="dialog" aria-modal="false" aria-labelledby="research-title">
  <header><span class="hongik-panel-name"><span class="hongik-orb" aria-hidden="true"></span>홍익 AI</span><button type="button" id="research-close" aria-label="홍익 AI 닫기">×</button></header>
  <div class="research-dialog-content"><p id="research-caption">현재 상황</p><h2 id="research-title"></h2>
@@ -21,7 +21,7 @@ root.innerHTML=`<button id="research-launch" type="button" aria-label="홍익 AI
  <section id="research-ending" hidden role="status" aria-live="polite"><small>홍익 AI</small><h2>주변 상황을 확인했어요</h2><p id="research-ending-message"></p><p id="research-ending-summary"></p><button id="research-ending-home" type="button">시나리오 선택으로</button></section>`;
 document.body.appendChild(root);
 const $=id=>document.getElementById(id),launch=$('research-launch'),dialog=$('research-dialog');
-let current=null,event=null,session=null,seen=null,unread=false,phase='options',selected=null;
+let current=null,event=null,session=null,seen=null,unread=false,phase='options',selected=null,linkLive=false;
 let busy=false,dialogReady=false,optionsReady=false,opening=false,generation=0,lastFocus=null,signature=null;
 let sendTail=Promise.resolve(),localFeedback='',feedbackBaseline='';
 const content=$('research-dialog').querySelector('.research-dialog-content');
@@ -40,6 +40,8 @@ const endClose=document.createElement('button');endClose.id='research-ending-clo
 const returnHome=document.createElement('button');returnHome.id='research-return-home';returnHome.type='button';returnHome.textContent='시나리오 선택으로';returnHome.hidden=true;root.append(returnHome);
 const previous=window.CockpitUpdate;
 let player=null,speechTurn=0;
+let explanationTimer=null;
+function scheduleChoices(){clearTimeout(explanationTimer);explanationTimer=setTimeout(()=>{if(!dialog.hidden&&phase==='explanation'){if(player&&!player.paused&&player.currentTime>0)return;explanationFinished=true;revealOptions()}},5000)}
 let explanationFinished=false,endingDismissed=false,viewAcknowledged=false,latestData=null;
 let voiceEnabled=true;try{
  voiceEnabled=localStorage.getItem('nurec-sohee-enabled')!=='false'&&localStorage.getItem('carla-navigation-voice')!=='off';
@@ -76,7 +78,7 @@ function readExplanation(){
 // Order open/choice/cancel/close acknowledgements; execute remains explicit.
 function post(action,details={}){
  const snapshot=session,nav=current;
- if(!snapshot||!nav)return Promise.reject(Error('주행 연결을 확인해 주세요.'));
+ if(!linkLive||!snapshot||!nav)return Promise.reject(Error('주행 연결을 확인해 주세요.'));
  const body={session_id:snapshot.session_id,navigation_id:nav.id,action,request_id:crypto.randomUUID(),
   client_event:{phase,client_ms:performance.now(),event_visible:event?.active===true,
    source:'hongik_click_panel',...details}};
@@ -119,8 +121,9 @@ function render(){
  $('research-vehicle-action').textContent=event.vehicle_action||event.description;
  $('research-live-detail').textContent=event.live_detail||'';
  $('research-caption').textContent=stages[outcome.phase]||(event.active?'현재 상황과 차량의 판단':'현재 주행');
- $('research-badge').textContent=resolving?(outcome.phase==='complete'?'주변 확인 완료':'주변 반응 확인 중'):unread?'새 상황 · 눌러서 확인':'상황 살펴보기';
+ $('research-badge').textContent=resolving?(outcome.phase==='complete'?'주변 확인 완료':'주변 반응 확인 중'):unread?'새 상황 · 눌러서 대응 선택':'눌러서 상황·대응 보기';
  $('research-read').parentElement&&( $('research-read').parentElement.hidden=Boolean(resolving));
+ if(unread&&event.active)$('research-badge').textContent=event.title+' · 눌러서 확인';
  $('research-unread').hidden=!unread;
  launch.classList.toggle('has-update',unread&&Boolean(event.active)&&dialog.hidden);
  const showOptions=Boolean(event.active)&&phase==='options';
@@ -134,7 +137,7 @@ function render(){
  $('research-confirmation').hidden=phase!=='confirm';
  $('research-execute').disabled=busy||Boolean(event.pending)||(!event.active&&!selected?.fixed)||Boolean((event.options||[]).find(o=>o.action===selected?.action)?.disabled);
  $('research-back').disabled=busy;
- if(localFeedback&&event.feedback!==feedbackBaseline){localFeedback='';feedbackBaseline=event.feedback||''}
+ if(localFeedback&&(event.feedback||'')!==feedbackBaseline){localFeedback='';feedbackBaseline=event.feedback||''}
  feedback(busy?'요청을 확인하고 있어요.':outcome.summary||localFeedback||event.feedback||'');
  const nextSignature=JSON.stringify(event.options||[]);
  if(signature!==nextSignature){
@@ -168,6 +171,7 @@ async function open(){
  dialogReady=false;optionsReady=false;opening=true;busy=true;localFeedback='';feedbackBaseline=event.feedback||'';
  dialog.hidden=false;unread=false;launch.setAttribute('aria-expanded','true');render();$('research-close').focus();
  if(!event.pending)readExplanation();
+ if(event.staged_options)scheduleChoices();
  try{
   const exposed=Boolean(event.active)&&!event.pending&&!event.staged_options;
   await post('study_open',{options_visible:exposed});
@@ -181,6 +185,7 @@ async function revealOptions(){
  stopSpeech();phase='options';render();await prepareOptions();
 }
 function close(){
+ clearTimeout(explanationTimer);
  if(dialog.hidden)return;
  stopSpeech();
  if(event?.study?.cancellable)record('study_cancel_pending',{reason:'explicit close'});
@@ -189,17 +194,12 @@ function close(){
  launch.setAttribute('aria-expanded','false');lastFocus?.focus();render();
 }
 async function choose(option){
- if(busy||!optionsReady||!event?.active||event.pending||option.disabled)return;
+ if(!option||busy||!optionsReady||!event?.active||event.pending||option.disabled)return;
  stopSpeech();
- const immediateHorn=option.action==='study_horn'&&latestData?.nurec?.scenario?.id==='congestion_long';
- if(immediateHorn)window.HongikSceneAudio?.playHornOnce?.(latestData.nurec.scenario.horn_duration_s||2.2);
  const token=generation;busy=true;render();
  try{
   await post('study_choice',{choice:option.action});if(!isCurrent(token))return;
   selected=option;
-  if(immediateHorn){
-   phase='result';busy=false;await execute();return;
-  }
   phase='confirm';$('research-confirm-copy').textContent=option.label+' 요청을 실행할까요? '+option.detail;
  window.HongikFeedback?.say('choice');
  }catch(error){if(isCurrent(token))showError(error)}
@@ -213,7 +213,7 @@ async function cancel(){
 }
 async function execute(){
  if(!selected||busy||event?.pending||(!event?.active&&!selected.fixed)||(event.options||[]).find(o=>o.action===selected.action)?.disabled)return;
- const token=generation,action=selected.action,expected=session.session_id;
+ const token=generation,action=selected.action,requestedLabel=selected.label,expected=session.session_id;
  busy=true;render();
  try{
   const queued=await post(action,{choice:action});let result=null;
@@ -226,11 +226,11 @@ async function execute(){
   }
   if(!isCurrent(token))return;
   if(result?.accepted!==true)throw Error('차량 응답을 확인하지 못했습니다. 현재 상태를 확인해 주세요.');
-  phase='result';selected=null;optionsReady=false;localFeedback=result.message||'';feedbackBaseline=event.feedback||'';
+  phase='result';selected=null;optionsReady=false;localFeedback=requestedLabel+' · '+(result.message||'요청을 받았어요.');feedbackBaseline=event.feedback||'';
  }catch(error){if(isCurrent(token)){phase='options';selected=null;showError(error)}}
  finally{if(isCurrent(token)){busy=false;render()}}
 }
-function fixedRequest(action,label){if(busy||!event||event.pending)return;selected={action,label,fixed:true};phase='confirm';dialogReady=true;optionsReady=false;dialog.hidden=false;endingDismissed=true;$('research-confirm-copy').textContent=label+'을 실행할까요? 실행 후에도 3초 안에 취소할 수 있어요.';render();}
+function fixedRequest(action,label){if(busy||!event||event.pending)return;selected={action,label,fixed:true};phase='confirm';dialogReady=true;optionsReady=false;dialog.hidden=false;endingDismissed=true;$('research-confirm-copy').textContent=label+'을 실행할까요? '+(action==='study_fixed_help'?'지원 요청을 기록하며, 실제 상담원 연결은 보장되지 않아요.':'정차할 공간을 확인한 뒤 서서히 이동해요.')+' 실행 후에도 3초 안에 취소할 수 있어요.';render();}
 $('research-fixed-help').onclick=()=>fixedRequest('study_fixed_help','도움 요청');$('research-fixed-stop').onclick=()=>fixedRequest('study_fixed_stop','정차 요청');
 $('research-maintain').onclick=()=>choose((event?.options||[]).find(o=>o.action==='study_maintain'));
 $('research-pending-cancel').onclick=async()=>{try{await post('study_cancel_pending');close();}catch(error){showError(error)}};
@@ -244,14 +244,13 @@ $('research-options-open').onclick=()=>{explanationFinished=true;revealOptions()
 $('research-direct-done').onclick=async()=>{if(busy||!event?.direct_pending)return;const token=generation;busy=true;render();try{await post('study_direct_done')}catch(error){if(isCurrent(token))showError(error)}finally{if(isCurrent(token)){busy=false;render()}}};
 $('research-read').onclick=()=>player?stopSpeech():readExplanation();
 $('research-ending-home').onclick=returnToSelection;returnHome.onclick=returnToSelection;
-window.addEventListener('hongik-horn-ended',e=>{
- if(e.detail?.session!==session?.session_id||latestData?.nurec?.scenario?.id!=='congestion_long')return;
- stopSpeech();post('study_horn_finished').then(()=>returnToSelection(true)).catch(showError);
-});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dialog.hidden){e.preventDefault();close()}});
 function notify(){
  if(event?.active&&seen!==current.id&&document.visibilityState==='visible'){
   seen=current.id;unread=dialog.hidden;
+  launch.setAttribute('aria-label',window.HongikLocale?.t?.(event.title+' · 눌러서 상황·대응 보기')||event.title);
+  launch.title=event.title;
+  if(unread){try{const C=window.AudioContext||window.webkitAudioContext;const c=new C();const o=c.createOscillator(),g=c.createGain();o.frequency.value=660;g.gain.setValueAtTime(.025,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.22);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+.23);o.onended=()=>c.close()}catch{}}
   record('study_presented',{alert_presented:true,phase:dialog.hidden?'button':'explanation_and_options'});
  }
  render();
@@ -264,6 +263,13 @@ window.CockpitUpdate=data=>{
  previous?.(data);
  const next=data.session?.navigation?.research_event;
  const live=Boolean(next&&data.connected&&['ready','running'].includes(data.session?.stage));
+ linkLive=live;
+ if(!live&&session&&data.connected===false){
+  root.hidden=false;launch.disabled=true;$('research-badge').textContent='차량 연결을 확인하고 있어요.';
+  for(const button of [...$('research-options').children,$('research-execute'),$('research-fixed-help'),$('research-fixed-stop')])button.disabled=true;
+  feedback('차량 연결이 끊겼어요. 다시 연결된 뒤 선택해 주세요.');return;
+ }
+ $('research-fixed-help').disabled=false;$('research-fixed-stop').disabled=false;
  root.hidden=!live;document.body.classList.toggle('research-driving',live);
  if(!live){stopSpeech();generation++;dialog.hidden=true;seen=null;session=null;current=null;event=null;busy=false;opening=false;dialogReady=false;optionsReady=false;return}
  if(session?.session_id!==data.session.session_id){

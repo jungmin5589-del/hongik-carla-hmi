@@ -250,7 +250,7 @@ class NativeBridge:
         self.state=dict(kind='hongik-native-carla',phase='choose',renderer_backend='carla',error=None,lab_rig=enabled(),
                         mode='paused',quality=quality,width=SIZES[quality][0],height=SIZES[quality][1],
                         speed_kph=0,frames=0,frame=0,target_fps=30,measured_fps=0)
-        self.state['runtime_revision']='20261112-physical-passing'
+        self.state['runtime_revision']='20261114-pilot-feedback'
         self.presentation='midterm';self.condition='B'
         self.language='ko';self.research=ResearchStore()
         self.command={'mode':'paused'};self.profile=None;self.scenario=None;self.ego=None
@@ -535,6 +535,7 @@ class NativeBridge:
                         self.update_context(dt,driving,snapshot,error)
                         continue
                     for item in self.vehicles[1:]:
+                        if snapshot.frame<=item.get('recycle_until_frame',-1):continue
                         tr=snapshot.find(item['actor'].id).get_transform()
                         item['s'],_=self.route.project([tr.location.x,tr.location.y],item['s'])
                     projected_at=time.perf_counter()
@@ -564,6 +565,7 @@ class NativeBridge:
                     passing_count=sum(bool(v.get('passing_flow')) for v in self.vehicles)
                     for j,item in enumerate(self.vehicles):
                         if item.get('passing_flow'):
+                            if snapshot.frame<=item.get('recycle_until_frame',-1):continue
                             kph=90.
                             if getattr(sc,'study',None) and sc.study.action=='merge' and sc.study.phase in ('applying','observing'):
                                 if item['s']<ego['s']:sc.study.traffic_yield_ids.add(item['actor'].id)
@@ -578,6 +580,7 @@ class NativeBridge:
                                     item['actor'].set_transform(pose)
                                     item['actor'].set_target_velocity(carla.Vector3D(x=math.cos(a)*kph/3.6,y=math.sin(a)*kph/3.6))
                                     item['s']=destination;item['steer']=0.;item['acc']=0.
+                                    item['recycle_until_frame']=snapshot.frame+3
                                     continue
                         if item['role']=='truck':
                             preferred=item['formation_s']

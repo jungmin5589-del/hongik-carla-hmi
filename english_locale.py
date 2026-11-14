@@ -410,6 +410,7 @@ def catalog():
     from pedestrian_voice import TEXTS as KO_PEDESTRIAN_VOICE
     from english_voice import TEXTS as EN_VOICE,canonical
     strings={line.split('\t',1)[0]:line.split('\t',1)[1] for line in PAIRS.splitlines() if '\t' in line}
+    strings.update({'차량 연결을 확인하고 있어요.':'Checking the vehicle connection.','차량 연결이 끊겼어요. 다시 연결된 뒤 선택해 주세요.':'The vehicle connection was lost. Please choose after reconnection.'})
     for profile,triplet in COPY.items():
         strings.update(zip(KO_COPY[profile],triplet))
     for profile,options in OPTIONS.items():
@@ -419,4 +420,5 @@ def catalog():
         for key,value in source.items():
             key=canonical(key)
             if key in EN_VOICE:strings[value[0] if isinstance(value,tuple) else value]=EN_VOICE[key][0]
+    strings.update({'상황 확인 · 대응 선택': 'Situation & response', '눌러서 상황·대응 보기': 'Tap to review situation and choices', '새 상황 · 눌러서 대응 선택': 'New situation · tap for choices', '요청을 받았어요.': 'Request received.', '요청을 반영하고 있어요.': 'Applying your request.', '지원 요청을 기록하며, 실제 상담원 연결은 보장되지 않아요.': 'The assistance request is recorded; connection to a live agent is not guaranteed.', '정차할 공간을 확인한 뒤 서서히 이동해요.': 'We will check for a stopping area and move over gradually.'})
     return dict(language='en',strings=strings,voices=voice_catalog())

@@ -48,28 +48,38 @@ class MidtermTests(unittest.TestCase):
     def test_congestion_offers_horn_instead_of_truck_spacing(self):
         actions={o['action'] for o in OPTIONS['congestion']}
         self.assertIn('study_horn',actions);self.assertNotIn('study_lateral',actions)
-    def test_congestion_merge_ends_without_lateral_target(self):
+    def test_congestion_merge_does_not_end_drive_on_request(self):
         self.sc.profile='congestion';self.b.profile='congestion'
+        self.b.route=SimpleNamespace(width=3.5)
         self.select('study_merge');self.cmd('study_merge')
         self.sc.tick(3.1,True,30,5.5);self.sc.study.tick(.1,True)
-        self.assertEqual(self.sc.study.phase,'stopping')
-        self.assertEqual(self.sc.study.targets(30.,0.),(0.,0.))
-        for _ in range(12):self.sc.study.tick(.1,True)
-        self.assertTrue(self.sc.completed);self.assertEqual(self.sc.completion_reason,'request_stop')
-        self.assertNotEqual(self.sc.study.status,'achieved')
+        self.assertEqual(self.sc.study.phase,'applying')
+        self.assertFalse(self.sc.completed)
 
-    def test_congestion_horn_executes_once_with_long_audio_duration(self):
+    def test_congestion_horn_requires_confirmation_countdown_then_observation(self):
         self.sc.profile='congestion';self.b.profile='congestion'
         self.select('study_horn');self.cmd('study_horn')
+        self.assertEqual(self.sc.horn_count,0)
+        self.assertEqual(self.sc.study.phase,'queued')
+        self.sc.tick(3.1,True,30,5.5);self.sc.study.tick(.1,True)
         self.assertEqual(self.sc.horn_count,1)
         self.assertEqual(self.sc.public()['horn_duration_s'],2.2)
-        self.assertEqual(self.sc.study.phase,'applying')
-        self.assertEqual(self.sc.study.targets(30.,0.),(0.,0.))
-        self.sc.study.tick(.1,True);self.assertFalse(self.sc.completed)
-        self.cmd('study_horn_finished');self.assertTrue(self.sc.completed)
-        self.assertEqual(self.sc.completion_reason,'horn_audio_finished')
-        self.assertEqual(self.sc.study.outcome()['observe_s'],0.)
-        self.cmd('study_horn_finished');self.assertEqual(self.sc.horn_count,1)
+        self.assertEqual(self.sc.study.targets(30.,0.),(30.,0.))
+        self.assertFalse(self.sc.completed)
+        self.assertEqual(self.sc.study.outcome()['observe_s'],20.)
+
+    def test_lane_request_interpolates_instead_of_jumping(self):
+        study=self.sc.study;study.phase='applying';study.action='pass';study.target_offset=-3.5
+        self.b.route=SimpleNamespace(width=3.5)
+        with patch('fallen_cargo.left_lane_clear',return_value=True),patch('midterm_study.rear_approach_clear',return_value=True):
+            for _ in range(40):first=study.targets(30.,0.)
+            self.assertEqual(first[1],0.)
+            self.sc.elapsed+=2.5
+            middle=study.targets(30.,0.)
+            self.assertAlmostEqual(middle[1],-1.75)
+            self.sc.elapsed+=2.5
+            self.assertEqual(study.targets(30.,0.)[1],-3.5)
+
     def test_opening_ai_does_not_end_or_pause_congestion(self):
         self.sc.profile='congestion';self.b.profile='congestion';self.b.command={'mode':'auto'}
         self.cmd('study_open',options_visible=True)

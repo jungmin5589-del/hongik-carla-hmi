@@ -22,3 +22,14 @@ body.midterm-study #research-launch.has-update,body.midterm-study #research-laun
 @media(max-width:700px){#research-return-home{left:16px;bottom:76px;padding:12px 18px;font-size:14px}}
 @media(max-height:760px){body.midterm-study #research-dialog{top:70px;bottom:90px}body.midterm-study .research-dialog-content{padding:18px 25px;gap:30px}body.midterm-study #research-title{font-size:24px;margin-bottom:14px}.midterm-info-card{padding:12px 15px;margin-bottom:10px}body.midterm-study .research-option{min-height:67px;padding:12px 15px}#midterm-passive{padding:10px 13px;margin-top:10px}}
 @media(max-width:800px){body.midterm-study #research-dialog{left:14px;right:14px;top:72px;bottom:80px}body.midterm-study .research-dialog-content{grid-template-columns:1fr;gap:20px;padding:20px}#research-ui .midterm-fixed{bottom:76px;min-width:110px;padding:11px 15px;font-size:13px}#research-fixed-help{left:16px}#research-fixed-stop{left:auto;right:16px}body.midterm-study.research-driving #research-launch{bottom:136px!important}#midterm-passive{display:none}}
+
+/* Test feedback: a clear control, not a loading orb or advertisement. */
+body.midterm-study #research-launch{border:2px solid #3e6ae1!important;border-radius:14px!important;background:#fff!important;min-height:72px;max-width:min(420px,calc(100vw - 32px));padding:14px 20px!important;box-shadow:0 5px 18px #1e3f6a28;cursor:pointer}
+body.midterm-study #research-launch::after{content:'›';font-size:30px;color:#3e6ae1;margin-left:12px}
+body.midterm-study #research-launch .hongik-orb{width:26px;height:26px;border-radius:7px;background:#3e6ae1;animation:none!important;box-shadow:none}
+body.midterm-study #research-launch strong{font-size:17px;color:#234ca9}
+body.midterm-study #research-launch small{white-space:normal;max-width:330px;line-height:1.5}
+body.midterm-study #research-launch.has-update{background:#edf3ff!important;animation:study-invitation 2.4s ease-in-out infinite!important}
+@keyframes study-invitation{50%{box-shadow:0 0 0 5px #3e6ae127}}
+body.midterm-study #research-launch:focus-visible{outline:4px solid #ffbf47;outline-offset:4px}
+@media(prefers-reduced-motion:reduce){body.midterm-study #research-launch.has-update{animation:none!important}}
