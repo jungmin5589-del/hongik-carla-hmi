@@ -57,6 +57,8 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
             db.execute('INSERT INTO participants VALUES(:id,:name,:created_utc)',value)
             self.current=value;self.changed()
         return dict(value)
+    def clear_participant(self):
+        with self.lock:self.current=None
     def current_participant(self):return dict(self.current) if self.current else None
     def attach(self,scenario,profile,condition,language='ko'):
         participant=self.current_participant()
@@ -211,6 +213,10 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
             finally:self.event_queue.task_done()
     def flush_events(self):self.event_queue.join()
     def close(self):
+        self.stop.set();self.wake.set()
         if self.event_worker:
             self.event_queue.put(None);self.event_worker.join(5)
-        self.stop.set();self.wake.set()
+            if self.event_worker.is_alive():raise RuntimeError('Research recording did not drain')
+        if self.worker:
+            self.worker.join(5)
+            if self.worker.is_alive():raise RuntimeError('Research export is still running')

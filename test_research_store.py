@@ -26,6 +26,11 @@ class ResearchTests(unittest.TestCase):
   with patch.object(self.store,'export',side_effect=unlocked_export):
    result=self.store.reset('초기화',counts)
   self.assertTrue(result['reset']);self.assertEqual(self.store.list()['counts']['trials'],0)
+ def test_anonymous_mode_keeps_existing_records_but_does_not_add_test_trials(self):
+  self.trial();before=self.store.list()['counts'].copy();self.store.clear_participant()
+  self.assertIsNone(self.store.current_participant())
+  self.store.attach(SimpleNamespace(session='anonymous-test'),'night','B')
+  self.assertEqual(self.store.list()['counts'],before)
  def test_unregistered_development_sessions_are_not_participant_records(self):
   self.store.attach(SimpleNamespace(session='dev'),'night','B');self.assertEqual(self.store.list()['counts']['trials'],0)
  def test_unicode_names_survive_restart_and_csv_is_excel_safe(self):
@@ -45,6 +50,28 @@ class ResearchTests(unittest.TestCase):
  def test_names_cannot_be_empty_or_control_text(self):
   for name in ('','   ','a\nb','x'*81):
    with self.assertRaises(ValueError):self.store.participant(name)
+
+class AutoMirrorTests(unittest.TestCase):
+ def test_registered_choice_automatically_reaches_verified_drive_folder(self):
+  import time
+  with tempfile.TemporaryDirectory() as folder:
+   root=Path(folder);target=root/'drive';target.mkdir()
+   config={'folder_id':'verified-folder','marker':'verified-marker','directory':str(target)}
+   (target/MARKER).write_text(json.dumps(config))
+   store=ResearchStore(root/'records')
+   try:
+    store.config_path.write_text(json.dumps(config));store.participant('QA-mirror')
+    sc=SimpleNamespace(session='auto-mirror',elapsed=0.,log=lambda *a,**k:None)
+    store.attach(sc,'night','B');store.start(sc.session)
+    sc.elapsed=12.5;sc.log('navigation_study_choice',client_event={'choice':'study_horn'})
+    deadline=time.monotonic()+5.;found=False
+    while time.monotonic()<deadline:
+     file=target/'events.csv'
+     if file.exists() and 'navigation_study_choice' in file.read_text('utf-8-sig'):
+      found=True;break
+     time.sleep(.05)
+    self.assertTrue(found,'registered choices must mirror without a manual sync click')
+   finally:store.close()
 
 class AsyncResearchTests(unittest.TestCase):
  def test_recording_queue_does_not_wait_for_export_lock_and_keeps_event_time(self):

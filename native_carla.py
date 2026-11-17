@@ -521,7 +521,7 @@ class NativeBridge:
                 if self.state['phase']!='live' or not self.scenario or self.scenario.completed:raise ValueError('시나리오를 먼저 준비해 주세요.')
                 if body['mode']=='auto' and self.scenario.elapsed==0:
                     participant=self.research.current_participant()
-                    if participant and getattr(self.scenario,'research_participant_id',None)!=participant['id']:
+                    if getattr(self.scenario,'research_participant_id',None)!=(participant['id'] if participant else None):
                         raise ValueError('참가자가 바뀌었어요. 시나리오를 다시 선택해 주세요.')
                     alignment=start_alignment(self.route,self.vehicles,self.world.get_snapshot())
                     self.state['departure_alignment']=alignment
@@ -930,10 +930,12 @@ def handler(bridge):
                 if not 0<size<=4096:raise ValueError('Invalid request size')
                 body=json.loads(self.rfile.read(size))
                 if not isinstance(body,dict):raise ValueError('Invalid request')
-                if self.path=='/api/participant':
+                if self.path in ('/api/participant','/api/participant/clear'):
                     with bridge.lock:
                         if bridge.scenario and bridge.scenario.elapsed>0 and not bridge.scenario.completed:raise ValueError('현재 주행이 끝난 뒤 참가자를 변경해 주세요.')
-                        participant=bridge.research.participant(body.get('name'))
+                        if self.path.endswith('/clear'):
+                            bridge.research.clear_participant();participant=None
+                        else:participant=bridge.research.participant(body.get('name'))
                     self.send(dict(participant=participant))
                 elif self.path=='/admin/api/sync':bridge.research.changed();self.send(dict(accepted=True))
                 elif self.path=='/admin/api/reset':
