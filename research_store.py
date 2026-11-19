@@ -60,11 +60,14 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
     def clear_participant(self):
         with self.lock:self.current=None
     def current_participant(self):return dict(self.current) if self.current else None
-    def attach(self,scenario,profile,condition,language='ko'):
+    def attach(self,scenario,profile,condition,language='ko',experiment=None):
         participant=self.current_participant()
         scenario.research_participant_id=participant['id'] if participant else None
         if participant is None:return  # Unregistered developer sessions stay in their original JSONL logs.
         labels={o['action']:o['label'] for o in __import__('midterm_study').OPTIONS.get(profile,[])}
+        if experiment:
+            from experiment_protocol import options
+            labels.update({o['action']:o['label'] for o in options(profile,experiment['option_order'])})
         labels.update(study_maintain='그냥 둘게요',study_fixed_help='도움 요청',study_fixed_stop='정차 요청')
         with self.lock,self.db() as db:
             db.execute('INSERT OR IGNORE INTO trials(id,participant_id,profile,condition,language,created_utc) VALUES(?,?,?,?,?,?)',
@@ -92,9 +95,10 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
         labels=labels or {};details=extra.get('client_event') or {}
         action=extra.get('action') or details.get('choice')
         # Store only study meaning, not tokens, browser/device IDs or world coordinates.
-        approved={key:extra[key] for key in ('status','condition','summary','count','repeat_count','reason') if key in extra}
-        for key in ('phase','options_visible','event_visible'):
+        approved={key:extra[key] for key in ('status','condition','summary','count','repeat_count','reason','trial_key','index','practice','ai_enabled','option_order') if key in extra}
+        for key in ('phase','options_visible','event_visible','input_source','transcript'):
             if key in details:approved[key]=details[key]
+        if event=='navigation_study_choice' and 'input_source' not in approved:approved['input_source']='phrase'
         with self.lock,self.db() as db:
             trial=db.execute('SELECT * FROM trials WHERE id=?',(session,)).fetchone()
             if not trial:return

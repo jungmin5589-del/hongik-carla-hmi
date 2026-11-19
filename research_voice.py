@@ -7,6 +7,8 @@ CACHE=Path(__file__).resolve().parents[1]/'cache/research-voice'
 ENGINE='Qwen3-TTS-12Hz-0.6B-CustomVoice'
 # Each row is Korean, English, Mandarin. Completion claims are outcome-gated.
 LINES={
+ 'watch_gap':('왼쪽 차로에 진입할 여유가 확인됐어요. 이동하려면 대응을 선택해 주세요.','There is now space on the left. Choose a response if you want to change lanes.','已确认左侧有空隙。如需变道，请选择应对方式。'),
+ 'watch_risk':('앞차의 움직임과 차간 거리에 주의가 필요해요. 대응을 선택할 수 있어요.','Please pay attention to the vehicle ahead and the gap. You can choose a response.','请注意前车的动作和车距。您可以选择应对方式。'),
  'choice':('선택한 대응을 확인했어요. 실행을 누르면 요청할게요.','Choice noted. Tap Execute to send the request.','已确认您的选择。点击执行后，我会发送请求。'),
  'queued':('요청을 받았어요.','Request received.','已收到您的请求。'),
  'applying':('요청한 대응을 진행하고 있어요.','We are carrying out your request.','正在按您的请求进行处理。'),
@@ -28,6 +30,7 @@ LINES={
  'cancelled':('요청을 취소했어요.','The request was cancelled.','已取消请求。')}
 # Prospective acknowledgements: describe the requested action, never claim success.
 INTENT_LINES={
+ 'intent_notify':('상황 변화를 확인하고 알려드릴게요.','I will monitor changes and let you know.','我会观察情况的变化并通知您。'),
  'intent_gap':('앞차와 거리를 넓힐게요.','I will increase the gap ahead.','我会拉大与前车的距离。'),
  'intent_left':('왼쪽의 안전한 틈을 기다릴게요.','I will wait for a safe gap on the left.','我会等候左侧的安全空隙。'),
  'intent_safe_stop':('안전한 정차 공간을 찾아볼게요.','I will look for a safe place to stop.','我会寻找安全的停车位置。'),
@@ -43,7 +46,7 @@ INTENT_LINES={
  'intent_avoid':('옆 공간을 확인하고 물체를 피할게요.','I will check the adjacent space before passing the object.','我会确认旁边空间后绕过物体。'),
  'intent_maintain':('지금의 대응을 유지할게요.','I will maintain the current response.','我会保持当前的应对方式。')}
 LINES.update(INTENT_LINES)
-INTENT_ACTIONS={'lateral':'intent_gap','widen':'intent_gap','merge':'intent_left','pass':'intent_left',
+INTENT_ACTIONS={'notify':'intent_notify','lateral':'intent_gap','widen':'intent_gap','merge':'intent_left','pass':'intent_left',
  'safe_stop':'intent_safe_stop','end_ride':'intent_end_ride','stop':'intent_stop','inspect':'intent_inspect',
  'slow':'intent_slow','horn':'intent_horn','announce':'intent_announce','creep':'intent_creep',
  'support':'intent_support','relocate':'intent_relocate','avoid':'intent_avoid','delegate':'intent_avoid','maintain':'intent_maintain'}

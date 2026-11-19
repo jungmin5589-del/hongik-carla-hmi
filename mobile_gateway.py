@@ -404,7 +404,8 @@ def handler(gateway):
             if origin!=expected and not (origin is None and self.loopback()):self.fail('앱 화면에서 다시 시도해 주세요.',403);return
             try:
                 size=int(self.headers.get('Content-Length','0'))
-                if not 0<size<=8192:raise ValueError('요청 크기를 확인해 주세요.')
+                limit=3000000 if urlparse(self.path).path=='/api/stt/transcribe' else 8192
+                if not 0<size<=limit:raise ValueError('요청 크기를 확인해 주세요.')
                 if 'application/json' not in self.headers.get('Content-Type',''):raise ValueError('앱에서 다시 시도해 주세요.')
                 body=json.loads(self.rfile.read(size));path=urlparse(self.path).path
                 if not isinstance(body,dict):raise ValueError('요청 형식을 확인해 주세요.')

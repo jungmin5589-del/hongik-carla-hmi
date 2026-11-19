@@ -167,7 +167,7 @@ class Scenario2:
                     self.log('details_opened', since_onset_s=now - self.onset_monotonic)
             elif action == 'close':
                 if self.dialog_open:
-                    self.log('details_closed', exposure_s=now - self.detail_opened)
+                    self.log('details_closed', exposure_s=now-self.detail_opened if self.detail_opened is not None else None)
                     self.dialog_open = False
                     self.detail_opened = None
             elif action in ('horn', 'widen', 'maintain'):
@@ -175,7 +175,7 @@ class Scenario2:
                 if not self.dialog_open:
                     raise ValueError('상황 창을 먼저 열어 주세요.')
                 self.log('action_selected', action=action, since_onset_s=now - self.onset_monotonic,
-                         details_exposure_s=now - self.detail_opened, gap_m=self.gap)
+                         details_exposure_s=now-self.detail_opened if self.detail_opened is not None else None, gap_m=self.gap)
                 self.last_action = action
                 self.action_complete = action != 'widen'
                 if action == 'horn':

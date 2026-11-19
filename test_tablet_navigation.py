@@ -85,6 +85,24 @@ class TabletTests(unittest.TestCase):
             self.assertEqual(self.client.post(self.url+'/api/select',json=body).status_code,400)
             forward.assert_not_called()
 
+    def test_experiment_requests_and_speech_require_full_pairing(self):
+        body={'session_id':'s1','text':'거리 더 넓혀 줘','source':'text','execute':False}
+        self.assertEqual(self.client.post(self.url+'/api/experiment/request',json=body).status_code,401)
+        self.grant()
+        with patch('tablet_navigation.backend',return_value=Response()) as forward:
+            self.assertEqual(self.client.post(self.url+'/api/experiment/request',json=body).status_code,200)
+            forward.assert_called_with('/api/experiment/request',body=body)
+            forward.reset_mock()
+            self.assertEqual(self.client.post(self.url+'/api/experiment/request',json=dict(body,session_id='old')).status_code,400)
+            forward.assert_not_called()
+            self.assertEqual(self.client.get(self.url+'/api/stt/status').status_code,200)
+            self.assertEqual(self.client.get(self.url+'/api/stt/jobs/'+'a'*32).status_code,200)
+            self.assertEqual(self.client.post(self.url+'/api/stt/transcribe',json={'audio':'x'*12000,'language':'ko'}).status_code,200)
+            forward.reset_mock()
+            self.assertIn(self.client.post(self.url+'/api/stt/start',json={}).status_code,(401,404))
+            self.assertIn(self.client.post(self.url+'/api/experiment/end',json={}).status_code,(401,404))
+            forward.assert_not_called()
+
     def test_research_registration_and_language_forward_but_admin_is_private(self):
         self.grant()
         with patch('tablet_navigation.backend',return_value=Response()) as forward:

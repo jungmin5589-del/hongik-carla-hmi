@@ -5,15 +5,16 @@ from research_voice import ENGINE,entries
 from prepare_city_audio import COURSE,MODEL
 
 def main():
- p=argparse.ArgumentParser();p.add_argument('--cache',type=Path,required=True);p.add_argument('--languages',default='ko,en,zh');p.add_argument('--batch',type=int,default=3);p.add_argument('--worker',action='store_true');p.add_argument('--list',action='store_true');a=p.parse_args()
+ p=argparse.ArgumentParser();p.add_argument('--cache',type=Path,required=True);p.add_argument('--languages',default='ko,en,zh');p.add_argument('--keys',default='');p.add_argument('--batch',type=int,default=3);p.add_argument('--worker',action='store_true');p.add_argument('--list',action='store_true');a=p.parse_args()
  languages=set(a.languages.split(','))
  if not languages<={'ko','en','zh'} or not languages or not 1<=a.batch<=3:raise ValueError('Invalid languages or batch size')
- selected={k:v for k,v in entries().items() if k.split('_',1)[0] in languages and '_intent_' in k}
+ keys=set(a.keys.split(',')) if a.keys else None
+ selected={k:v for k,v in entries().items() if k.split('_',1)[0] in languages and (k.split('_',1)[1] in keys if keys else '_intent_' in k)}
  if a.list:print(json.dumps(selected,ensure_ascii=False,indent=2));return
  if not a.worker:
   from launch_live import memory_state
   if memory_state()<6:raise RuntimeError('Voice preparation requires 6 GiB commit headroom')
-  subprocess.run([str(COURSE/'.tts-env/Scripts/python.exe'),'-u',str(Path(__file__).resolve()),'--worker','--cache',str(a.cache),'--languages',a.languages,'--batch',str(a.batch)],check=True,env=dict(os.environ,HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1',OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='2'),creationflags=0x08000000);return
+  subprocess.run([str(COURSE/'.tts-env/Scripts/python.exe'),'-u',str(Path(__file__).resolve()),'--worker','--cache',str(a.cache),'--languages',a.languages,'--keys',a.keys,'--batch',str(a.batch)],check=True,env=dict(os.environ,HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1',OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='2'),creationflags=0x08000000);return
  import torch,soundfile as sf
  from qwen_tts import Qwen3TTSModel
  if not torch.cuda.is_available() or torch.cuda.mem_get_info()[0]<4.5*1024**3:raise RuntimeError('Stop driving first; voice preparation needs 4.5 GiB free GPU memory')

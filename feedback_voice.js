@@ -24,6 +24,7 @@ addEventListener('DOMContentLoaded',()=>{
  const previous=window.CockpitUpdate;
  window.CockpitUpdate=data=>{
   previous?.(data);const event=data.session?.navigation?.research_event,study=event?.study;
+  if(data.experiment&&(!data.experiment.ai_enabled||data.experiment.practice)){stop();return;}
   if(!data.connected||!study){stop();return;}
   const sid=data.session.session_id;if(session!==sid){stop();session=sid;phase=null;last=''}
   const outcome=event.outcome||{},signature=[sid,study.action,study.phase,outcome.status,study.repeat_count].join(':');

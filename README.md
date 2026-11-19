@@ -1,3 +1,5 @@
+[AI OFF/ON 실험과 무료 로컬 STT](docs/EXPERIMENT_QUICKSTART_KO.md): `64_START_EXPERIMENT.bat`에서 연습 → 정체 OFF/ON → 졸음운전 OFF/ON을 준비합니다. 기존 내비를 유지하며 문구·텍스트·음성 요청과 명시적 실행 확인을 연결합니다. STT는 PC마다 `63_SETUP_LOCAL_STT.bat`로 설치합니다. [기술 구성과 검증 범위](docs/EXPERIMENT_STT.md).
+
 [연구실 원클릭 실행과 아이패드 QR](docs/LAB-ONE-CLICK-KO.md): SSD 폴더의 `00_START_LAB.bat`에서 준비·검사·3면 앱·내비·QR을 이어갑니다. MotionHouse 현장 연결은 별도 확인 항목입니다.
 
 [참가자 기록·관리자·응답 음성·중국어](docs/RESEARCH-RECORDS-AND-CHINESE-KO.md): 기존 내비에서 참가자 등록, 선택/실행 시간 기록, 비공개 Drive 백업, Sohee 응답과 간체자·표준중국어를 연결합니다.

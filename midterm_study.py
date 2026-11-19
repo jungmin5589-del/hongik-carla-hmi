@@ -102,22 +102,38 @@ class StudyRequests:
         self.original_action=None;self.base_lateral=None;self.last_dt=.04;self.last_level=None
         self.finish_after_horn=False;self.horn_started_wall=None;self.request_delay=3.;self.ack_delays={}
         self.bay_start_s=0.;self.bay_blocked_s=0.;self.bay_waiting=False
+        self.direct_input=False
 
     def bind(self,bridge,condition):
         self.bridge=bridge;self.condition=condition
         self.sc.log('midterm_condition_assigned',condition=condition,presentation='junho_midterm',ui_version='20261106')
+        self.protocol=None
+        if getattr(bridge,'experiment_spec',None):
+            from experiment_protocol import Protocol
+            self.protocol=Protocol(self,bridge.experiment_spec)
+            if self.protocol.setting['practice']:self.sc.ONSET_SECONDS=1000000.
 
-    def schedule(self,action,session,fixed=False):
+    def schedule(self,action,session,fixed=False,direct=False):
         sc=self.sc
         if session!=sc.session:raise ValueError('현재 주행에서 다시 요청해 주세요.')
         if self.phase not in ('idle','complete'):raise ValueError('요청을 진행 중이에요.')
         if sc.completed:raise ValueError('주행이 끝났어요. 출발 설정에서 다시 준비해 주세요.')
-        if not fixed and (self.condition!='B' or not sc.onset or not sc.dialog_open):
+        if not fixed and (self.condition!='B' or not sc.onset or (not direct and not sc.dialog_open)):
             raise ValueError('현재 상황을 먼저 확인해 주세요.')
-        allowed={o['scenario_action'][8:] for o in OPTIONS[sc.profile]}|{'maintain'}
+        if getattr(self,'protocol',None):
+            if not self.protocol.setting['ai_enabled'] and not fixed:raise ValueError('이번 회차는 AI 안내가 꺼져 있어요.')
+            if self.protocol.setting['practice'] and not fixed:raise ValueError('연습에서는 온도 조절만 요청해 주세요.')
+            handled=self.protocol.request(action) if not fixed else None
+            if handled is not None:return dict(sc.public(),feedback=handled)
+        source_options=OPTIONS[sc.profile]
+        if getattr(self,'protocol',None):
+            from experiment_protocol import options
+            source_options=options(sc.profile)
+        allowed={o['scenario_action'][8:] for o in source_options}|{'maintain'}
         if fixed:allowed|={'support','safe_stop'}
         if action not in allowed:raise ValueError('이 상황에서 제공하는 요청을 선택해 주세요.')
-        self.action=action;self.phase='queued';self.pending_at=sc.elapsed
+        if getattr(self,'protocol',None):self.protocol.stop_watch()
+        self.action=action;self.phase='queued';self.pending_at=sc.elapsed;self.direct_input=bool(direct)
         from research_voice import intent_delay,INTENT_ACTIONS,INTENT_LINES
         language=getattr(self,'voice_language',getattr(self.bridge,'language','ko'))
         self.request_delay=self.ack_delays[(language,action)] if (language,action) in self.ack_delays else intent_delay(action,language)
@@ -128,6 +144,8 @@ class StudyRequests:
         return sc.public()
 
     def cancel(self):
+        if getattr(self,'protocol',None) and self.protocol.watch:
+            self.protocol.stop_watch();self.sc.log('experiment_watch_cancelled');self.feedback='알림 요청을 취소했어요.'
         if self.phase=='queued':
             self.sc.log('request_cancelled_before_execution',action=self.action)
             self.phase='idle';self.action=None;self.pending_at=None;self.feedback='요청을 취소했어요.'
@@ -161,6 +179,8 @@ class StudyRequests:
         self.base_lateral=self.offset
         previous_gap=getattr(sc,'desired_gap',None)
         sc.action_complete=False;sc.last_action=action;sc.feedback='요청을 반영하고 있어요.'
+        visible_dialog=sc.dialog_open
+        if self.direct_input:sc.dialog_open=True  # Legacy physical action gate; never claim a UI exposure.
         self.dispatching=True
         try:
             native=profile in ('congestion','night','fog')
@@ -175,7 +195,10 @@ class StudyRequests:
                 if profile=='yield' and action=='announce':sc.announcement_count+=1
                 if action=='widen':sc.desired_gap=max(sc.desired_gap+8.,sc.WIDE_GAP)
             sc.outcome.phase='managed'
-        finally:self.dispatching=False
+        finally:
+            self.dispatching=False
+            if self.direct_input:sc.dialog_open=visible_dialog
+            self.direct_input=False
         if action=='widen' and previous_gap is not None:
             self.gap_goal=sc.desired_gap;sc.desired_gap=previous_gap
         if action=='lateral':self.target_offset=max(-.65,self.offset-.5)
@@ -218,6 +241,7 @@ class StudyRequests:
 
     def tick(self,dt,driving):
         sc=self.sc;b=self.bridge
+        if getattr(self,'protocol',None):self.protocol.tick(dt,driving)
         if self.finish_after_horn:
             if not sc.completed and time.monotonic()-self.horn_started_wall>10.:self.finish_horn(False)
             return
@@ -256,6 +280,7 @@ class StudyRequests:
             self.stopped=self.stopped+dt if speed<.5 else 0.
             if self.stopped>=1.:
                 self.phase='complete';sc.completed=True;sc.completion_reason='request_stop' if getattr(self,'stop_in_lane',False) else 'action_outcome'
+                if self.action in ('practice_end','moderator_end'):sc.completion_reason=self.action
                 sc.outcome.phase='complete';sc.outcome.summary=self.summary or self.feedback
                 if hasattr(sc,'phase'):sc.phase='complete'
                 self.service_end=self.action=='end_ride' and self.status=='achieved'

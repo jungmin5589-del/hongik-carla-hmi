@@ -74,6 +74,7 @@ function readExplanation(){
   const playback=player.play();playback?.catch(()=>{if(turn===speechTurn){stopSpeech();$('research-voice-status').textContent='다시 듣기를 눌러 주세요.'}});
  }catch{stopSpeech();$('research-voice-status').textContent='음성을 재생하지 못했어요.'}
 }
+window.HongikStudyVoice={read:readExplanation};
 
 // Order open/choice/cancel/close acknowledgements; execute remains explicit.
 function post(action,details={}){
@@ -99,6 +100,7 @@ function scenarioComplete(){return latestData?.nurec?.scenario?.completed===true
 function returnToSelection(confirmedHorn=false){
  if(confirmedHorn!==true&&!scenarioComplete())return;
  stopSpeech();
+ if(latestData?.experiment){location.assign(window.HONGIK_TABLET?'/navigation':'/experiment');return;}
  const target=new URL('/',location.href);
  if(['A','B'].includes(event?.condition))target.searchParams.set('condition',event.condition);
  const lang=window.HongikLocale?.lang;if(['ko','en','zh'].includes(lang))target.searchParams.set('lang',lang);

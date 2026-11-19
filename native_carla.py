@@ -162,6 +162,11 @@ class NativeNavigation(NavigationAdapter):
         from navigation_adapter import BLOCKADE_OPTIONS, OPTIONS, FOG_OPTIONS
         if getattr(self.bridge,'presentation',None)=='midterm' and getattr(self.bridge.scenario,'study',None):
             if self.bridge.condition=='A':return []
+            protocol=getattr(self.bridge.scenario.study,'protocol',None)
+            if protocol:
+                if protocol.setting['practice']:return []
+                from experiment_protocol import options
+                return [*options(self.bridge.profile,protocol.setting['option_order']),study_option('maintain','그냥 둘게요','현재 주행을 유지해요.')]
             return [*MIDTERM_OPTIONS[self.bridge.profile],study_option('maintain','그냥 둘게요','현재 차량의 대응을 유지해요.')]
         if self.bridge.profile == 'cargo':return CARGO_OPTIONS
         if self.bridge.profile == 'yield':return YIELD_OPTIONS
@@ -184,6 +189,8 @@ class NativeNavigation(NavigationAdapter):
             wp=self.bridge.road_map.get_waypoint(self.bridge.ego.get_location(),project_to_road=False,lane_type=carla.LaneType.Any)
             if wp:data['ego']['lane_type']=str(wp.lane_type)
         data=enrich_navigation(data,self.bridge)
+        protocol=getattr(getattr(self.bridge.scenario,'study',None),'protocol',None)
+        if protocol: data=protocol.enrich(data)
         guard=self.bridge.state.get('drive_guard')
         if guard and data.get('session'):
             event=data['session']['navigation']['research_event']
@@ -377,7 +384,8 @@ class NativeBridge:
 
     def setup(self, profile):
         with self.lock:
-            self.state.update(phase='preparing',error=None,mode='paused',drive_guard=None);self.command['mode']='paused'
+            self.state.update(phase='preparing',error=None,mode='paused',drive_guard=None,departure_ready=False);self.command['mode']='paused'
+            self.ready_since=None
             self.clear_actors()
             target='Town03' if profile in ('yield','carpool') else 'Town04'
             if self.world is None or not self.world.get_map().name.endswith('/'+target):self.connect(profile)
@@ -391,7 +399,9 @@ class NativeBridge:
             modern=self.presentation=='midterm'
             native_cls,context_cls,yield_cls,cargo_cls=(StudyNative,StudyContext,StudyYield,StudyCargo) if modern else (NativeScenario,ContextScenario,YieldScenario,CargoScenario)
             self.scenario=cargo_cls(event_path) if profile=='cargo' else yield_cls(event_path,self.route) if profile=='yield' else context_cls(profile,event_path,self.ego_s,offset) if profile in CONTEXT_OPTIONS else native_cls(profile,event_path)
-            self.research.attach(self.scenario,profile,self.condition,self.language)
+            setting=getattr(self,'experiment_spec',None)
+            record_condition=('PRACTICE' if setting['practice'] else 'AI_ON' if setting['ai_enabled'] else 'AI_OFF') if setting else self.condition
+            self.research.attach(self.scenario,profile,record_condition,self.language,experiment=setting)
             if modern:
                 self.scenario.study.bind(self,self.condition)
                 # Verify/cache acknowledgement durations before any car moves.
@@ -520,6 +530,8 @@ class NativeBridge:
                 if body['mode'] not in ('auto','paused'):raise ValueError('Invalid mode')
                 if self.state['phase']!='live' or not self.scenario or self.scenario.completed:raise ValueError('시나리오를 먼저 준비해 주세요.')
                 if body['mode']=='auto' and self.scenario.elapsed==0:
+                    if getattr(self,'experiment_spec',None) and not self.state.get('departure_ready'):
+                        raise ValueError('카메라와 주행 제어를 준비하고 있어요. 잠시 후 출발해 주세요.')
                     participant=self.research.current_participant()
                     if getattr(self.scenario,'research_participant_id',None)!=(participant['id'] if participant else None):
                         raise ValueError('참가자가 바뀌었어요. 시나리오를 다시 선택해 주세요.')
@@ -605,12 +617,16 @@ class NativeBridge:
                     target=30.+(3.*math.sin(elapsed/5.5) if self.profile=='congestion' else 0.)
                     if fog:target=30.-15.*fog_density(elapsed)/99.
                     lead['speed']=target
+                    experiment=getattr(self,'experiment_spec',None)
+                    if experiment:
+                        from experiment_protocol import traffic_targets
+                        lead['speed'],lead['offset']=traffic_targets(self.profile,elapsed,experiment['practice'],elapsed<sc.settle_until)
                     lead_speed=snapshot.find(lead['actor'].id).get_velocity().length()*3.6
                     ego['speed']=safe_following_speed(speed/3.6,lead_speed/3.6,gap,sc.desired_gap,35./3.6)*3.6
                     if sc.outcome.phase in ('stopping','complete') or elapsed>=300:ego['speed']=0.
                     ego['offset']=0.
                     if getattr(sc,'study',None):ego['speed'],ego['offset']=sc.study.targets(ego['speed'],ego['offset'])
-                    if self.profile=='night':
+                    if self.profile=='night' and not experiment:
                         u=min(1.,max(0.,(elapsed-10.)/5.));ramp=u*u*(3-2*u)
                         amplitude=.65*(.2 if elapsed<sc.settle_until else 1.)
                         lead['offset']=ramp*(1.6+amplitude*math.sin((elapsed-10.)*2*math.pi/10.5))
@@ -692,6 +708,11 @@ class NativeBridge:
                     if elapsed-last_trace>=.5:
                         self.trace.write(json.dumps(dict(self.state,scenario=sc.public()),ensure_ascii=False)+'\n');last_trace=elapsed
                     if elapsed<last_trace:last_trace=elapsed
+                    if not driving and sc.elapsed==0:
+                        stable=self.state['control_cycle_ms']<250 and self.state.get('frames',0)>=10
+                        if not stable:self.ready_since=None
+                        elif self.ready_since is None:self.ready_since=time.monotonic()
+                        self.state['departure_ready']=bool(self.ready_since is not None and time.monotonic()-self.ready_since>=3.)
             except Exception as exc:
                 import traceback
                 traceback.print_exc()
@@ -822,13 +843,13 @@ def native_navigation_html(midterm=False):
     if midterm:
         html=html.replace('src="/research-events.js','src="/midterm-panel.js')
         html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/underbody-sound.js"></script><script defer src="/scene-audio.js"></script><script defer src="/midterm-audio.js"></script><link rel="stylesheet" href="/midterm-panel.css"></head>')
-        html=html.replace('</head>','<script defer src="/feedback-voice.js"></script></head>')
+        html=html.replace('</head>','<script defer src="/feedback-voice.js"></script><script defer src="/experiment-ui.js"></script></head>')
     else:html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/underbody-sound.js"></script><script defer src="/scene-audio.js"></script><script defer src="/city-study.js"></script><link rel="stylesheet" href="/city-study.css"></head>')
     return html.encode('utf-8')
 
 
 def native_home_html():
-    return (ROOT/'native_home.html').read_bytes().replace(b'<main>',b'<script src="/language.js"></script><script defer src="/participant-setup.js"></script><main>',1)
+    return (ROOT/'native_home.html').read_bytes().replace(b'<main>',b'<script src="/language.js"></script><script defer src="/participant-setup.js"></script><main><p><a href="/experiment">AI OFF / ON experiment</a></p>',1)
 
 
 def handler(bridge):
@@ -843,6 +864,11 @@ def handler(bridge):
             try:
                 if path=='/':self.send(native_home_html(),'text/html; charset=utf-8')
                 elif path=='/lab':self.send((ROOT/'lab_start.html').read_bytes(),'text/html; charset=utf-8')
+                elif path=='/experiment':self.send((ROOT/'experiment.html').read_bytes(),'text/html; charset=utf-8')
+                elif path=='/experiment-ui.js':self.send((ROOT/'experiment_ui.js').read_bytes(),'application/javascript')
+                elif path.startswith('/api/stt'):
+                    from stt_proxy import proxy_get
+                    self.send(proxy_get(path))
                 elif path=='/admin':self.send((ROOT/'research_admin.html').read_bytes(),'text/html; charset=utf-8')
                 elif path=='/admin/api/trials':self.send(bridge.research.list(parse_qs(urlparse(self.path).query).get('q',[''])[0]))
                 elif path=='/admin/api/events':self.send(bridge.research.detail(parse_qs(urlparse(self.path).query).get('trial',[''])[0]))
@@ -927,10 +953,29 @@ def handler(bridge):
                 self.send_error(403);return
             try:
                 size=int(self.headers.get('Content-Length','0'))
-                if not 0<size<=4096:raise ValueError('Invalid request size')
+                if not 0<size<=(3000000 if self.path=='/api/stt/transcribe' else 4096):raise ValueError('Invalid request size')
                 body=json.loads(self.rfile.read(size))
                 if not isinstance(body,dict):raise ValueError('Invalid request')
-                if self.path in ('/api/participant','/api/participant/clear'):
+                if self.path.startswith('/api/stt/'):
+                    from stt_proxy import proxy_post
+                    self.send(proxy_post(self.path,body,bridge))
+                elif self.path=='/api/experiment/request':
+                    from experiment_api import request
+                    self.send(request(bridge,body))
+                elif self.path=='/api/experiment/end':
+                    with bridge.lock:
+                        study=getattr(bridge.scenario,'study',None)
+                        if not study or not getattr(study,'protocol',None):raise ValueError('실험 회차를 먼저 준비해 주세요.')
+                        if body.get('session_id')!=bridge.scenario.session:raise ValueError('현재 회차에서 다시 요청해 주세요.')
+                        if bridge.command.get('mode')!='auto' and bridge.ego.get_velocity().length()>=.14:raise ValueError('차량이 완전히 정차한 뒤 다시 중단해 주세요.')
+                        study.protocol.stop_watch();study.action='moderator_end';study.phase='stopping';study.status='cancelled'
+                        study.summary=study.feedback='진행자가 회차를 중단해 차량을 정차하고 있어요.'
+                        bridge.scenario.log('experiment_moderator_end')
+                        if bridge.command.get('mode')!='auto':
+                            study.phase='complete';bridge.scenario.completed=True;bridge.scenario.completion_reason='moderator_end'
+                            bridge.scenario.log('trial_completed',reason='moderator_end',status='cancelled')
+                    self.send({'accepted':True})
+                elif self.path in ('/api/participant','/api/participant/clear'):
                     with bridge.lock:
                         if bridge.scenario and bridge.scenario.elapsed>0 and not bridge.scenario.completed:raise ValueError('현재 주행이 끝난 뒤 참가자를 변경해 주세요.')
                         if self.path.endswith('/clear'):
@@ -946,12 +991,20 @@ def handler(bridge):
                     from research_github import start
                     self.send(start(bridge.research,body.get('confirmation')))
                 elif self.path=='/api/select':
+                    setting=None
+                    if 'experiment_index' in body:
+                        from experiment_protocol import spec
+                        setting=spec(body['experiment_index'],body.get('option_order',0))
+                        body.update(profile=setting['profile'],condition='B' if setting['ai_enabled'] else 'A',presentation='midterm')
                     profile=body.get('profile')
                     if profile not in PROFILES:raise ValueError('시나리오를 선택해 주세요.')
                     condition=body.get('condition','B');presentation=body.get('presentation','midterm')
                     if condition not in ('A','B') or presentation not in ('midterm','classic'):raise ValueError('Invalid presentation condition')
                     with bridge.lock:
                         if bridge.state['phase']=='preparing':raise ValueError('시나리오를 준비하고 있어요.')
+                        if setting and bridge.scenario and bridge.scenario.elapsed>0 and not bridge.scenario.completed and not bridge.state.get('drive_guard'):
+                            raise ValueError('현재 회차가 끝난 뒤 다음 회차를 준비해 주세요.')
+                        bridge.experiment_spec=setting
                         bridge.condition=condition;bridge.presentation=presentation
                         bridge.language=body.get('language','ko') if body.get('language','ko') in ('ko','en','zh') else 'ko'
                         bridge.command['mode']='paused';bridge.state['phase']='preparing'
