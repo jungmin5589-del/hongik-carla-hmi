@@ -88,18 +88,24 @@ def main(start_path='/'):
         owned['carla']=p.pid
         OWNED.write_text(json.dumps(owned),encoding='utf-8')
         # First engine startup can take longer than an app page. Keep that visible.
-        deadline=time.monotonic()+180
+        started=time.monotonic();deadline=started+600;next_progress=started
+        print('Starting CARLA engine. First load from the external drive may take several minutes.',flush=True)
         while not listening(2026):
             if p.poll() is not None or time.monotonic()>deadline:
                 raise RuntimeError('CARLA engine did not start. Check native-runs launch logs.')
+            if time.monotonic()>=next_progress:
+                print(f'Loading CARLA engine... {int(time.monotonic()-started)}s / 600s; waiting for RPC 2026',flush=True)
+                next_progress=time.monotonic()+15
             time.sleep(.5)
+        print('CARLA engine ready. Starting navigation server...',flush=True)
     with (logs/'app.log').open('w',encoding='utf-8') as log:
         p=subprocess.Popen([str(PYTHON),'-u',str(ROOT/'native_carla.py'),'--no-browser'],cwd=ROOT,
                            stdout=log,stderr=subprocess.STDOUT,creationflags=NO_WINDOW,
                            env=dict(os.environ,OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='2',MKL_NUM_THREADS='1'))
     owned['app']=p.pid;OWNED.write_text(json.dumps(owned),encoding='utf-8')
-    for _ in range(60):
+    for attempt in range(240):
         if p.poll() is not None:raise RuntimeError('Native app startup failed. Check native-runs logs.')
+        if attempt%40==0:print(f'Preparing navigation... {attempt//4}s / 60s',flush=True)
         if listening(8774):
             ensure_phone()
             if open_ui:webbrowser.open('http://127.0.0.1:8774'+start_path)
