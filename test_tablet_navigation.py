@@ -85,6 +85,17 @@ class TabletTests(unittest.TestCase):
             self.assertEqual(self.client.post(self.url+'/api/select',json=body).status_code,400)
             forward.assert_not_called()
 
+    def test_experiment_replay_waits_for_completion_and_rejects_extra_controls(self):
+        self.grant();body={'experiment_index':2,'option_order':0,'language':'ko'}
+        with patch('tablet_navigation.backend',return_value=Response()) as forward:
+            self.assertEqual(self.client.post(self.url+'/api/select',json=body).status_code,400)
+            forward.assert_not_called()
+            with patch.object(self.gateway,'state',return_value={'connected':True,'completed':True,'elapsed_s':90}):
+                self.assertEqual(self.client.post(self.url+'/api/select',json=body).status_code,200)
+                forward.assert_called_with('/api/select',body=body)
+                for invalid in (dict(body,experiment_index=99),dict(body,experiment_index=True),dict(body,option_order=4),dict(body,open_navigation=True)):
+                    self.assertEqual(self.client.post(self.url+'/api/select',json=invalid).status_code,400)
+
     def test_experiment_requests_and_speech_require_full_pairing(self):
         body={'session_id':'s1','text':'거리 더 넓혀 줘','source':'text','execute':False}
         self.assertEqual(self.client.post(self.url+'/api/experiment/request',json=body).status_code,401)

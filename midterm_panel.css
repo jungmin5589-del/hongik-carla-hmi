@@ -53,3 +53,5 @@ body.midterm-study #research-launch:focus-visible{outline:2px solid #3e6ae1;outl
 @keyframes hongik-wave-breathe{0%,100%{opacity:.72}50%{opacity:1}}
 @media(max-width:800px){body.midterm-study #research-ui .midterm-fixed{bottom:108px}body.midterm-study #research-launch{max-width:none}#research-launch .wave-label{max-width:calc(100vw - 24px)}}
 @media(prefers-reduced-motion:reduce){#research-launch .hongik-wave,#research-launch .hongik-wave path{animation:none!important;transition:none}}
+
+#research-replay{display:block;margin-top:12px;padding:13px 20px;border:1px solid #dce3ee;border-radius:10px;background:white;color:#3e6ae1;font:650 15px Pretendard,Arial,sans-serif;cursor:pointer}

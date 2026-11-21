@@ -37,6 +37,7 @@ from fallen_cargo import CargoScenario, CargoActor, OPTIONS as CARGO_OPTIONS, na
 from lab_settings import sun_altitude
 from research_store import ResearchStore
 from runtime_version import REVISION
+from traffic_intro import ONSET_SECONDS,INTRO_GAP,blend,following_gap,truck_formation,lead_targets
 from passing_traffic import recycle_destination
 from vehicle_following import following_speed as safe_following_speed,imminent_contact,longitudinal,driving_step
 
@@ -54,7 +55,7 @@ class NativeScenario(Scenario2):
         if profile == 'congestion':self.FAST_SPEED=25.
         self.BASE_GAP = 8. if profile == 'fog' else 6.5 if profile == 'night' else 5.5 if profile == 'congestion' else 9.
         self.WIDE_GAP = 36. if profile == 'fog' else 28.
-        self.ONSET_SECONDS = 10.
+        self.ONSET_SECONDS = ONSET_SECONDS if profile in ('congestion','night') else 10.
         self.lock = threading.RLock()
         self.events = open_events(event_path)
         self.enabled = True
@@ -63,6 +64,7 @@ class NativeScenario(Scenario2):
     def reset(self, enabled=None):
         super().reset(enabled)
         self.gap = self.BASE_GAP
+        if self.profile in ('congestion','night'):self.gap=self.desired_gap=INTRO_GAP
         self.highbeam_at = None
         self.highbeam_on = False
         self.actual_elapsed = 0.
@@ -75,6 +77,7 @@ class NativeScenario(Scenario2):
                 self.elapsed += dt
                 if not self.onset and self.elapsed >= self.ONSET_SECONDS:
                     self.onset = True
+                    self.onset_elapsed = self.elapsed
                     self.onset_monotonic = time.monotonic()
                     self.log('scenario_onset', renderer='CARLA RGB', profile=self.profile)
             if self.highbeam_at is not None:
@@ -429,18 +432,18 @@ class NativeBridge:
                 self.scenario.actor_id=self.cargo.actor.id
                 self.scenario.log('cargo_loaded',actor_id=self.cargo.actor.id)
             elif profile=='rattle':self.scenario.shoulder_offset=find_shoulder(self.route,self.world.get_map(),self.ego_s+35.)
-            else:self.spawn('vehicle.nissan.micra',100+self.scenario.BASE_GAP+4.2,0.,'lead',color='220,223,226')
+            else:self.spawn('vehicle.nissan.micra',100+self.scenario.desired_gap+4.2,0.,'lead',color='220,223,226')
             if profile=='congestion':
                 # Two abreast columns, each three HGVs long. Keep the same
                 # longitudinal wave within a column so trucks never converge.
                 for lane in (1,2):
                     for relative_s in (-13.,2.,17.):
-                        truck=self.spawn('vehicle.carlamotors.european_hgv',self.ego_s+relative_s,lane*self.route.width,'truck',30)
+                        truck=self.spawn('vehicle.carlamotors.european_hgv',self.ego_s+truck_formation(relative_s,0.),lane*self.route.width,'truck',35)
                         truck['formation_s']=relative_s
                 # Enough cars to fill the off-camera recycling corridor without
                 # introducing a long empty gap between successive platoons.
                 for i in range(24):
-                    self.spawn('vehicle.tesla.model3',self.ego_s-65+i*13.,-self.route.width,'fast',90,
+                    self.spawn('vehicle.tesla.model3',self.ego_s+160+i*13.,-self.route.width,'fast',55,
                                color=['185,189,193','45,49,55','214,216,219'][i%3])
             weather=carla.WeatherParameters(cloudiness=15,precipitation=0,sun_altitude_angle=sun_altitude(profile),
                                            fog_density=0,fog_distance=0,fog_falloff=.1,wetness=0)
@@ -625,18 +628,17 @@ class NativeBridge:
                     if fog:target=30.-15.*fog_density(elapsed)/99.
                     lead['speed']=target
                     experiment=getattr(self,'experiment_spec',None)
-                    if experiment:
-                        from experiment_protocol import traffic_targets
-                        lead['speed'],lead['offset']=traffic_targets(self.profile,elapsed,experiment['practice'],elapsed<sc.settle_until)
+                    if self.profile in ('congestion','night'):
+                        practice=bool(experiment and experiment['practice'])
+                        lead['speed'],lead['offset']=lead_targets(self.profile,elapsed,practice,elapsed<sc.settle_until)
+                        target=lead['speed']
+                        if not practice and getattr(getattr(sc,'study',None),'phase','idle')=='idle' and not getattr(getattr(sc,'study',None),'action',None):
+                            sc.desired_gap=following_gap(self.profile,elapsed)
                     lead_speed=snapshot.find(lead['actor'].id).get_velocity().length()*3.6
                     ego['speed']=safe_following_speed(speed/3.6,lead_speed/3.6,gap,sc.desired_gap,35./3.6)*3.6
                     if sc.outcome.phase in ('stopping','complete') or elapsed>=300:ego['speed']=0.
                     ego['offset']=0.
                     if getattr(sc,'study',None):ego['speed'],ego['offset']=sc.study.targets(ego['speed'],ego['offset'])
-                    if self.profile=='night' and not experiment:
-                        u=min(1.,max(0.,(elapsed-10.)/5.));ramp=u*u*(3-2*u)
-                        amplitude=.65*(.2 if elapsed<sc.settle_until else 1.)
-                        lead['offset']=ramp*(1.6+amplitude*math.sin((elapsed-10.)*2*math.pi/10.5))
                     controls=[];traffic_alignment=[]
                     planned_at=time.perf_counter()
                     passing_count=sum(bool(v.get('passing_flow')) for v in self.vehicles)
@@ -647,11 +649,11 @@ class NativeBridge:
                     for j,item in enumerate(self.vehicles):
                         if item.get('passing_flow'):
                             if snapshot.frame<=item.get('recycle_until_frame',-1):continue
-                            kph=90.
+                            kph=blend(55.,90.,elapsed,30.,40.)
                             item['speed']=kph
                             if driving:
                                 others=[v['s'] for v in self.vehicles if v is not item and v.get('passing_flow')]
-                                destination=recycle_destination(item['s'],ego['s'],passing_count,others)
+                                destination=recycle_destination(item['s'],ego['s'],passing_count,others) if elapsed>=ONSET_SECONDS else None
                                 if destination is not None:
                                     xyz,a=self.route.sample(destination,item['offset'])
                                     pose=carla.Transform(carla.Location(x=float(xyz[0]),y=float(xyz[1]),z=float(xyz[2]+item['rest_z'])),carla.Rotation(yaw=math.degrees(a)))
@@ -669,10 +671,10 @@ class NativeBridge:
                                     item['recycle_until_frame']=snapshot.frame+3
                                     continue
                         if item['role']=='truck':
-                            preferred=item['formation_s']
+                            preferred=truck_formation(item['formation_s'],elapsed)
                             # Anchor to the slow lead, not the ego: a stop request
                             # must let the truck columns pass rather than trap us.
-                            anchor=lead['s']-(sc.BASE_GAP+4.2)
+                            anchor=lead['s']-(following_gap(self.profile,elapsed)+4.2)
                             item['speed']=max(25.,min(35.,target+.5*(anchor+preferred-item['s'])))
                         item['speed']=curve_speed_limit(self.route,item['s'],item['offset'],item['speed'])
                         actor=item['actor'];actor_snapshot=snapshot.find(actor.id)

@@ -43,7 +43,7 @@ class MidtermTests(unittest.TestCase):
         self.sc=StudyNative('night',Path(self.temp.name)/'events.jsonl')
         self.b=SimpleNamespace(scenario=self.sc,profile='night',presentation='midterm',condition='B',ego=None)
         self.sc.study.bind(self.b,'B');self.nav=NativeNavigation(self.b)
-        self.sc.tick(11,True,30,6.5)
+        self.sc.tick(self.sc.ONSET_SECONDS+1,True,35,24.)
 
     def tearDown(self):
         self.sc.events.close();self.temp.cleanup()

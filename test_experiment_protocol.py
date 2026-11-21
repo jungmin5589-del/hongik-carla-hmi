@@ -11,7 +11,7 @@ class ProtocolTests(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory();self.sc=StudyNative('night',Path(self.tmp.name)/'events.jsonl')
   self.b=NS(scenario=self.sc,profile='night',presentation='midterm',condition='B',experiment_spec=spec(4),lock=threading.RLock(),ego=None,state={},command={'mode':'auto'})
-  self.sc.study.bind(self.b,'B');self.nav=NativeNavigation(self.b);self.sc.tick(11,True,30,6.5)
+  self.sc.study.bind(self.b,'B');self.nav=NativeNavigation(self.b);self.sc.tick(31,True,35,24.)
  def tearDown(self):self.sc.events.close();self.tmp.cleanup()
  def req(self,text,execute=False,**extra):return request(self.b,dict(session_id=self.sc.session,text=text,execute=execute,**extra))
  def test_proposal_never_executes(self):
@@ -20,7 +20,7 @@ class ProtocolTests(unittest.TestCase):
  def test_direct_request_executes_without_a_fake_dialog_exposure_timestamp(self):
   self.assertIsNone(self.sc.detail_opened)
   self.req('앞차랑 거리 더 넓혀 줘',True);self.sc.study._execute()
-  self.assertEqual(self.sc.desired_gap,6.5);self.assertEqual(self.sc.study.gap_goal,28.)
+  self.assertEqual(self.sc.desired_gap,24.);self.assertEqual(self.sc.study.gap_goal,28.)
   self.assertEqual(self.sc.study.phase,'applying');self.assertIsNone(self.sc.detail_opened)
   self.assertFalse(self.sc.dialog_open)
  def test_stale_session_rejected(self):
@@ -44,7 +44,7 @@ class ProtocolTests(unittest.TestCase):
   self.assertEqual(self.sc.study.phase,'idle');self.assertFalse(self.sc.completed)
  def test_watch_waits_for_changed_state_and_twenty_seconds_after_notice(self):
   p=self.sc.study.protocol;self.req('위험해지면 알려 줘',True)
-  self.b.vehicles=[{'extent':NS(x=2.)},{'s':11.,'extent':NS(x=2.),'offset':1.6}];self.b.ego_s=0
+  self.b.vehicles=[{'extent':NS(x=2.)},{'s':28.,'extent':NS(x=2.),'offset':1.6}];self.b.ego_s=0
   for _ in range(20):self.sc.elapsed+=.1;p.tick(.1,True)
   self.assertFalse(p.notified);self.assertEqual(self.sc.study.phase,'idle')
   self.b.vehicles[1]['offset']=2.2
@@ -63,8 +63,8 @@ class ProtocolTests(unittest.TestCase):
   for text in ('경적 울리지 말고 기다려','앞차와 거리 좁혀 줘','다른 출구로 가 줘'):
    self.assertIsNone(intent(text,'night'))
  def test_same_smooth_physics_for_on_and_off(self):
-  self.assertEqual(traffic_targets('night',5),(30.,0.));self.assertEqual(traffic_targets('night',55,True),(30.,0.))
-  self.assertGreater(traffic_targets('congestion',10)[0],traffic_targets('congestion',40)[0])
+  self.assertEqual(traffic_targets('night',5),(35.,0.));self.assertEqual(traffic_targets('night',55,True),(30.,0.))
+  self.assertGreater(traffic_targets('congestion',10)[0],traffic_targets('congestion',55)[0])
   for t in (10,15,25,30,40,45):self.assertLess(abs(traffic_targets('night',t+.001)[1]-traffic_targets('night',t-.001)[1]),.01)
  def test_disconnected_state_is_safe(self):self.assertEqual(self.sc.study.protocol.enrich({'connected':False}),{'connected':False})
 

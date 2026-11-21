@@ -39,7 +39,7 @@ def stop_unhealthy_gateway():
 def ensure_gateway():
     value=gateway_status()
     if value.get('kind')=='hongik-mobile':
-        if value.get('polling',True) and value.get('api_version')==2:return
+        if value.get('polling',True) and value.get('api_version')==3:return
         stop_unhealthy_gateway()
         # Windows may keep the old listener visible briefly after verified shutdown.
         deadline=time.monotonic()+5.

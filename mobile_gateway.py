@@ -323,7 +323,7 @@ def handler(gateway):
             from tablet_navigation import serve
             if serve(self,gateway):return
             path=urlparse(self.path).path
-            if path=='/health':self.send(dict(kind='hongik-mobile',api_version=2,tls_port=HTTPS_PORT,address=gateway.address,polling=gateway.worker_alive));return
+            if path=='/health':self.send(dict(kind='hongik-mobile',api_version=3,tls_port=HTTPS_PORT,address=gateway.address,polling=gateway.worker_alive));return
             if path.startswith('/pc/'):
                 if not self.loopback():self.fail('PC에서만 열 수 있는 화면입니다.',403);return
                 if path=='/pc/state':

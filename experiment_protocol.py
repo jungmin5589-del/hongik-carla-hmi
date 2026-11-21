@@ -89,15 +89,5 @@ class Protocol:
   return data
 
 def traffic_targets(profile,elapsed,practice=False,settled=False):
- """The same smooth stimulus timeline is used for OFF and ON."""
- def blend(a,b,start,end):
-  u=min(1.,max(0.,(elapsed-start)/(end-start)));u=u*u*(3.-2.*u)
-  return a+(b-a)*u
- if practice:return 30.,0.
- if profile=='congestion':
-  speed=blend(35.,30.,10.,15.)-blend(0.,3.,25.,30.)-blend(0.,2.,40.,45.)
-  return speed,0.
- amplitude=blend(.3,.5,25.,30.)+blend(0.,.15,40.,45.)
- ramp=blend(0.,1.,10.,15.)
- import math
- return 30.,ramp*(1.6+amplitude*(.2 if settled else 1.)*math.sin((elapsed-10.)*2*math.pi/10.5))
+ from traffic_intro import lead_targets
+ return lead_targets(profile,elapsed,practice,settled)

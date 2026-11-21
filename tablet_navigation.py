@@ -167,7 +167,12 @@ def post(h,gateway,body):
                 raise ValueError('현재 주행 화면에서 다시 요청해 주세요.')
             clean=body
         else:
-            if set(body)-{'profile','presentation','condition','language'} or body.get('profile') not in {
+            if 'experiment_index' in body:
+                from experiment_protocol import spec
+                if set(body)-{'experiment_index','option_order','language'} or type(body.get('option_order',0)) is not int or body.get('option_order',0) not in (0,1):
+                    raise ValueError('실험 회차를 다시 선택해 주세요.')
+                spec(body['experiment_index'],body.get('option_order',0))
+            elif set(body)-{'profile','presentation','condition','language'} or body.get('profile') not in {
                 'congestion','night','fog','yield','carpool','rattle','cargo'} or body.get('condition') not in ('A','B') or body.get('presentation')!='midterm':
                 raise ValueError('주행 환경을 다시 선택해 주세요.')
             if state.get('connected') and state.get('elapsed_s',0)>0 and not state.get('completed'):

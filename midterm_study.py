@@ -246,7 +246,7 @@ class StudyRequests:
             if not sc.completed and time.monotonic()-self.horn_started_wall>10.:self.finish_horn(False)
             return
         self.last_dt=max(0.,dt) if driving else 0.
-        elapsed=sc.elapsed-(getattr(sc,'onset_elapsed',None) or (10. if sc.profile in ('congestion','night','fog','cargo') else 0.))
+        elapsed=sc.elapsed-(getattr(sc,'onset_elapsed',None) or getattr(sc,'ONSET_SECONDS',0.))
         level=1 if elapsed<15. else 2 if elapsed<30. else 3
         if sc.onset and self.last_level!=level:
             self.last_level=level;sc.log('stimulus_level',level=level,condition=self.condition)
@@ -532,6 +532,7 @@ def enrich_navigation(data,b):
     if not sc.onset:
         title='동승자를 기다리고 있어요' if sc.profile=='carpool' else '경로를 따라 이동하고 있어요'
         situation='주변 교통과 주행 상태를 확인하고 있어요.'
+        if sc.profile in ('congestion','night'):behavior='차로를 유지하며 주변 교통 흐름에 맞춰 주행하고 있어요.'
     if sc.profile=='carpool' and sc.onset and sc.exterior.get('at_window'):title='차 밖에서 누군가 문을 두드리고 있어요'
     speed=b.state.get('speed_kph',0.)
     detail=f'현재 속도 {speed:.0f} km/h'
@@ -539,7 +540,7 @@ def enrich_navigation(data,b):
         if study.action in ('merge','pass') and study.lane_started and abs(study.offset-study.target_offset)<.8:
             detail+=' · 왼쪽 차로 주행'
         else:detail+=f' · 앞차 간격 약 {sc.gap:.0f} m'
-    elapsed=sc.elapsed-(getattr(sc,'onset_elapsed',None) or (10. if sc.profile in ('congestion','night','fog','cargo') else 0.))
+    elapsed=sc.elapsed-(getattr(sc,'onset_elapsed',None) or getattr(sc,'ONSET_SECONDS',0.))
     level=1 if elapsed<15. else 2 if elapsed<30. else 3
     event.update(title=title,situation=situation,vehicle_action=behavior,description=situation+' '+behavior,
                  active=sc.onset and not sc.completed and study.phase=='idle' and study.condition=='B',pending=study.phase not in ('idle','complete'),

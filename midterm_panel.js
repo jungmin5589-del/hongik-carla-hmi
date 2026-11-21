@@ -41,6 +41,7 @@ content.replaceChildren(left,right);
 root.insertAdjacentHTML('beforeend','<button id="research-fixed-help" class="midterm-fixed" type="button">도움 요청</button><button id="research-fixed-stop" class="midterm-fixed" type="button">정차 요청</button>');
 const passive=document.createElement('div');passive.id='midterm-passive';passive.innerHTML='<small>차량 상태</small><strong id="midterm-passive-title"></strong><p id="midterm-passive-body"></p>';$('route-card').append(passive);
 const endClose=document.createElement('button');endClose.id='research-ending-close';endClose.type='button';endClose.textContent='×';endClose.setAttribute('aria-label','결과 닫기');$('research-ending').append(endClose);
+const replay=document.createElement('button');replay.id='research-replay';replay.type='button';replay.textContent='같은 상황 다시 확인';$('research-ending').append(replay);let replayBusy=false;
 const returnHome=document.createElement('button');returnHome.id='research-return-home';returnHome.type='button';returnHome.textContent='시나리오 선택으로';returnHome.hidden=true;root.append(returnHome);
 const previous=window.CockpitUpdate;
 let player=null,speechTurn=0;
@@ -117,6 +118,7 @@ function render(){
  if(complete&&!endingDismissed)dialog.hidden=true;
  if(resolving){phase='result';selected=null;optionsReady=false}
  $('research-ending').hidden=!complete||endingDismissed;
+ replay.hidden=!complete;replay.disabled=replayBusy;
  returnHome.hidden=!complete||!endingDismissed;
  $('research-fixed-help').hidden=complete;$('research-fixed-stop').hidden=complete;
  $('research-ending-message').textContent=outcome.message||(complete?'주행이 끝났어요. 다른 상황을 선택할 수 있어요.':'');
@@ -250,6 +252,17 @@ $('research-close').onclick=close;$('research-back').onclick=cancel;$('research-
 $('research-options-open').onclick=()=>{explanationFinished=true;revealOptions()};
 $('research-direct-done').onclick=async()=>{if(busy||!event?.direct_pending)return;const token=generation;busy=true;render();try{await post('study_direct_done')}catch(error){if(isCurrent(token))showError(error)}finally{if(isCurrent(token)){busy=false;render()}}};
 $('research-read').onclick=()=>player?stopSpeech():readExplanation();
+replay.onclick=async()=>{
+ if(replayBusy||!scenarioComplete()||window.HongikSurvey?.require({testingReplay:true}))return;
+ replayBusy=true;replay.disabled=true;
+ try{
+  const p=latestData?.experiment;
+  const body=p?{experiment_index:p.index,option_order:p.option_order}:{profile:latestData.nurec.profile,condition:event.condition||'B',presentation:'midterm'};
+  body.language=window.HongikLocale?.lang||'ko';
+  const r=await fetch('/api/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.error||'다시 준비하지 못했어요.');
+  stopSpeech();location.reload();
+ }catch(error){$('research-ending-message').textContent=error.message;replayBusy=false;replay.disabled=false}
+};
 $('research-ending-home').onclick=returnToSelection;returnHome.onclick=returnToSelection;
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dialog.hidden){e.preventDefault();close()}});
 function notify(){
