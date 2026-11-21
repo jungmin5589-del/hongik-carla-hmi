@@ -18,10 +18,10 @@ function pushSetup(){
  const checks={secure:isSecureContext,installed,paired:paired&&!!state,permission:permission==='granted',requiresHome:ios};
  // iOS browser tabs may hide PushManager: explain Home Screen installation first.
  if(!checks.secure)return {checks,reason:'secure',message:'지금은 일반 HTTP 주소예요. 아래 보안 주소를 Safari로 열고, 그 주소로 홈 화면에 추가해 주세요.'};
- if(!installed)return {checks,reason:'install',message:'지금은 브라우저 탭으로 열려 있어요. Safari의 공유 → 홈 화면에 추가 후, 홈 화면의 홍익 AI 아이콘으로 다시 열어 주세요.'};
+ if(!installed)return {checks,reason:'install',message:'지금은 브라우저 탭으로 열려 있어요. Safari의 공유 → 홈 화면에 추가 후, 홈 화면의 홍익이 아이콘으로 다시 열어 주세요.'};
  if(!supported)return {checks,reason:'unsupported',message:'이 화면에서 시스템 알림 기능을 사용할 수 없어요. 아이폰은 iOS 16.4 이상에서 보안 주소로 추가한 홈 화면 앱이 필요해요.'};
  if(!checks.paired)return {checks,reason:'pair',message:'이 홈 화면 앱에서는 PC 연결이 아직 확인되지 않았어요. 설정을 닫고 PC의 현재 QR 또는 연결 코드로 연결해 주세요. Safari 탭의 연결과 다를 수 있어요.'};
- if(permission==='denied')return {checks,reason:'denied',message:'이 앱의 알림이 차단돼 있어요. 아이폰 설정 → 알림 → 홍익 AI에서 알림 허용을 켠 뒤 이 앱을 다시 열어 주세요.'};
+ if(permission==='denied')return {checks,reason:'denied',message:'이 앱의 알림이 차단돼 있어요. 아이폰 설정 → 알림 → 홍익이에서 알림 허용을 켠 뒤 이 앱을 다시 열어 주세요.'};
  return {checks,reason:'ready',message:workerError||'준비됐어요. 아래 버튼을 누르고 아이폰의 알림 허용을 선택해 주세요.'};
 }
 function updatePush(){
@@ -52,7 +52,7 @@ function render(){
  const s=state,e=s.event||{},out=e.outcome||{},resolving=out.phase&&out.phase!=='idle';
  $('mobile-fixed').hidden=!e.study;
  $('destination').textContent=s.destination||'내 주행';$('connection').textContent=s.connected?'PC와 연결됨':'PC 연결을 기다리는 중';$('dot').classList.toggle('online',!!s.connected);$('speed').textContent=s.connected?Math.round(s.speed_kph):'—';$('remaining').textContent=s.remaining_m==null?'—':s.remaining_m>=1000?(s.remaining_m/1000).toFixed(1)+' km':Math.round(s.remaining_m)+' m';$('gap').textContent=s.gap_m==null?'':`앞차 간격 약 ${s.gap_m} m`;$('beam').hidden=!s.high_beam_on;
- $('status-label').textContent=s.completed?'차량이 정차했습니다':resolving?'선택한 행동의 결과 확인 중':s.stage==='running'?'주행 중':'출발 대기';$('status-copy').textContent=out.summary||e.feedback||(s.stage==='running'?'상황이 생기면 홍익 AI가 알려드릴게요.':'PC에서 주행을 시작해 주세요.');
+ $('status-label').textContent=s.completed?'차량이 정차했습니다':resolving?'선택한 행동의 결과 확인 중':s.stage==='running'?'주행 중':'출발 대기';$('status-copy').textContent=out.summary||e.feedback||(s.stage==='running'?'상황이 생기면 홍익이가 알려드릴게요.':'PC에서 주행을 시작해 주세요.');
  const unread=e.condition!=='A'&&!!s.connected&&!!e.active&&seen!==s.session&&!resolving;$('banner').hidden=!unread;$('launch').hidden=e.condition==='A';$('launch').classList.toggle('unread',unread);$('launch-copy').textContent=s.completed?'행동 결과 보기':resolving?'행동 결과 확인 중':unread?'새 상황 · 눌러서 확인':'상황 살펴보기';
  if(unread&&exposed!==s.session&&document.visibilityState==='visible'){exposed=s.session;ping();navigator.vibrate?.([50]);}
  if(unread&&presented!==s.session&&document.visibilityState==='visible'){presented=s.session;send('study_presented').catch(()=>{});}

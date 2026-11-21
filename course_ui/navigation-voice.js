@@ -127,7 +127,7 @@ class NavigationVoice {
   const assistant=message.kind==='assistant';
   const briefing=assistant&&message.speechRole==='briefing';
   current.backend=assistant?(globalThis.QwenSpeechTransport?new globalThis.QwenSpeechTransport({provider:'qwen'}):null):this.backend;
-  current.voiceLabel=assistant?(briefing?'홍익 AI · Qwen 저장 브리핑':'홍익 AI · Qwen Sohee'):this.voiceLabel;
+  current.voiceLabel=assistant?(briefing?'홍익이 · Qwen 저장 브리핑':'홍익이 · Qwen Sohee'):this.voiceLabel;
   if(assistant&&!current.backend){this.current=null;this.onStatus('AI 목소리를 불러오지 못했습니다. 화면을 새로고침해 주세요.');return}
   this.requestTurn(current,token,()=>{if(token===this.generation&&this.current===current){if(current.backend)this.pumpQwen(message,token,current);else this.pumpBrowser(message,token,current)}});
  }

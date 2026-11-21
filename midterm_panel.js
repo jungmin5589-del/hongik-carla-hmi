@@ -4,14 +4,14 @@
 (()=>{
 'use strict';
 const root=document.createElement('div');root.id='research-ui';root.hidden=true;
-root.innerHTML=`<button id="research-launch" type="button" aria-label="홍익 AI 상황 살펴보기" aria-expanded="false" aria-controls="research-dialog">
+root.innerHTML=`<button id="research-launch" type="button" aria-label="홍익이 상황 살펴보기" aria-expanded="false" aria-controls="research-dialog">
  <svg class="hongik-wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false">
  <defs><linearGradient id="hongik-wave-gradient"><stop offset="0" stop-color="var(--wave-a)"/><stop offset=".45" stop-color="var(--wave-b)"/><stop offset="1" stop-color="var(--wave-c)"/></linearGradient></defs>
  <path class="wave-back" d="M-160 44 C80 4 220 58 440 30 S820 7 1030 32 S1320 10 1600 30 L1600 80 L-160 80Z"/>
  <path class="wave-front" d="M-160 48 C60 58 220 18 440 40 S780 57 1010 30 S1300 53 1600 33 L1600 80 L-160 80Z"/>
- </svg><span class="wave-label"><strong>홍익 AI</strong><small id="research-badge">눌러서 상황·대응 보기</small></span><i id="research-unread" hidden></i></button>
+ </svg><span class="wave-label"><strong>홍익이</strong><small id="research-badge">눌러서 상황·대응 보기</small></span><i id="research-unread" hidden></i></button>
  <section id="research-dialog" hidden role="dialog" aria-modal="false" aria-labelledby="research-title">
- <header><span class="hongik-panel-name"><span class="hongik-orb" aria-hidden="true"></span>홍익 AI</span><button type="button" id="research-close" aria-label="홍익 AI 닫기">×</button></header>
+ <header><span class="hongik-panel-name"><span class="hongik-orb" aria-hidden="true"></span>홍익이</span><button type="button" id="research-close" aria-label="홍익이 닫기">×</button></header>
  <div class="research-dialog-content"><p id="research-caption">현재 상황</p><h2 id="research-title"></h2>
  <p id="research-description"></p><p id="research-live-detail"></p>
  <div class="research-voice"><button id="research-read" type="button">설명 다시 듣기</button><small id="research-voice-status" role="status">Sohee</small></div>
@@ -22,7 +22,7 @@ root.innerHTML=`<button id="research-launch" type="button" aria-label="홍익 AI
  <div id="research-confirmation" hidden><p id="research-confirm-copy"></p><div class="research-confirm-actions">
  <button id="research-back" type="button">선택 취소</button><button id="research-execute" type="button" class="research-primary">실행</button></div></div>
  </div></section>
- <section id="research-ending" hidden role="status" aria-live="polite"><small>홍익 AI</small><h2>주변 상황을 확인했어요</h2><p id="research-ending-message"></p><p id="research-ending-summary"></p><button id="research-ending-home" type="button">시나리오 선택으로</button></section>`;
+ <section id="research-ending" hidden role="status" aria-live="polite"><small>홍익이</small><h2>주변 상황을 확인했어요</h2><p id="research-ending-message"></p><p id="research-ending-summary"></p><button id="research-ending-home" type="button">시나리오 선택으로</button></section>`;
 document.body.appendChild(root);
 const $=id=>document.getElementById(id),launch=$('research-launch'),dialog=$('research-dialog');
 let current=null,event=null,session=null,seen=null,unread=false,phase='options',selected=null,linkLive=false;
@@ -44,7 +44,7 @@ const endClose=document.createElement('button');endClose.id='research-ending-clo
 const replay=document.createElement('button');replay.id='research-replay';replay.type='button';replay.textContent='같은 상황 다시 확인';$('research-ending').append(replay);let replayBusy=false;
 const returnHome=document.createElement('button');returnHome.id='research-return-home';returnHome.type='button';returnHome.textContent='시나리오 선택으로';returnHome.hidden=true;root.append(returnHome);
 const notice=document.createElement('section');notice.id='research-notice';notice.hidden=true;notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
-notice.innerHTML='<span class="notice-accent" aria-hidden="true"></span><small>홍익 AI</small><p id="research-notice-copy"></p><button id="research-notice-more" type="button">자세히 보기 <span aria-hidden="true">›</span></button><button id="research-notice-close" type="button" aria-label="상황 알림 닫기">×</button>';
+notice.innerHTML='<span class="notice-accent" aria-hidden="true"></span><small>홍익이</small><p id="research-notice-copy"></p><button id="research-notice-more" type="button">자세히 보기 <span aria-hidden="true">›</span></button><button id="research-notice-close" type="button" aria-label="상황 알림 닫기">×</button>';
 root.append(notice);let noticeTimer=null,noticeToken=0;
 function hideNotice(){noticeToken++;clearTimeout(noticeTimer);notice.hidden=true}
 async function showNotice(){

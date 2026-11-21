@@ -67,3 +67,6 @@ body.experiment-off #research-notice{display:none!important}
 @keyframes notice-arrive{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:800px){#research-notice{left:16px;bottom:170px;width:min(360px,calc(100vw - 32px))}}
 @media(prefers-reduced-motion:reduce){#research-notice{animation:none}}
+
+/* Situation explanations live in the Hongiki notice and detail panel. */
+#midterm-passive{display:none!important}

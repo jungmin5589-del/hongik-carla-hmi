@@ -4,10 +4,10 @@
 (()=>{
 'use strict';
 const root=document.createElement('div');root.id='research-ui';root.hidden=true;
-root.innerHTML=`<button id="research-launch" type="button" aria-label="홍익 AI 상황 살펴보기" aria-expanded="false" aria-controls="research-dialog">
- <span class="hongik-orb" aria-hidden="true"></span><span><strong>홍익 AI</strong><small id="research-badge">상황 살펴보기</small></span><i id="research-unread" hidden></i></button>
+root.innerHTML=`<button id="research-launch" type="button" aria-label="홍익이 상황 살펴보기" aria-expanded="false" aria-controls="research-dialog">
+ <span class="hongik-orb" aria-hidden="true"></span><span><strong>홍익이</strong><small id="research-badge">상황 살펴보기</small></span><i id="research-unread" hidden></i></button>
  <section id="research-dialog" hidden role="dialog" aria-modal="false" aria-labelledby="research-title">
- <header><span class="hongik-panel-name"><span class="hongik-orb" aria-hidden="true"></span>홍익 AI</span><button type="button" id="research-close" aria-label="홍익 AI 닫기">×</button></header>
+ <header><span class="hongik-panel-name"><span class="hongik-orb" aria-hidden="true"></span>홍익이</span><button type="button" id="research-close" aria-label="홍익이 닫기">×</button></header>
  <div class="research-dialog-content"><p id="research-caption">현재 상황</p><h2 id="research-title"></h2>
  <p id="research-description"></p><p id="research-live-detail"></p>
  <div class="research-voice"><button id="research-read" type="button">설명 다시 듣기</button><small id="research-voice-status" role="status">Sohee</small></div>
@@ -18,7 +18,7 @@ root.innerHTML=`<button id="research-launch" type="button" aria-label="홍익 AI
  <div id="research-confirmation" hidden><p id="research-confirm-copy"></p><div class="research-confirm-actions">
  <button id="research-back" type="button">선택 취소</button><button id="research-execute" type="button" class="research-primary">실행</button></div></div>
  </div></section>
- <section id="research-ending" hidden role="status" aria-live="polite"><small>홍익 AI</small><h2>주변 상황을 확인했어요</h2><p id="research-ending-message"></p><p id="research-ending-summary"></p><button id="research-ending-home" type="button">확인</button></section>`;
+ <section id="research-ending" hidden role="status" aria-live="polite"><small>홍익이</small><h2>주변 상황을 확인했어요</h2><p id="research-ending-message"></p><p id="research-ending-summary"></p><button id="research-ending-home" type="button">확인</button></section>`;
 document.body.appendChild(root);
 const $=id=>document.getElementById(id),launch=$('research-launch'),dialog=$('research-dialog');
 let current=null,event=null,session=null,seen=null,unread=false,phase='options',selected=null;

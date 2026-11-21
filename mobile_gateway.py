@@ -186,20 +186,20 @@ class Gateway:
         if not value.get('connected') or not value.get('session'):return
         session=value['session'];events=[]
         if value['stage']=='running' and 0<value['elapsed_s']<5:events.append(('start','주행을 시작했어요','휴대폰에서 주행 상황과 선택 결과를 확인할 수 있어요.'))
-        if value['event'].get('active'):events.append(('situation','새로운 주행 상황이 있어요','홍익 AI를 열어 상황 설명과 대응 방법을 확인해 보세요.'))
+        if value['event'].get('active'):events.append(('situation','새로운 주행 상황이 있어요','홍익이를 열어 상황 설명과 대응 방법을 확인해 보세요.'))
         if value['event'].get('outcome',{}).get('phase')=='complete':events.append(('end','요청한 대응을 마쳤어요','선택한 행동의 결과를 확인해 주세요.'))
         for kind,title,body in events:
             language=(self.pairing.device or {}).get('language','ko')
             if language=='en':
                 title,body={
                     'start':('Your drive has started','Review the driving status and your choices on your phone.'),
-                    'situation':('There is a new driving situation','Open Hongik AI to review the situation and response choices.'),
+                    'situation':('There is a new driving situation','Open Hongiki to review the situation and response choices.'),
                     'end':('Your request is complete','Review the outcome of your choice.')
                 }[kind]
             elif language=='zh':
                 title,body={
                     'start':('行程已开始','您可以在移动设备上查看行驶状态和选择结果。'),
-                    'situation':('出现了新的行驶情况','打开弘益 AI 查看情况说明和应对选项。'),
+                    'situation':('出现了新的行驶情况','打开弘益 查看情况说明和应对选项。'),
                     'end':('请求处理已结束','请查看所选行动的实际结果。')
                 }[kind]
             key=session+':'+kind
@@ -323,7 +323,7 @@ def handler(gateway):
             from tablet_navigation import serve
             if serve(self,gateway):return
             path=urlparse(self.path).path
-            if path=='/health':self.send(dict(kind='hongik-mobile',api_version=3,tls_port=HTTPS_PORT,address=gateway.address,polling=gateway.worker_alive));return
+            if path=='/health':self.send(dict(kind='hongik-mobile',api_version=4,tls_port=HTTPS_PORT,address=gateway.address,polling=gateway.worker_alive));return
             if path.startswith('/pc/'):
                 if not self.loopback():self.fail('PC에서만 열 수 있는 화면입니다.',403);return
                 if path=='/pc/state':
@@ -394,6 +394,8 @@ def handler(gateway):
             if path in ('/','/m'):self.send_response(302);self.send_header('Location','/m/');self.end_headers();return
             if path in files:
                 name,kind=files[path];payload=(ASSETS/name).read_bytes()
+                if name=='manifest.webmanifest':
+                    manifest=json.loads(payload);manifest.update(name='홍익이',short_name='홍익이');payload=json.dumps(manifest,ensure_ascii=False).encode('utf-8')
                 if name=='index.html':payload=payload.replace(b'</head>',b'<script src="/m/language.js"></script></head>')
                 self.send(payload,kind);return
             self.send_error(404)
@@ -425,8 +427,8 @@ def handler(gateway):
                 if path=='/m/api/push-test':
                     if not gateway.pairing.device.get('subscription'):raise ValueError('시스템 알림을 먼저 켜 주세요.')
                     language=(gateway.pairing.device or {}).get('language','ko')
-                    title,body=('Hongik AI notification check','Driving situation alerts will appear here.') if language=='en' else ('홍익 AI 알림 연결 확인','실제 주행 상황이 생기면 이곳으로 알려드릴게요.')
-                    if language=='zh':title,body='弘益 AI 通知连接确认','出现行驶情况时，将在这里通知您。'
+                    title,body=('Hongiki notification check','Driving situation alerts will appear here.') if language=='en' else ('홍익이 알림 연결 확인','실제 주행 상황이 생기면 이곳으로 알려드릴게요.')
+                    if language=='zh':title,body='弘益 通知连接确认','出现行驶情况时，将在这里通知您。'
                     gateway.deliver(dict(title=title,body=body,tag='test-'+secrets.token_hex(4),url='/m/?lang='+language))
                     self.send(dict(sent=gateway.push_error is None));return
                 self.send_error(404)

@@ -42,7 +42,7 @@ PC와 연결	Connect to PC
 상향등	High beam
 남은 구간	Distance remaining
 새로운 주행 상황이 있어요	There is a new driving situation
-홍익 AI에서 상황을 확인해 보세요	Open Hongik AI to review the situation
+홍익이에서 상황을 확인해 보세요	Open Hongiki to review the situation
 주행 준비 중	Preparing your drive
 PC에서 시나리오를 시작하면 함께 연결됩니다.	Start a drive on the PC to connect here.
 상황 살펴보기	Review the situation
@@ -66,7 +66,7 @@ PC에서 시나리오를 시작하면 함께 연결됩니다.	Start a drive on t
 PC의 ‘휴대폰 연결’ 화면을 새로고침해 새 코드를 확인한 뒤, 아래 보안 주소를 열고 연결 코드 6자리를 입력해 주세요. 기존 HTTP 연결은 해제됩니다.	Refresh the PC's phone connection page for a new code. Open the secure address below and enter its six-digit code. The previous HTTP connection will be disconnected.
 보안 주소 열기	Open the secure address
 3. 홈 화면에 추가하고 알림 허용	3. Add to Home Screen and allow notifications
-보안 주소를 Safari에서 연 뒤 공유 버튼 → ‘홈 화면에 추가’. 홈 화면의 홍익 AI를 열고 설정 → ‘아이폰 시스템 알림 켜기’ → 허용을 누르세요.	Open the secure address in Safari, then choose Share → Add to Home Screen. Open Hongik AI from Home Screen and choose Settings → Enable iPhone notifications → Allow.
+보안 주소를 Safari에서 연 뒤 공유 버튼 → ‘홈 화면에 추가’. 홈 화면의 홍익이를 열고 설정 → ‘아이폰 시스템 알림 켜기’ → 허용을 누르세요.	Open the secure address in Safari, then choose Share → Add to Home Screen. Open Hongiki from Home Screen and choose Settings → Enable iPhone notifications → Allow.
 ‘알림 받아보기’를 누르고 아이폰을 잠가 실제로 도착하는지 확인해 주세요. 알림을 눌러 앱을 연 다음 행동을 선택합니다. PC와 같은 Wi-Fi가 연결되어 있어야 행동 요청이 전달됩니다.	Send a test notification and lock your iPhone to check delivery. Tap the notification to open the app and choose an action. Your phone must be on the PC's Wi-Fi network to send requests.
 일반 HTTP 연결에서는 앱을 열어둔 동안의 배너와 선택만 사용할 수 있어요.	On an HTTP connection, banners and choices are available while the app is open.
 상황 닫기	Close the situation
@@ -76,10 +76,10 @@ PC의 ‘휴대폰 연결’ 화면을 새로고침해 새 코드를 확인한 �
 연결을 확인해 주세요.	Please check the connection.
 PC와 연결된 뒤 다시 선택해 주세요.	Connect to the PC before choosing again.
 지금은 일반 HTTP 주소예요. 아래 보안 주소를 Safari로 열고, 그 주소로 홈 화면에 추가해 주세요.	This is an HTTP address. Open the secure address below in Safari and add it to Home Screen.
-지금은 브라우저 탭으로 열려 있어요. Safari의 공유 → 홈 화면에 추가 후, 홈 화면의 홍익 AI 아이콘으로 다시 열어 주세요.	You are in a browser tab. In Safari, choose Share → Add to Home Screen, then open the Hongik AI icon.
+지금은 브라우저 탭으로 열려 있어요. Safari의 공유 → 홈 화면에 추가 후, 홈 화면의 홍익이 아이콘으로 다시 열어 주세요.	You are in a browser tab. In Safari, choose Share → Add to Home Screen, then open the Hongiki icon.
 이 화면에서 시스템 알림 기능을 사용할 수 없어요. 아이폰은 iOS 16.4 이상에서 보안 주소로 추가한 홈 화면 앱이 필요해요.	System notifications are unavailable here. iPhone requires iOS 16.4 or later and a Home Screen app added from the secure address.
 이 홈 화면 앱에서는 PC 연결이 아직 확인되지 않았어요. 설정을 닫고 PC의 현재 QR 또는 연결 코드로 연결해 주세요. Safari 탭의 연결과 다를 수 있어요.	This Home Screen app is not connected to the PC yet. Close settings and use the PC's current QR or code. Its connection may differ from the Safari tab.
-이 앱의 알림이 차단돼 있어요. 아이폰 설정 → 알림 → 홍익 AI에서 알림 허용을 켠 뒤 이 앱을 다시 열어 주세요.	Notifications are blocked. In iPhone Settings → Notifications → Hongik AI, allow notifications, then reopen this app.
+이 앱의 알림이 차단돼 있어요. 아이폰 설정 → 알림 → 홍익이에서 알림 허용을 켠 뒤 이 앱을 다시 열어 주세요.	Notifications are blocked. In iPhone Settings → Notifications → Hongiki, allow notifications, then reopen this app.
 준비됐어요. 아래 버튼을 누르고 아이폰의 알림 허용을 선택해 주세요.	Ready. Tap the button below and allow notifications on your iPhone.
 알림 연결 중…	Connecting notifications…
 시스템 알림 연결됨	System notifications connected
@@ -96,7 +96,7 @@ HTTPS 보안 주소	Secure HTTPS address
 PC와 연결됨	Connected to PC
 PC 연결을 기다리는 중	Waiting for PC connection
 선택한 행동의 결과 확인 중	Checking the outcome
-상황이 생기면 홍익 AI가 알려드릴게요.	Hongik AI will notify you when a situation arises.
+상황이 생기면 홍익이가 알려드릴게요.	Hongiki will notify you when a situation arises.
 PC에서 주행을 시작해 주세요.	Start the drive on the PC.
 행동 결과 보기	View the outcome
 행동 결과 확인 중	Checking the outcome
@@ -144,7 +144,7 @@ PC와 연결했어요. 주행을 시작하면 함께 알려드릴게요.	Connect
 주변 확인 중\tChecking the surroundings
 왼쪽 차로 주행\tDriving in the left lane
 한국어\t한국어
-홍익 AI\tHongik AI
+홍익이\tHongiki
 차량\tVehicle
 실시간 연결\tLive connection
 연결 대기\tWaiting for connection
@@ -313,7 +313,7 @@ Sohee 음성을 준비하지 못했어요.\tThe Sohee recording is not available
 화면 선명도\tImage quality
 목적지·AI 음성 안내\tNavigation and AI voice
 내비 안내 목소리\tNavigation voice
-홍익 AI 답변 목소리\tHongik AI voice
+홍익이 답변 목소리\tHongiki voice
 밝은 안내 · Supertonic F3\tBright guidance · Supertonic F3
 한국어 음성 확인\tVoice preview
 안내 듣기\tPlay sample
@@ -371,7 +371,7 @@ CARLA의 도로·차량·보행자를 같은 엔진에서 표현합니다.\tRoad
 주차 구역에서 동승자를 기다리는 중, 바깥에서 목소리와 발소리가 들리고 사람이 다가옵니다.\tWhile waiting in a parking area, voices and footsteps are heard outside as someone approaches.
 차량 하부의 이상음을 듣고 상태 보기·저속 점검·정차 점검·주행 유지 중 선택합니다.\tAfter hearing a sound from underneath the vehicle, review its status, check at low speed, stop and check, or continue.
 앞 트럭에서 물체가 떨어집니다. 감속 후 자세히 확인·회피·정지·차량 판단 위임 중 대응을 선택합니다.\tAn object falls from the truck ahead. After slowing down, choose to inspect, pass, stop, or let the vehicle respond.
-홍익 AI 알림을 눌러 설명과 대응을 열고, 실행하면 결과를 확인한 후 종료합니다.\tOpen Hongik AI to review the situation and choices. After confirming, observe the response before the drive ends.
+홍익이 알림을 눌러 설명과 대응을 열고, 실행하면 결과를 확인한 후 종료합니다.\tOpen Hongiki to review the situation and choices. After confirming, observe the response before the drive ends.
 기본 1280×720 · 목표 30fps · 물리 차량 / 비동기 주행 ·\tDefault 1280×720 · Target 30 fps · Physical vehicles / asynchronous driving ·
 준비 완료\tReady
 준비 중 문제가 생겼어요:\tThere was a problem preparing the drive:
@@ -387,12 +387,12 @@ PC와 연결됨\tConnected to PC
 PC 연결을 기다리는 중\tWaiting for PC connection
 내 주행\tMy drive
 새로운 주행 상황이 있어요\tThere is a new driving situation
-홍익 AI에서 상황을 확인해 보세요\tReview it in Hongik AI
+홍익이에서 상황을 확인해 보세요\tReview it in Hongiki
 행동 결과 보기\tView response outcome
 행동 결과 확인 중\tMonitoring response outcome
 선택한 행동의 결과\tOutcome of your choice
 선택한 행동의 결과 확인 중\tMonitoring the outcome of your choice
-상황이 생기면 홍익 AI가 알려드릴게요.\tHongik AI will indicate when a situation occurs.
+상황이 생기면 홍익이가 알려드릴게요.\tHongiki will indicate when a situation occurs.
 PC에서 주행을 시작해 주세요.\tStart the drive on the PC.
 음성 안내가 꺼져 있어요.\tVoice guidance is off.
 대응 방법 보기\tView response choices
