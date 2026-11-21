@@ -5,7 +5,11 @@
 'use strict';
 const root=document.createElement('div');root.id='research-ui';root.hidden=true;
 root.innerHTML=`<button id="research-launch" type="button" aria-label="홍익 AI 상황 살펴보기" aria-expanded="false" aria-controls="research-dialog">
- <span class="hongik-orb" aria-hidden="true"></span><span><strong>상황 확인 · 대응 선택</strong><small id="research-badge">상황 살펴보기</small></span><i id="research-unread" hidden></i></button>
+ <svg class="hongik-wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+ <defs><linearGradient id="hongik-wave-gradient"><stop offset="0" stop-color="var(--wave-a)"/><stop offset=".45" stop-color="var(--wave-b)"/><stop offset="1" stop-color="var(--wave-c)"/></linearGradient></defs>
+ <path class="wave-back" d="M-160 44 C80 4 220 58 440 30 S820 7 1030 32 S1320 10 1600 30 L1600 80 L-160 80Z"/>
+ <path class="wave-front" d="M-160 48 C60 58 220 18 440 40 S780 57 1010 30 S1300 53 1600 33 L1600 80 L-160 80Z"/>
+ </svg><span class="wave-label"><strong>홍익 AI</strong><small id="research-badge">눌러서 상황·대응 보기</small></span><i id="research-unread" hidden></i></button>
  <section id="research-dialog" hidden role="dialog" aria-modal="false" aria-labelledby="research-title">
  <header><span class="hongik-panel-name"><span class="hongik-orb" aria-hidden="true"></span>홍익 AI</span><button type="button" id="research-close" aria-label="홍익 AI 닫기">×</button></header>
  <div class="research-dialog-content"><p id="research-caption">현재 상황</p><h2 id="research-title"></h2>

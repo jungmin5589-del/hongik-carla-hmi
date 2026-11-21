@@ -23,22 +23,33 @@ body.midterm-study #research-launch.has-update,body.midterm-study #research-laun
 @media(max-height:760px){body.midterm-study #research-dialog{top:70px;bottom:90px}body.midterm-study .research-dialog-content{padding:18px 25px;gap:30px}body.midterm-study #research-title{font-size:24px;margin-bottom:14px}.midterm-info-card{padding:12px 15px;margin-bottom:10px}body.midterm-study .research-option{min-height:67px;padding:12px 15px}#midterm-passive{padding:10px 13px;margin-top:10px}}
 @media(max-width:800px){body.midterm-study #research-dialog{left:14px;right:14px;top:72px;bottom:80px}body.midterm-study .research-dialog-content{grid-template-columns:1fr;gap:20px;padding:20px}#research-ui .midterm-fixed{bottom:76px;min-width:110px;padding:11px 15px;font-size:13px}#research-fixed-help{left:16px}#research-fixed-stop{left:auto;right:16px}body.midterm-study.research-driving #research-launch{bottom:136px!important}#midterm-passive{display:none}}
 
-/* Test feedback: a clear control, not a loading orb or advertisement. */
-body.midterm-study #research-launch{border:2px solid #3e6ae1!important;border-radius:14px!important;background:#fff!important;min-height:72px;max-width:min(420px,calc(100vw - 32px));padding:14px 20px!important;box-shadow:0 5px 18px #1e3f6a28;cursor:pointer}
-body.midterm-study #research-launch::after{content:'›';font-size:30px;color:#3e6ae1;margin-left:12px}
-body.midterm-study #research-launch .hongik-orb{width:26px;height:26px;border-radius:7px;background:#3e6ae1;animation:none!important;box-shadow:none}
-body.midterm-study #research-launch strong{font-size:17px;color:#234ca9}
-body.midterm-study #research-launch small{white-space:normal;max-width:330px;line-height:1.5}
-body.midterm-study #research-launch.has-update{background:#edf3ff!important;animation:study-invitation 2.4s ease-in-out infinite!important}
-@keyframes study-invitation{50%{box-shadow:0 0 0 5px #3e6ae127}}
-body.midterm-study #research-launch:focus-visible{outline:4px solid #ffbf47;outline-offset:4px}
-@media(prefers-reduced-motion:reduce){body.midterm-study #research-launch.has-update{animation:none!important}}
-
-/* Slow double glow marks a new situation; acknowledgement stops it. */
-body.midterm-study #research-launch.has-update{animation:study-double-glow 3s ease-in-out infinite!important}
-@keyframes study-double-glow{0%,60%,100%{box-shadow:0 5px 18px #1e3f6a28;background:#fff}18%,42%{box-shadow:0 0 0 6px #3e6ae126,0 0 24px #3e6ae14d;background:#dfebff;border-color:#224fc4}30%{box-shadow:0 0 0 2px #3e6ae118;background:#f4f8ff}}
-body.midterm-study #research-launch.has-update::after{animation:study-arrow 3s ease-in-out infinite}
-@keyframes study-arrow{18%,42%{transform:translateX(3px);color:#174bc7}0%,60%,100%{transform:translateX(0)}}
-@media(prefers-reduced-motion:reduce){body.midterm-study #research-launch.has-update,body.midterm-study #research-launch.has-update::after{animation:none!important}body.midterm-study #research-launch.has-update{background:#dfebff!important;border-color:#224fc4!important}}
-
-#research-ui[data-fault="true"] #research-launch{border-color:#be4b4b!important;background:#fff4f3!important}
+/* A dedicated bottom edge keeps the existing footer controls unobstructed. */
+body.midterm-study main{height:calc(100dvh - 150px)}
+body.midterm-study>footer{height:102px;padding-bottom:32px}
+body.midterm-study #research-ui .midterm-fixed{bottom:114px}
+body.midterm-study #research-fixed-stop{bottom:114px}
+body.midterm-study #research-launch,body.midterm-study.research-driving #research-launch{
+ --wave-a:#83cde4;--wave-b:#96b4ed;--wave-c:#a1ddd0;--wave-opacity:.38;
+ position:fixed;left:0;right:0;bottom:0!important;top:auto;width:100%;height:44px;min-height:44px;min-width:0;max-width:none;
+ padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;
+ display:block;z-index:49;overflow:visible;cursor:pointer;animation:none!important;touch-action:manipulation;
+}
+body.midterm-study #research-launch::after{content:none}
+#research-launch .hongik-wave{position:absolute;bottom:0;left:0;width:100%;height:32px;overflow:hidden;pointer-events:none;opacity:var(--wave-opacity);transition:opacity 1s ease}
+.hongik-wave path{stroke:none;fill:url(#hongik-wave-gradient);transform-origin:50% 100%;will-change:transform}
+.hongik-wave .wave-back{filter:blur(4px);opacity:.46;animation:hongik-wave-drift 9s ease-in-out infinite alternate}
+.hongik-wave .wave-front{opacity:.7;animation:hongik-wave-drift 7s ease-in-out -3s infinite alternate-reverse}
+body.midterm-study #research-launch.has-update{--wave-a:#4a9aff;--wave-b:#9870f5;--wave-c:#ed9bcf;--wave-opacity:1}
+#research-launch.has-update .hongik-wave{animation:hongik-wave-breathe 3.6s ease-in-out infinite}
+body.midterm-study #research-launch[aria-expanded="true"]{--wave-a:#69bee8;--wave-b:#7799ea;--wave-c:#8acfc6;--wave-opacity:.65}
+#research-launch .wave-label{position:absolute;bottom:49px;left:50%;transform:translateX(-50%) translateY(4px);display:flex;align-items:center;gap:12px;white-space:nowrap;padding:10px 16px;border:1px solid #e2e7ee;border-radius:12px;background:#fffffff5;box-shadow:0 4px 18px #15263c12;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .18s,transform .18s;font:550 13px Pretendard,Arial,sans-serif;color:#64738a}
+#research-launch .wave-label strong{font-size:14px;color:#334b7c}#research-launch .wave-label small{font-size:12px;max-width:min(65vw,500px);overflow:hidden;text-overflow:ellipsis}
+#research-launch:hover .wave-label,#research-launch:focus-visible .wave-label{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+body.midterm-study #research-launch:focus-visible{outline:2px solid #3e6ae1;outline-offset:-2px}
+#research-launch #research-unread{display:none!important}
+#research-ui[data-fault="true"] #research-launch{--wave-a:#e7ab72;--wave-b:#ce7474;--wave-c:#e5ae91;--wave-opacity:.85}
+#research-launch:disabled .hongik-wave{animation:none;opacity:.2}#research-launch:disabled path{animation-play-state:paused}
+@keyframes hongik-wave-drift{from{transform:translateX(-3%) scaleY(.8)}to{transform:translateX(3%) scaleY(1.12)}}
+@keyframes hongik-wave-breathe{0%,100%{opacity:.72}50%{opacity:1}}
+@media(max-width:800px){body.midterm-study #research-ui .midterm-fixed{bottom:108px}body.midterm-study #research-launch{max-width:none}#research-launch .wave-label{max-width:calc(100vw - 24px)}}
+@media(prefers-reduced-motion:reduce){#research-launch .hongik-wave,#research-launch .hongik-wave path{animation:none!important;transition:none}}
