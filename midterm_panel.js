@@ -43,6 +43,26 @@ const passive=document.createElement('div');passive.id='midterm-passive';passive
 const endClose=document.createElement('button');endClose.id='research-ending-close';endClose.type='button';endClose.textContent='×';endClose.setAttribute('aria-label','결과 닫기');$('research-ending').append(endClose);
 const replay=document.createElement('button');replay.id='research-replay';replay.type='button';replay.textContent='같은 상황 다시 확인';$('research-ending').append(replay);let replayBusy=false;
 const returnHome=document.createElement('button');returnHome.id='research-return-home';returnHome.type='button';returnHome.textContent='시나리오 선택으로';returnHome.hidden=true;root.append(returnHome);
+const notice=document.createElement('section');notice.id='research-notice';notice.hidden=true;notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
+notice.innerHTML='<span class="notice-accent" aria-hidden="true"></span><small>홍익 AI</small><p id="research-notice-copy"></p><button id="research-notice-more" type="button">자세히 보기 <span aria-hidden="true">›</span></button><button id="research-notice-close" type="button" aria-label="상황 알림 닫기">×</button>';
+root.append(notice);let noticeTimer=null,noticeToken=0;
+function hideNotice(){noticeToken++;clearTimeout(noticeTimer);notice.hidden=true}
+async function showNotice(){
+ const token=++noticeToken,sid=session?.session_id,profile=latestData?.nurec?.profile;
+ if(!profile||!dialog.hidden||latestData?.experiment&&(!latestData.experiment.ai_enabled||latestData.experiment.practice))return;
+ try{
+  const lang=window.HongikLocale?.lang||'ko';const pack=await(await fetch('/api/research-voice?lang='+lang)).json();
+  if(token!==noticeToken||sid!==session?.session_id||!event?.active||!dialog.hidden)return;
+  const voice=pack.voices?.['alert_'+profile];
+  $('research-notice-copy').textContent=voice?.text||event.situation||event.title;
+  notice.hidden=false;clearTimeout(noticeTimer);noticeTimer=setTimeout(hideNotice,12000);
+  notice.dataset.audioState='requested';
+  const played=await window.HongikFeedback?.say('alert_'+profile);
+  if(token===noticeToken)notice.dataset.audioState=played?'playback-started':'not-started';
+ }catch{if(token===noticeToken&&event?.active&&dialog.hidden){$('research-notice-copy').textContent=event.situation||event.title;notice.hidden=false;noticeTimer=setTimeout(hideNotice,12000)}}
+}
+$('research-notice-close').onclick=hideNotice;
+$('research-notice-more').onclick=()=>{hideNotice();launch.click()};
 const previous=window.CockpitUpdate;
 let player=null,speechTurn=0;
 let explanationTimer=null;
@@ -119,6 +139,7 @@ function render(){
  if(resolving){phase='result';selected=null;optionsReady=false}
  $('research-ending').hidden=!complete||endingDismissed;
  replay.hidden=!complete;replay.disabled=replayBusy;
+ if(complete||!dialog.hidden||!event.active)hideNotice();
  returnHome.hidden=!complete||!endingDismissed;
  $('research-fixed-help').hidden=complete;$('research-fixed-stop').hidden=complete;
  $('research-ending-message').textContent=outcome.message||(complete?'주행이 끝났어요. 다른 상황을 선택할 수 있어요.':'');
@@ -270,7 +291,7 @@ function notify(){
   seen=current.id;unread=dialog.hidden;
   launch.setAttribute('aria-label',window.HongikLocale?.t?.(event.title+' · 눌러서 상황·대응 보기')||event.title);
   launch.title=event.title;
-  if(unread){try{const C=window.AudioContext||window.webkitAudioContext;const c=new C();const o=c.createOscillator(),g=c.createGain();o.frequency.value=660;g.gain.setValueAtTime(.025,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.22);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+.23);o.onended=()=>c.close()}catch{}}
+  if(unread)showNotice();
   record('study_presented',{alert_presented:true,phase:dialog.hidden?'button':'explanation_and_options'});
  }
  render();
@@ -292,9 +313,9 @@ window.CockpitUpdate=data=>{
  const fault=Boolean(data.nurec?.drive_guard);root.dataset.fault=String(fault);
  $('research-fixed-help').disabled=fault;$('research-fixed-stop').disabled=fault;
  root.hidden=!live;document.body.classList.toggle('research-driving',live);
- if(!live){stopSpeech();generation++;dialog.hidden=true;seen=null;session=null;current=null;event=null;busy=false;opening=false;dialogReady=false;optionsReady=false;return}
+ if(!live){hideNotice();stopSpeech();generation++;dialog.hidden=true;seen=null;session=null;current=null;event=null;busy=false;opening=false;dialogReady=false;optionsReady=false;return}
  if(session?.session_id!==data.session.session_id){
-  endingDismissed=false;viewAcknowledged=false;
+  hideNotice();endingDismissed=false;viewAcknowledged=false;
   stopSpeech();
   generation++;seen=null;unread=false;phase='options';selected=null;busy=false;opening=false;dialogReady=false;optionsReady=false;
   dialog.hidden=true;localFeedback='';feedbackBaseline='';signature=null;launch.setAttribute('aria-expanded','false');

@@ -8,7 +8,7 @@ addEventListener('DOMContentLoaded',()=>{
  if(channel)channel.onmessage=()=>stop();
  const load=()=>fetch('/api/research-voice?lang='+lang(),{cache:'no-store'}).then(r=>r.json()).then(p=>pack=p).catch(()=>null);
  const ready=load();
- async function say(key){if(!enabled||document.visibilityState!=='visible')return;const requested=++turn;await ready;if(requested!==turn)return;
+ async function say(key){if(!enabled||document.visibilityState!=='visible')return;const requested=++turn;await ready;if(pack?.language!==lang())await load();if(requested!==turn)return;
   if(key.startsWith('intent:'))key=pack?.intent_actions?.[key.slice(7)]||null;
   if(!key)return;
   if(key.startsWith('result:'))key=pack?.actions?.[key.slice(7)]||'unfulfilled';
@@ -16,7 +16,7 @@ addEventListener('DOMContentLoaded',()=>{
   stop();dispatchEvent(new Event('hongik-feedback-speaking'));channel?.postMessage({claim:'feedback-'+crypto.randomUUID()});
   const mine=turn;audio=new Audio(voice.url);audio.id='research-feedback-audio';audio.hidden=true;document.body.append(audio);
   audio.onplaying=()=>{if(mine===turn)window.passengerNarration?.setDuck?.(.16)};
-  audio.onended=()=>{if(mine===turn)stop()};audio.onerror=()=>{if(mine===turn)stop()};audio.play().catch(()=>{if(mine===turn)stop()});
+  audio.onended=()=>{if(mine===turn)stop()};audio.onerror=()=>{if(mine===turn)stop()};try{await audio.play();return true}catch{if(mine===turn)stop();return false}
  }
  window.HongikFeedback={say,stop};
  addEventListener('hongik-voice-enabled',e=>{enabled=Boolean(e.detail);if(!enabled)stop()});

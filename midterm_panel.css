@@ -55,3 +55,15 @@ body.midterm-study #research-launch:focus-visible{outline:2px solid #3e6ae1;outl
 @media(prefers-reduced-motion:reduce){#research-launch .hongik-wave,#research-launch .hongik-wave path{animation:none!important;transition:none}}
 
 #research-replay{display:block;margin-top:12px;padding:13px 20px;border:1px solid #dce3ee;border-radius:10px;background:white;color:#3e6ae1;font:650 15px Pretendard,Arial,sans-serif;cursor:pointer}
+
+/* Brief situation notice shares the cockpit's white cards and blue accents. */
+#research-notice{position:fixed;z-index:55;left:24px;bottom:178px;width:min(380px,calc(40vw - 48px));padding:18px 44px 14px 21px;border:1px solid #e0e6ef;border-radius:16px;background:#fffffff5;box-shadow:0 8px 30px #20354b1a;animation:notice-arrive .25s ease-out}
+#research-notice[hidden]{display:none!important}#research-notice .notice-accent{position:absolute;left:0;top:19px;bottom:19px;width:3px;border-radius:4px;background:linear-gradient(#72bded,#a185ed)}
+#research-notice>small{font-size:11px;font-weight:700;letter-spacing:.04em;color:#6c7d9a}#research-notice>p{margin:7px 0 10px;color:#26354c;font-size:15px;line-height:1.6;font-weight:650;word-break:keep-all}
+#research-notice-more{padding:4px 0;color:#3e6ae1;background:none;border:0;font:650 13px Pretendard,Arial,sans-serif;cursor:pointer}#research-notice-more span{margin-left:8px}
+#research-notice-close{position:absolute;right:10px;top:10px;width:32px;height:32px;border:0;border-radius:50%;color:#7b8696;background:transparent;font:24px Pretendard,Arial,sans-serif;cursor:pointer}
+#research-notice button:focus-visible{outline:3px solid #89a5ff;outline-offset:3px}
+body.experiment-off #research-notice{display:none!important}
+@keyframes notice-arrive{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:800px){#research-notice{left:16px;bottom:170px;width:min(360px,calc(100vw - 32px))}}
+@media(prefers-reduced-motion:reduce){#research-notice{animation:none}}

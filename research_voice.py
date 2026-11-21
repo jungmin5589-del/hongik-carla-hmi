@@ -28,6 +28,15 @@ LINES={
  'unfulfilled':('요청한 대응을 완료하지 못했어요. 현재 상태를 확인해 주세요.','We could not complete the request. Please review the current status.','未能完成您的请求，请查看当前状态。'),
  'complete':('주변 확인을 마치고 차량을 정차했어요.','We have finished monitoring the surroundings and stopped.','已完成周围情况确认，车辆已停车。'),
  'cancelled':('요청을 취소했어요.','The request was cancelled.','已取消请求。')}
+# Brief onset notices; shown and spoken once before the detail panel opens.
+LINES.update({
+ 'alert_congestion':('앞차와 오른쪽 대형차가 서행하고 있어요. 왼쪽에는 빠른 차량이 지나가요.','Traffic ahead and on the right is moving slowly. Vehicles are passing quickly on the left.','前方和右侧的大型车辆正在慢行，左侧不断有车辆快速通过。'),
+ 'alert_night':('앞차가 차선 부근에서 좌우로 흔들리고 있어요.','The vehicle ahead is swaying near the lane marking.','前车正在车道线附近左右摇摆。'),
+ 'alert_fog':('전방에 안개가 짙어져 시야가 줄어들고 있어요.','Fog ahead is getting denser and visibility is decreasing.','前方雾气正在加重，能见度正在下降。'),
+ 'alert_yield':('횡단보도 옆 보행자가 건널지 망설이고 있어요.','A pedestrian by the crossing is hesitating to cross.','人行横道旁的行人正在犹豫是否过街。'),
+ 'alert_carpool':('차 밖에서 누군가 소리치며 문 쪽으로 다가오고 있어요.','Someone outside is shouting and approaching the door.','车外有人喊叫着向车门靠近。'),
+ 'alert_rattle':('주행 중 차량 아래쪽에서 달그락거리는 소리가 반복돼요.','A rattling sound is recurring beneath the vehicle.','行驶中，车辆下方反复传来异响。'),
+ 'alert_cargo':('앞 트럭에서 물체가 떨어져 도로에 놓여 있어요.','An object has fallen from the truck ahead onto the road.','前方卡车有物体掉落在道路上。')})
 # Prospective acknowledgements: describe the requested action, never claim success.
 INTENT_LINES={
  'intent_notify':('상황 변화를 확인하고 알려드릴게요.','I will monitor changes and let you know.','我会观察情况的变化并通知您。'),

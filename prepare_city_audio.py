@@ -9,7 +9,7 @@ import time
 from city_voice import CACHE,TEXTS
 from exterior_dialogue import DIALOGUE
 
-COURSE=Path.home()/'Desktop/홍익대/2026 2학기/휴먼 자율주행 인터렉션 디자인/CARLA-YOLO-실습'
+COURSE=Path(os.environ.get('HONGIK_TTS_COURSE',str(Path.home()/'Desktop/홍익대/2026 2학기/휴먼 자율주행 인터렉션 디자인/CARLA-YOLO-실습')))
 MODEL=COURSE/'models/qwen3-tts-0.6b-sohee'
 
 def main():

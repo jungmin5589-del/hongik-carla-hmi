@@ -437,9 +437,12 @@ class NativeBridge:
                 # Two abreast columns, each three HGVs long. Keep the same
                 # longitudinal wave within a column so trucks never converge.
                 for lane in (1,2):
-                    for relative_s in (-13.,2.,17.):
-                        truck=self.spawn('vehicle.carlamotors.european_hgv',self.ego_s+truck_formation(relative_s,0.),lane*self.route.width,'truck',35)
-                        truck['formation_s']=relative_s
+                    for index,relative_s in enumerate((-13.,2.,17.)):
+                        models=('vehicle.carlamotors.european_hgv','vehicle.carlamotors.carlacola','vehicle.mitsubishi.fusorosa')
+                        blueprint=models[(index+lane-1)%len(models)]
+                        color=('225,227,230','49,70,96','148,67,49')[(index+lane)%3]
+                        truck=self.spawn(blueprint,self.ego_s+truck_formation(relative_s,0.,lane),lane*self.route.width,'truck',35,color=color)
+                        truck['formation_s']=relative_s;truck['formation_lane']=lane
                 # Enough cars to fill the off-camera recycling corridor without
                 # introducing a long empty gap between successive platoons.
                 for i in range(24):
@@ -671,7 +674,7 @@ class NativeBridge:
                                     item['recycle_until_frame']=snapshot.frame+3
                                     continue
                         if item['role']=='truck':
-                            preferred=truck_formation(item['formation_s'],elapsed)
+                            preferred=truck_formation(item['formation_s'],elapsed,item.get('formation_lane',1))
                             # Anchor to the slow lead, not the ego: a stop request
                             # must let the truck columns pass rather than trap us.
                             anchor=lead['s']-(following_gap(self.profile,elapsed)+4.2)

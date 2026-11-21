@@ -17,5 +17,5 @@ def lead_targets(profile,elapsed,practice=False,settled=False):
 def following_gap(profile,elapsed):
  return blend(INTRO_GAP,5.5 if profile=='congestion' else 6.5,elapsed)
 
-def truck_formation(relative,elapsed):
- return relative+blend(45.,0.,elapsed)
+def truck_formation(relative,elapsed,lane=1):
+ return relative+blend(45.,0.,elapsed)+(6. if lane==2 else 0.)

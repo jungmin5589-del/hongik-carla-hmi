@@ -29,4 +29,10 @@ class IntroTests(unittest.TestCase):
    positions=[truck_formation(x,t) for x in (-13.,2.,17.)]
    self.assertAlmostEqual(positions[1]-positions[0],15.)
    self.assertAlmostEqual(positions[2]-positions[1],15.)
+ def test_stagger_is_longitudinal_and_keeps_each_column_spacing(self):
+  for t in (0,29,30,35,45,90):
+   a=[truck_formation(x,t,1) for x in (-13.,2.,17.)]
+   b=[truck_formation(x,t,2) for x in (-13.,2.,17.)]
+   for left,right in zip(a,b):self.assertAlmostEqual(right-left,6.)
+   for column in (a,b):self.assertTrue(all(y-x>=14.99 for x,y in zip(column,column[1:])))
 if __name__=='__main__':unittest.main()
