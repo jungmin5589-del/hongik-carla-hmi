@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,trial_id 
  FOREIGN KEY(trial_id) REFERENCES trials(id));
 CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
 ''')
+        from survey_store import init as init_survey
+        init_survey(self)
         self.worker=None;self.event_worker=None;self.event_queue=queue.Queue()
         if start_worker:
             self.event_worker=threading.Thread(target=self._events_loop,daemon=True);self.event_worker.start()
@@ -95,7 +97,7 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
         labels=labels or {};details=extra.get('client_event') or {}
         action=extra.get('action') or details.get('choice')
         # Store only study meaning, not tokens, browser/device IDs or world coordinates.
-        approved={key:extra[key] for key in ('status','condition','summary','count','repeat_count','reason','trial_key','index','practice','ai_enabled','option_order') if key in extra}
+        approved={key:extra[key] for key in ('status','condition','summary','count','repeat_count','reason','trial_key','index','practice','ai_enabled','option_order','speed_kph','gap_m','lane_error_m','lane_offset_m','steering_command','collisions','request_phase') if key in extra}
         for key in ('phase','options_visible','event_visible','input_source','transcript'):
             if key in details:approved[key]=details[key]
         if event=='navigation_study_choice' and 'input_source' not in approved:approved['input_source']='phrase'
@@ -114,13 +116,15 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
             if event=='navigation_execution_confirmed':db.execute('UPDATE trials SET executed_s=COALESCE(executed_s,?),last_action=? WHERE id=?',(elapsed,canonical,session))
             if event in ('request_completed','outcome_trial_completed','trial_completed'):
                 db.execute('UPDATE trials SET completed=1,finished_utc=?,result=? WHERE id=?',(recorded_utc,extra.get('status') or extra.get('reason') or 'complete',session))
-            self.changed()
+            if event=='vehicle_signal_sample':self.dirty=True  # periodic mirror; avoid exporting the DB on every sample
+            else:self.changed()
     def list(self,search=''):
         search=str(search)[:100]
         with self.lock,self.db() as db:
             trials=[dict(row) for row in db.execute('''SELECT t.*,p.name participant_name,
  (SELECT label FROM events WHERE trial_id=t.id AND event='navigation_study_choice' ORDER BY id LIMIT 1) first_choice,
  (SELECT COUNT(*) FROM events WHERE trial_id=t.id AND event='navigation_study_choice') selection_count,
+ (SELECT submitted_utc FROM surveys WHERE trial_id=t.id) survey_submitted_utc,
  t.selected_s-t.onset_s selected_after_onset_s
  FROM trials t JOIN participants p ON t.participant_id=p.id
  WHERE p.name LIKE ? OR t.profile LIKE ? ORDER BY t.created_utc DESC LIMIT 500''',('%'+search+'%','%'+search+'%'))]
@@ -133,6 +137,9 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
         with self.lock,self.db() as db:
             return [dict(row) for row in db.execute('SELECT * FROM events WHERE trial_id=? ORDER BY id',(trial,))]
     def export_csv(self,kind='trials',date=None):
+        if kind=='surveys':
+            from survey_store import export_csv
+            return export_csv(self,date)
         if kind not in ('trials','events'):raise ValueError('Unknown export')
         with self.lock,self.db() as db:
             if kind=='trials':cursor=db.execute('''SELECT COALESCE(t.started_utc,t.created_utc) _experiment_utc,p.name participant,t.id trial,t.profile scenario,t.condition,t.language,
@@ -157,9 +164,9 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
             backup=self.root/'reset-backups'/(datetime.now().strftime('%Y%m%d-%H%M%S')+'-'+uuid.uuid4().hex[:8])
             backup.mkdir(parents=True)
             with self.db() as source,closing(sqlite3.connect(backup/'research.sqlite3')) as dest:source.backup(dest)
-            for kind in ('trials','events'):(backup/(kind+'.csv')).write_bytes(self.export_csv(kind))
+            for kind in ('trials','events','surveys'):(backup/(kind+'.csv')).write_bytes(self.export_csv(kind))
             with self.db() as db:
-                db.execute('DELETE FROM events');db.execute('DELETE FROM trials');db.execute('DELETE FROM participants')
+                db.execute('DELETE FROM surveys');db.execute('DELETE FROM events');db.execute('DELETE FROM trials');db.execute('DELETE FROM participants')
             self.current=None;self.heartbeat.clear();self.error='';self.changed()
         self.export()
         return dict(reset=True,backup=str(backup),previous_counts=counts)
@@ -187,7 +194,7 @@ CREATE INDEX IF NOT EXISTS event_trial ON events(trial_id,id);
         folder=self.root/'exports';folder.mkdir(exist_ok=True)
         with self.lock:self.dirty=False
         # CSV encoding and filesystem/Drive work must not hold the record lock.
-        for kind in ('trials','events'):
+        for kind in ('trials','events','surveys'):
             temp=folder/(kind+'.tmp');temp.write_bytes(self.export_csv(kind));os.replace(temp,folder/(kind+'.csv'))
         temporary=folder/'research.tmp.sqlite3'
         with self.lock,self.db() as source,closing(sqlite3.connect(temporary)) as target:source.backup(target)

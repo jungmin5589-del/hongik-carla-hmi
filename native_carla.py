@@ -189,6 +189,8 @@ class NativeNavigation(NavigationAdapter):
             wp=self.bridge.road_map.get_waypoint(self.bridge.ego.get_location(),project_to_road=False,lane_type=carla.LaneType.Any)
             if wp:data['ego']['lane_type']=str(wp.lane_type)
         data=enrich_navigation(data,self.bridge)
+        if data.get('nurec',{}).get('scenario') is not None:
+            data['nurec']['scenario']['emergency_pending']=bool(getattr(self.bridge.scenario,'emergency_requested',False))
         protocol=getattr(getattr(self.bridge.scenario,'study',None),'protocol',None)
         if protocol: data=protocol.enrich(data)
         guard=self.bridge.state.get('drive_guard')
@@ -525,6 +527,7 @@ class NativeBridge:
                 if not self.profile:raise ValueError('시나리오를 먼저 선택해 주세요.')
                 self.pending.put(('profile',self.profile))
             if 'mode' in body:
+                if body['mode']=='auto' and getattr(self.scenario,'emergency_requested',False):raise ValueError('비상 정지 중에는 다시 출발할 수 없어요.')
                 if body['mode']=='auto' and self.state.get('drive_guard'):
                     raise ValueError('주행 이상이 기록됐어요. 시나리오를 다시 준비한 뒤 출발해 주세요.')
                 if body['mode'] not in ('auto','paused'):raise ValueError('Invalid mode')
@@ -584,6 +587,10 @@ class NativeBridge:
                     if self.state.get('drive_guard'):
                         driving=False;self.command['mode']='paused';self.state['mode']='paused'
                         self.client.apply_batch([carla.command.ApplyVehicleControl(v['actor'].id,carla.VehicleControl(throttle=0.,brake=1.,hand_brake=False)) for v in self.vehicles])
+                    finish_emergency(self,ego_snapshot.get_velocity().length())
+                    if driving and getattr(sc,'research_participant_id',None) and sc.elapsed-getattr(sc,'last_signal_at',-1.)>=1.:
+                        sc.last_signal_at=sc.elapsed
+                        sc.log('vehicle_signal_sample',speed_kph=round(ego_snapshot.get_velocity().length()*3.6,3),gap_m=getattr(sc,'gap',None),lane_error_m=round(error,4),lane_offset_m=getattr(getattr(sc,'study',None),'offset',None),steering_command=ego.get('steer'),collisions=getattr(sc,'collision_count',0),request_phase=getattr(getattr(sc,'study',None),'phase','idle'))
                     if self.profile=='cargo':
                         self.update_cargo(dt,driving,snapshot,error)
                         continue
@@ -843,7 +850,7 @@ def native_navigation_html(midterm=False):
     if midterm:
         html=html.replace('src="/research-events.js','src="/midterm-panel.js')
         html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/underbody-sound.js"></script><script defer src="/scene-audio.js"></script><script defer src="/midterm-audio.js"></script><link rel="stylesheet" href="/midterm-panel.css"></head>')
-        html=html.replace('</head>','<script defer src="/feedback-voice.js"></script><script defer src="/experiment-ui.js"></script></head>')
+        html=html.replace('</head>','<script defer src="/feedback-voice.js"></script><script defer src="/experiment-ui.js"></script><script defer src="/survey-ui.js"></script></head>')
     else:html=html.replace('</head>','<script defer src="/exterior-sound.js"></script><script defer src="/underbody-sound.js"></script><script defer src="/scene-audio.js"></script><script defer src="/city-study.js"></script><link rel="stylesheet" href="/city-study.css"></head>')
     return html.encode('utf-8')
 
@@ -851,6 +858,15 @@ def native_navigation_html(midterm=False):
 def native_home_html():
     return (ROOT/'native_home.html').read_bytes().replace(b'<main>',b'<script src="/language.js"></script><script defer src="/participant-setup.js"></script><main><p><a href="/experiment">AI OFF / ON experiment</a></p>',1)
 
+
+def finish_emergency(bridge,speed):
+    sc=bridge.scenario
+    if getattr(sc,'emergency_requested',False) and speed<.14:
+        sc.emergency_requested=False;sc.completed=True;sc.completion_reason='emergency_stop'
+        sc.outcome.phase='complete';sc.outcome.status='cancelled';sc.outcome.summary='비상 정지 요청으로 실험을 종료했어요.'
+        if getattr(sc,'study',None):
+            sc.study.phase='complete';sc.study.status='cancelled';sc.study.summary=sc.study.feedback=sc.outcome.summary
+        sc.log('trial_completed',reason='emergency_stop',status='cancelled')
 
 def handler(bridge):
     class Handler(BaseHTTPRequestHandler):
@@ -865,6 +881,15 @@ def handler(bridge):
                 if path=='/':self.send(native_home_html(),'text/html; charset=utf-8')
                 elif path=='/lab':self.send((ROOT/'lab_start.html').read_bytes(),'text/html; charset=utf-8')
                 elif path=='/experiment':self.send((ROOT/'experiment.html').read_bytes(),'text/html; charset=utf-8')
+                elif path=='/survey-ui.js':self.send((ROOT/'survey_ui.js').read_bytes(),'application/javascript; charset=utf-8')
+                elif path=='/api/survey':
+                    from survey_store import current
+                    with bridge.lock:self.send(current(bridge))
+                elif path=='/admin/api/survey':
+                    from survey_store import read,schema
+                    trial=parse_qs(urlparse(self.path).query).get('trial',[''])[0]
+                    with bridge.research.db() as db:row=db.execute('SELECT condition FROM trials WHERE id=?',(trial,)).fetchone()
+                    self.send(dict(record=read(bridge.research,trial),schema=schema(not row or row['condition'] not in ('A','AI_OFF'))))
                 elif path=='/experiment-ui.js':self.send((ROOT/'experiment_ui.js').read_bytes(),'application/javascript')
                 elif path.startswith('/api/stt'):
                     from stt_proxy import proxy_get
@@ -953,12 +978,26 @@ def handler(bridge):
                 self.send_error(403);return
             try:
                 size=int(self.headers.get('Content-Length','0'))
-                if not 0<size<=(3000000 if self.path=='/api/stt/transcribe' else 4096):raise ValueError('Invalid request size')
+                if not 0<size<=(3000000 if self.path=='/api/stt/transcribe' else 65536 if self.path=='/api/survey' else 4096):raise ValueError('Invalid request size')
                 body=json.loads(self.rfile.read(size))
                 if not isinstance(body,dict):raise ValueError('Invalid request')
                 if self.path.startswith('/api/stt/'):
                     from stt_proxy import proxy_post
                     self.send(proxy_post(self.path,body,bridge))
+                elif self.path=='/api/survey':
+                    from survey_store import current
+                    with bridge.lock:self.send(current(bridge,body))
+                elif self.path=='/api/emergency/end':
+                    with bridge.lock:
+                        sc=bridge.scenario
+                        if not sc or body.get('session_id')!=sc.session:raise ValueError('현재 주행에서 다시 요청해 주세요.')
+                        bridge.command['mode']='paused'
+                        if not sc.completed:
+                            sc.emergency_requested=True
+                            if getattr(sc,'study',None) and getattr(sc.study,'protocol',None):sc.study.protocol.stop_watch()
+                            sc.log('emergency_stop_confirmed')
+                            finish_emergency(bridge,bridge.ego.get_velocity().length())
+                    self.send({'accepted':True})
                 elif self.path=='/api/experiment/request':
                     from experiment_api import request
                     self.send(request(bridge,body))
@@ -1004,12 +1043,16 @@ def handler(bridge):
                         if bridge.state['phase']=='preparing':raise ValueError('시나리오를 준비하고 있어요.')
                         if setting and bridge.scenario and bridge.scenario.elapsed>0 and not bridge.scenario.completed and not bridge.state.get('drive_guard'):
                             raise ValueError('현재 회차가 끝난 뒤 다음 회차를 준비해 주세요.')
+                        from survey_store import pending
+                        if pending(bridge):raise ValueError('주행 후 설문을 제출한 뒤 다음 회차를 선택해 주세요.')
                         bridge.experiment_spec=setting
                         bridge.condition=condition;bridge.presentation=presentation
                         bridge.language=body.get('language','ko') if body.get('language','ko') in ('ko','en','zh') else 'ko'
                         bridge.command['mode']='paused';bridge.state['phase']='preparing'
                         bridge.pending.put(('profile',profile))
                     self.send({'accepted':True})
+                    if body.get('open_navigation') is True:
+                        threading.Thread(target=webbrowser.open,args=('http://127.0.0.1:8774/navigation?voice=1',),daemon=True).start()
                 elif self.path=='/api/command':self.send(bridge.navigation.command(body))
                 elif self.path=='/api/shutdown':
                     if body.get('confirm')!='stop-owned-app':raise ValueError('Invalid shutdown request')

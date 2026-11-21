@@ -123,15 +123,20 @@ def ensure_phone():
 
 
 def ensure_native_display():
+    from runtime_version import REVISION
+    (ROOT/'display-request.txt').write_text(str(time.time_ns()),encoding='ascii')
     owned=json.loads(OWNED.read_text(encoding='utf-8-sig')) if OWNED.is_file() else {}
     command=process_command(owned.get('display'))
-    if str(ROOT/'native_drive_window.py').lower() in command.lower():return
+    if str(ROOT/'native_drive_window.py').lower() in command.lower():
+        if owned.get('display_revision')==REVISION:return
+        # This is the verified owned display, refreshed only while scenario setup is paused.
+        subprocess.run(['taskkill','/PID',str(owned['display']),'/T','/F'],capture_output=True,creationflags=NO_WINDOW,check=False)
     logs=ROOT/'native-runs';logs.mkdir(exist_ok=True)
     with (logs/('display-'+time.strftime('%Y%m%d-%H%M%S')+'-'+str(os.getpid())+'.log')).open('w',encoding='utf-8') as log:
         p=subprocess.Popen([str(PYTHON),str(ROOT/'native_drive_window.py')],cwd=ROOT,
                            stdout=log,stderr=subprocess.STDOUT,creationflags=NO_WINDOW,
                            env=dict(os.environ,OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='2'))
-    owned['display']=p.pid;OWNED.write_text(json.dumps(owned),encoding='utf-8')
+    owned['display']=p.pid;owned['display_revision']=REVISION;OWNED.write_text(json.dumps(owned),encoding='utf-8')
 
 
 if __name__=='__main__':main()

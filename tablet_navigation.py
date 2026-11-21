@@ -15,10 +15,10 @@ STATIC = {'/cockpit.css','/cockpit.js','/driving-sound.css','/driving-sound.js',
  '/midterm-panel.css','/midterm-panel.js','/multimodal.css','/nurec-map-context.js',
  '/nurec-nav-boot.js','/nurec-nav.css','/nurec-nav.js','/recorded-cabin.js',
  '/research-events.css','/research-events.js','/scene-audio.js','/underbody-sound.js',
- '/city-study.js','/city-study.css','/pedestrian-ui.js','/participant-setup.js','/feedback-voice.js','/experiment-ui.js'}
+ '/city-study.js','/city-study.css','/pedestrian-ui.js','/participant-setup.js','/feedback-voice.js','/experiment-ui.js','/survey-ui.js'}
 JSON_GET = {'/api/state','/api/atlas','/api/library','/api/language/en','/state',
  '/api/footsteps','/api/mechanical-audio','/api/recorded-cabin','/api/cabin-audio',
- '/api/participant/current','/api/research-voice','/api/language/zh','/api/stt/status'}
+ '/api/participant/current','/api/research-voice','/api/language/zh','/api/stt/status','/api/survey'}
 SOUNDS = re.compile(r'^/api/(?:narration/audio|english-audio|chinese-audio|research-audio)/[a-z_]+\.wav$')
 MEDIA = re.compile(r'^/media/[a-zA-Z0-9_-]+$')
 
@@ -76,7 +76,7 @@ def safe_state(data):
     value={key:data[key] for key in keys if key in data}
     raw=data.get('nurec',{})
     value['nurec']={key:raw[key] for key in ('kind','phase','mode','quality','width','height',
-        'speed_kph','frames','scenario','error','lab_rig') if key in raw}
+        'speed_kph','frames','departure_ready','scenario','error','lab_rig') if key in raw}
     return value
 
 
@@ -142,12 +142,15 @@ def serve(h, gateway, head=False):
 
 def post(h,gateway,body):
     path=urlparse(h.path).path
-    if path not in ('/api/command','/control','/api/select','/api/participant','/api/experiment/request','/api/stt/transcribe'):return False
+    if path not in ('/api/command','/control','/api/select','/api/participant','/api/experiment/request','/api/stt/transcribe','/api/survey','/api/emergency/end'):return False
     if not authenticated(h,gateway):h.fail('전체 내비 연결이 필요합니다.',401);return True
     try:
         if path=='/api/command':h.send(gateway.queue_command(body,source='hongik_tablet'));return True
         state=gateway.state()
-        if path=='/api/experiment/request':
+        if path in ('/api/survey','/api/emergency/end'):
+            if body.get('session_id')!=state.get('session'):raise ValueError('현재 주행에서 다시 요청해 주세요.')
+            clean=body
+        elif path=='/api/experiment/request':
             if set(body)-{'session_id','text','source','execute'} or body.get('session_id')!=state.get('session'):
                 raise ValueError('현재 주행에서 다시 요청해 주세요.')
             clean=body

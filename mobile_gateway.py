@@ -323,7 +323,7 @@ def handler(gateway):
             from tablet_navigation import serve
             if serve(self,gateway):return
             path=urlparse(self.path).path
-            if path=='/health':self.send(dict(kind='hongik-mobile',tls_port=HTTPS_PORT,address=gateway.address,polling=gateway.worker_alive));return
+            if path=='/health':self.send(dict(kind='hongik-mobile',api_version=2,tls_port=HTTPS_PORT,address=gateway.address,polling=gateway.worker_alive));return
             if path.startswith('/pc/'):
                 if not self.loopback():self.fail('PC에서만 열 수 있는 화면입니다.',403);return
                 if path=='/pc/state':
@@ -404,7 +404,7 @@ def handler(gateway):
             if origin!=expected and not (origin is None and self.loopback()):self.fail('앱 화면에서 다시 시도해 주세요.',403);return
             try:
                 size=int(self.headers.get('Content-Length','0'))
-                limit=3000000 if urlparse(self.path).path=='/api/stt/transcribe' else 8192
+                limit=3000000 if urlparse(self.path).path=='/api/stt/transcribe' else 65536 if urlparse(self.path).path=='/api/survey' else 8192
                 if not 0<size<=limit:raise ValueError('요청 크기를 확인해 주세요.')
                 if 'application/json' not in self.headers.get('Content-Type',''):raise ValueError('앱에서 다시 시도해 주세요.')
                 body=json.loads(self.rfile.read(size));path=urlparse(self.path).path

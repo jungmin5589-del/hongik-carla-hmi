@@ -39,8 +39,17 @@ def stop_unhealthy_gateway():
 def ensure_gateway():
     value=gateway_status()
     if value.get('kind')=='hongik-mobile':
-        if value.get('polling',True):return
+        if value.get('polling',True) and value.get('api_version')==2:return
         stop_unhealthy_gateway()
+        # Windows may keep the old listener visible briefly after verified shutdown.
+        deadline=time.monotonic()+5.
+        while time.monotonic()<deadline:
+            busy=False
+            for port in (8776,8777):
+                with socket.socket() as probe:
+                    probe.settimeout(.2);busy=busy or probe.connect_ex(('127.0.0.1',port))==0
+            if not busy:break
+            time.sleep(.1)
     if not PYTHON.is_file():raise RuntimeError('휴대폰 연결용 실행 환경이 없습니다. D 드라이브 연결을 확인해 주세요.')
     for port in (8776,8777):
         with socket.socket() as probe:

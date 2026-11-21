@@ -18,7 +18,7 @@ box.querySelector('form').onsubmit=e=>{e.preventDefault();propose(q('text').valu
 confirm.onclick=async()=>{if(!pending||busy)return;busy=true;confirm.disabled=true;try{const r=await post('/api/experiment/request',{session_id:pending.session,text:pending.text,source,execute:true});msg.textContent=r.message;pending=null;confirm.hidden=cancel.hidden=true}catch(e){msg.textContent=e.message}finally{busy=false;confirm.disabled=false}};
 cancel.onclick=()=>{pending=null;confirm.hidden=cancel.hidden=true;msg.textContent='실행 전 선택을 취소했어요.'};
 q('stop').onclick=async()=>{try{const s=data.session;await post('/api/command',{session_id:s.session_id,navigation_id:s.navigation.id,action:'study_cancel_pending',request_id:crypto.randomUUID(),client_event:{source:'experiment_request_card'}});msg.textContent='요청을 중단하고 현재 상태를 확인하고 있어요.'}catch(e){msg.textContent=e.message}};
-q('home').onclick=()=>{location.href=window.HONGIK_TABLET?'/navigation':'/experiment'};
+q('home').onclick=()=>{if(window.HongikSurvey?.require())return;location.href=window.HONGIK_TABLET?'/navigation':'/experiment'};
 async function sttStatus(){try{const s=await(await fetch('/api/stt/status')).json();ready=s.state==='ready';q('stt').textContent=ready?'로컬 음성 인식 준비됨':s.state==='loading'?'음성 모델 준비 중':'PC에서 음성 모델을 준비해 주세요.';mic.disabled=!ready||!window.isSecureContext}catch{ready=false;mic.disabled=true}}
 sttStatus();setInterval(()=>{if(!box.hidden&&!recording)sttStatus()},5000);
 function wav(chunks,samples,rate){const buffer=new ArrayBuffer(44+samples*2),v=new DataView(buffer);const str=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};str(0,'RIFF');v.setUint32(4,36+samples*2,true);str(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);str(36,'data');v.setUint32(40,samples*2,true);let at=44;for(const a of chunks)for(const x of a){v.setInt16(at,Math.max(-1,Math.min(1,x))*32767,true);at+=2}let b='';for(const x of new Uint8Array(buffer))b+=String.fromCharCode(x);return btoa(b)}
@@ -37,6 +37,7 @@ try{
 const old=window.CockpitUpdate;window.CockpitUpdate=d=>{old?.(d);data=d;const p=d.experiment,sid=d.session?.session_id,event=d.session?.navigation?.research_event,study=event?.study,complete=d.nurec?.scenario?.completed;
  document.body.classList.toggle('experiment-off',Boolean(p&&(!p.ai_enabled||p.practice)));box.hidden=!p||!p.ai_enabled;
  if(!p)return;
+ const depart=document.getElementById('passenger-depart');if(depart&&d.nurec?.scenario?.elapsed_s===0){depart.disabled=d.nurec?.departure_ready===false;depart.textContent=depart.disabled?'주행 준비 중…':'출발'}
  if(session!==sid){session=sid;pending=null;notice=0;ack=0;recognized='';confirm.hidden=cancel.hidden=true;msg.textContent='';recording?.()}
  const phases={idle:'대기',queued:'실행 전 · 취소 가능',applying:'실행 중',observing:'결과 확인 중',stopping:'정차 중',complete:'완료'};
  q('stage').textContent=p.practice?'연습 · 온도를 22도로 설정해 보세요.':('내 요청 · '+(p.watching?(p.notified?'변화 알림 · 반응 확인 중':'상황 변화 확인 중'):phases[study?.phase]||'대기'));

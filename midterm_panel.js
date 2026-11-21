@@ -99,6 +99,7 @@ function isCurrent(token){return token===generation&&!dialog.hidden}
 function scenarioComplete(){return latestData?.nurec?.scenario?.completed===true||event?.outcome?.phase==='complete'}
 function returnToSelection(confirmedHorn=false){
  if(confirmedHorn!==true&&!scenarioComplete())return;
+ if(window.HongikSurvey?.require())return;
  stopSpeech();
  if(latestData?.experiment){location.assign(window.HONGIK_TABLET?'/navigation':'/experiment');return;}
  const target=new URL('/',location.href);
