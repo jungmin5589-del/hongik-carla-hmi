@@ -2,6 +2,7 @@
 import argparse,json,os,subprocess,sys,time,urllib.request
 from pathlib import Path
 from nurec_paths import data_root
+from nurec_environment import python_path,carla_root,distro_name
 
 def main():
     parser=argparse.ArgumentParser()
@@ -10,8 +11,7 @@ def main():
     parser.add_argument('--no-browser',action='store_true')
     parser.add_argument('--check',action='store_true')
     args=parser.parse_args();root=data_root();live=root/'live'
-    python=Path(os.environ.get('HONGIK_NUREC_PYTHON',r'C:\CARLA_0.9.16\diagnostics\nurec-env\Scripts\python.exe'))
-    if not python.is_file():raise RuntimeError('기존 NuRec Python 환경을 연결해 주세요.')
+    python=python_path(True);engine=carla_root(True);distro=distro_name(True)
     from profile_sources import source_id
     from lab_viewer import monitors,surround_rect
     cfg=dict(engine='nurec',profile=args.profile,scene=source_id(args.profile),display=[5760,1080],
@@ -29,7 +29,8 @@ def main():
         '--renderer','trained','--lab-surround','--natural-motion','--skip-hub']
     if cfg['fullscreen']:command.append('--surround-fullscreen')
     if args.no_browser:command.append('--no-browser')
-    env=dict(os.environ,HONGIK_NUREC_ROOT=str(root))
+    env=dict(os.environ,HONGIK_NUREC_ROOT=str(root),HONGIK_NUREC_PYTHON=str(python),
+        HONGIK_NUREC_CARLA_ROOT=str(engine),HONGIK_NUREC_DISTRO=distro)
     # Reuse the existing verified responses from the separate native bundle;
     # do not copy recordings into Git or regenerate speech during a drive.
     candidate=Path(root.anchor)/'Hongik-CARLA-Lab-20261107/cache/research-voice'

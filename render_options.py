@@ -69,9 +69,9 @@ def stop_nurec(live,python):
 
 def nurec_preflight():
     from nurec_paths import data_root,stored_file,official_root
+    from nurec_environment import python_path,carla_root,distro_name
     root=data_root();official_root()
-    python=Path(os.environ.get('HONGIK_NUREC_PYTHON',r'C:\CARLA_0.9.16\diagnostics\nurec-env\Scripts\python.exe'))
-    if not python.is_file():raise FileNotFoundError('기존 NuRec Python 설치가 필요해요.')
+    python=python_path(True);carla_root(True);distro_name(True)
     for filename in ('scene-download.json','wide-long-scene-download.json'):
         report=json.loads((root/'reports'/filename).read_text(encoding='utf-8-sig'))
         if report.get('phase')!='download_verified':raise ValueError('NuRec 원본 검증이 필요해요.')

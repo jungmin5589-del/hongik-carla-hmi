@@ -49,7 +49,7 @@ class NaturalBlockade(HighwayBlockade):
         self.fast_s=[-80.+i*self.FAST_SPACING for i in range(len(self.fast_ids))]
 
     def slow_speed(self,phase,position):
-        ramp=transition(0.,1.,0.,4.,self.elapsed)
+        ramp=transition(0.,1.,0.,12.,self.elapsed)
         variation=transition(0.,1.,30.,45.,self.elapsed)
         target=35.+variation*(-5.+5.*math.sin(2*math.pi*max(0.,self.elapsed-30.)/12.+phase))
         return min(target/3.6*ramp,math.sqrt(2.*1.7*max(0.,self.route.length-12.-position)))
@@ -126,7 +126,7 @@ class NaturalWeaving(BoundaryWeaving):
     def advance(self,dt,driving,ego_xy,speed):
         with self.lock:
             if driving and not self.completed:
-                self.lead_speed=transition(0.,1.,0.,4.,self.elapsed)*transition(self.cruise_kph,min(30.,self.cruise_kph),30.,42.,self.elapsed)/3.6
+                self.lead_speed=transition(0.,1.,0.,12.,self.elapsed)*transition(self.cruise_kph,min(30.,self.cruise_kph),30.,42.,self.elapsed)/3.6
                 self.lead_speed=min(self.lead_speed,math.sqrt(2*1.7*max(0.,self.route.length-8.-self.lead_s)))
                 if self.last_action!='widen':self.desired_gap=transition(24.,self.BASE_GAP,30.,42.,self.elapsed)
             # The parent movement uses LEAD_SPEED; temporarily supply the actual

@@ -20,14 +20,15 @@ def camera_views(camera, cfg):
         result[name] = camera @ rotation
     return result
 
-def pinhole(proto, size, fov):
+def pinhole(proto, size, fov, camera_id='camera_front_wide_120fov'):
     w,h = size
     if w*9 != h*16: raise ValueError('Each lab panel must be 16:9')
     focal = w/(2*math.tan(math.radians(fov)/2))
-    return proto.CameraSpec(resolution_w=w,resolution_h=h,shutter_type=proto.GLOBAL,
+    return proto.CameraSpec(logical_id=camera_id,resolution_w=w,resolution_h=h,shutter_type=proto.GLOBAL,
         opencv_pinhole_param=proto.OpenCVPinholeCameraParam(
             principal_point_x=w/2,principal_point_y=h/2,
-            focal_length_x=focal,focal_length_y=focal))
+            focal_length_x=focal,focal_length_y=focal,radial_coeffs=[0.]*6,
+            tangential_coeffs=[0.]*2,thin_prism_coeffs=[0.]*4))
 
 class NuRecSurround:
     def __init__(self, cfg=None):

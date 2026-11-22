@@ -98,6 +98,11 @@ class ProjectionTests(unittest.TestCase):
     def test_bundle_has_one_timestamp_and_three_real_camera_requests(self):
         rig,calls,perform=self.render();self.assertIsNotNone(perform());self.addCleanup(rig.close)
         self.assertEqual([c.frame_start_us for c in calls],[1234]*3)
+        for call in calls:
+            self.assertEqual(call.camera_intrinsics.logical_id,'camera_front_wide_120fov')
+            self.assertEqual(len(call.camera_intrinsics.opencv_pinhole_param.radial_coeffs),6)
+            self.assertEqual(len(call.camera_intrinsics.opencv_pinhole_param.tangential_coeffs),2)
+            self.assertEqual(len(call.camera_intrinsics.opencv_pinhole_param.thin_prism_coeffs),4)
         self.assertEqual(len({tuple(c.sensor_pose.start_pose.flatten()) for c in calls}),3)
         with zipfile.ZipFile(io.BytesIO(rig.frames.zip)) as z:self.assertEqual(set(z.namelist()),{'frame.json','left.jpg','center.jpg','right.jpg'})
 

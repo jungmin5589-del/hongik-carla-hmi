@@ -9,7 +9,7 @@ def allowed(name):
     path=Path(name)
     if path.is_absolute() or '..' in path.parts:return False
     if len(path.parts)==1:
-        return name in ('.gitignore','README.md','AGENTS.md','mobile-requirements.txt') or (path.suffix in TEXT and name!='serve-reference.py')
+        return name in ('.gitignore','.gitattributes','README.md','AGENTS.md','mobile-requirements.txt') or (path.suffix in TEXT and name!='serve-reference.py')
     if path.parts[0]=='docs':return len(path.parts)==2 and path.suffix=='.md'
     if path.parts[0]=='settings':return name.replace('\\','/') in ('settings/runtime-lock.json','settings/scenarios.json','settings/requirements.lock.txt','settings/lab-shared.json','settings/portable-motion.json')
     if path.parts[0]=='data-server-py':

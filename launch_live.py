@@ -13,10 +13,11 @@ import argparse
 from profile_sources import manifest_name,source_id
 from nurec_paths import data_root,wsl_path
 from runtime_version import REVISION
+from nurec_environment import python_path,carla_root,distro_name
 
 ROOT = Path(__file__).resolve().parent
-PYTHON = Path(r"C:\CARLA_0.9.16\diagnostics\nurec-env\Scripts\python.exe")
-CARLA = Path(r"C:\CARLA_0.9.16")
+PYTHON = python_path()
+CARLA = carla_root()
 NO_WINDOW = 0x08000000
 RENDER_BACKENDS = {'night_pedestrian':'trained','congestion': 'trained', 'night': 'trained', 'fog': 'trained','rattle':'trained'}
 
@@ -33,7 +34,7 @@ def can_reuse_drive(state,profile,renderer='trained',night_mode='straight',appea
             and state.get('renderer_backend','trained')==renderer
             and state.get('appearance_mode','legacy')==appearance_mode
             and (profile!='night' or state.get('night_mode')==night_mode)
-            and state.get('phase')!='error' and not state.get('error'))
+            and state.get('phase')=='live' and not state.get('error'))
 
 
 def memory_state():
@@ -127,6 +128,7 @@ def main():
                 and bool(state.get('lab_rig'))==args.lab_surround
                 and bool(state.get('natural_motion'))==args.natural_motion
                 and (not args.lab_surround or (state.get('quality')==args.quality and state.get('runtime_revision')==REVISION))
+                and (not args.lab_surround or state.get('python_executable')==str(PYTHON))
                 and state.get('scenario_load','full') == args.scenario_load
                 and state.get('traffic_load','standard') == args.traffic_load
                 and state.get('proxy_update_mode') == args.proxy_update_mode):
@@ -166,7 +168,7 @@ def main():
             query = "$p=Get-CimInstance Win32_Process -Filter 'ProcessId=" + str(pid) + "';if($p){$p.CommandLine}"
             carla_args = subprocess.check_output(["powershell.exe", "-NoProfile", "-Command", query],
                 creationflags=NO_WINDOW).decode(errors="replace")
-            if "-carla-rpc-port=2016" in carla_args and r"C:\CARLA_0.9.16\CarlaUE4".lower() in carla_args.lower():
+            if "-carla-rpc-port=2016" in carla_args and str(CARLA/'CarlaUE4').lower() in carla_args.lower():
                 owned["carla"] = pid
     if open_port(2016) and "carla" not in owned:
         raise RuntimeError("Port 2016 is occupied by an untracked session; inspect it before loading this trial")
@@ -211,7 +213,7 @@ def main():
         time.sleep(1)
     if not open_port(46435):
         out = (launch / "renderer-launch.log").open("w", encoding="utf-8")
-        proc = subprocess.Popen(["wsl.exe", "-d", "Ubuntu-22.04", "-u", "root", "--exec", "bash",
+        proc = subprocess.Popen(["wsl.exe", "-d", distro_name(True), "-u", "root", "--exec", "bash",
             wsl_path(ROOT/'serve-live.sh'), args.profile, args.renderer,args.scenario_load,
             'surround' if args.lab_surround else 'mono'],
             stdout=out, stderr=subprocess.STDOUT, creationflags=NO_WINDOW)

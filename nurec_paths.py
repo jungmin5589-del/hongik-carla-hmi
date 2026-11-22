@@ -34,6 +34,8 @@ def stored_file(value, root=None):
 def official_root():
     configured = os.environ.get('HONGIK_NUREC_OFFICIAL')
     candidates = ([Path(configured)] if configured else [])
+    try:candidates.append(data_root()/'source/official-integration')
+    except FileNotFoundError:pass
     candidates += [Path(f'{drive}:/CARLA-Build/carla-0.9.16/PythonAPI/examples/nvidia/nurec') for drive in 'EDF']
     for path in candidates:
         if (path/'projection_functions.py').is_file(): return path

@@ -3,6 +3,7 @@ import json
 import subprocess
 import time
 from pathlib import Path
+from nurec_environment import distro_name
 
 ROOT=Path(__file__).resolve().parent
 IMAGE='nvcr.io/nvidia/nre/nre-ga@sha256:97f43e7130c5636ce3e80ea3184d97f56a87fdd989b05cce42230881dbdea284'
@@ -21,5 +22,5 @@ def stop_for_switch(keep_renderer=False):
         time.sleep(.5)
         return
     shell="container=nurec-live-20261019; image=$(docker inspect --format '{{.Config.Image}}' $container 2>/dev/null) || exit 0; [ \"$image\" = '"+IMAGE+"' ] || exit 1; docker stop --timeout 10 $container >/dev/null; for i in $(seq 1 40); do docker inspect $container >/dev/null 2>&1 || exit 0; sleep 0.5; done; exit 1"
-    subprocess.run(['wsl.exe','-d','Ubuntu-22.04','-u','root','--exec','bash','-lc',shell],check=True,creationflags=0x08000000)
+    subprocess.run(['wsl.exe','-d',distro_name(True),'-u','root','--exec','bash','-lc',shell],check=True,creationflags=0x08000000)
     time.sleep(1.)

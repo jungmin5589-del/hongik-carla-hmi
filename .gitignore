@@ -1,6 +1,7 @@
 # Explicit source-only backup. Runtime data and credentials are denied by default.
 *
 !/.gitignore
+!/.gitattributes
 !/README.md
 !/AGENTS.md
 !/*.py

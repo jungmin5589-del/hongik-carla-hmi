@@ -4,4 +4,5 @@ scipy==1.18.1
 Pillow==12.3.0
 pygame==2.6.1
 grpcio==1.84.0
+protobuf==7.36.2
 opencv-python-headless==4.11.0.86

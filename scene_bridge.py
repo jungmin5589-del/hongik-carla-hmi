@@ -285,6 +285,7 @@ class Bridge:
         self.state['renderer_backend'] = getattr(args, 'renderer_backend', 'trained')
         self.state['target_fps'] = args.fps
         self.state.update(kind='hongik-nurec',lab_rig=bool(self.rig),motion=dict(enabled=False),
+            python_executable=sys.executable,
             runtime_revision=REVISION,
             display=[5760,1080] if self.rig else [args.width,args.height],
             natural_motion=bool(getattr(args,'natural_motion',False)))
@@ -847,7 +848,8 @@ class Bridge:
                     if isinstance(self.scenario,(HighwayBlockade,BoundaryWeaving,NaturalDrive)):
                         # Low-speed feed-forward/integral control avoids a
                         # persistent following-distance error from driveline drag.
-                        speed_integral=float(np.clip(speed_integral+error*min(dt,.2),-6.,6.))
+                        integral_limit=18. if getattr(self.args,'natural_motion',False) else 6.
+                        speed_integral=float(np.clip(speed_integral+error*min(dt,.2),-integral_limit,integral_limit))
                         ctl.throttle=float(np.clip(.18+.07*error+.03*speed_integral,0.,.7))
                         ctl.brake=float(np.clip(-error*.12,0.,.3)) if error<-.6 else 0.
                         if target_speed<.1:ctl.throttle,ctl.brake=0.,.3
