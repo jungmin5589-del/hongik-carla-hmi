@@ -122,6 +122,9 @@ class NaturalWeaving(BoundaryWeaving):
         # introduction plus an observation period. Pace within the real source,
         # never extend the road or loop an unseen background.
         self.cruise_kph=min(35.,max(3.6,(self.route.length-self.lead_s-20.)*3.6/75.))
+        self.weave_reference_speed=min(30.,self.cruise_kph)/3.6
+        self.weave_clock=0.
+        self.horn_motion_at=None
 
     def advance(self,dt,driving,ego_xy,speed):
         with self.lock:
@@ -129,10 +132,51 @@ class NaturalWeaving(BoundaryWeaving):
                 self.lead_speed=transition(0.,1.,0.,12.,self.elapsed)*transition(self.cruise_kph,min(30.,self.cruise_kph),30.,42.,self.elapsed)/3.6
                 self.lead_speed=min(self.lead_speed,math.sqrt(2*1.7*max(0.,self.route.length-8.-self.lead_s)))
                 if self.last_action!='widen':self.desired_gap=transition(24.,self.BASE_GAP,30.,42.,self.elapsed)
-            # The parent movement uses LEAD_SPEED; temporarily supply the actual
-            # continuous speed, while retaining the calibrated route/heading.
-            self.LEAD_SPEED=max(.01,self.lead_speed)
-            return super().advance(dt,driving,ego_xy,speed)
+            # The parent integrates longitudinal travel with LEAD_SPEED. Zero
+            # really means stationary; never manufacture forward travel.
+            self.LEAD_SPEED=self.lead_speed
+            previous_s,previous_time=self.lead_s,self.elapsed
+            result=super().advance(dt,driving,ego_xy,speed)
+            # Weaving follows distance, not wall time. At the source boundary
+            # both lateral motion and its heading must freeze together.
+            active_time=max(0.,self.elapsed-max(previous_time,self.ONSET_SECONDS))
+            elapsed=self.elapsed-previous_time
+            if elapsed>0. and active_time>0.:
+                self.weave_clock+=max(0.,self.lead_s-previous_s)*min(1.,active_time/elapsed)/self.weave_reference_speed
+            return result
+
+    def interaction(self,action,session):
+        with self.lock:
+            result=super().interaction(action,session)
+            if action=='horn':
+                self.horn_motion_at=self.weave_clock
+                result=self.public()
+            return result
+
+    def pose(self):
+        with self.lock:
+            t=self.weave_clock
+            u=min(1.,t/5.) if self.onset else 0.
+            ramp=u**3*(10.-15.*u+6.*u*u)
+            ramp_speed=6.*u*u*(1.-u)**2 if 0.<u<1. else 0.
+            scale,scale_speed=1.,0.
+            age=t-self.horn_motion_at if self.horn_motion_at is not None else -1.
+            if 0.<=age<4.:
+                blend=min(1.,age,4.-age)
+                blend_speed=1. if age<1. else -1. if age>3. else 0.
+                scale=1.-.82*blend*blend*(3.-2.*blend)
+                scale_speed=-.82*6.*blend*(1.-blend)*blend_speed
+            phase=2.*math.pi*t/self.PERIOD;secondary=2.*math.pi*t/6.7
+            oscillation=.8*math.sin(phase)+.2*math.sin(secondary)
+            derivative=.8*(2.*math.pi/self.PERIOD)*math.cos(phase)+.2*(2.*math.pi/6.7)*math.cos(secondary)
+            wave=self.BOUNDARY+self.AMPLITUDE*scale*oscillation
+            lateral=ramp*wave
+            velocity=ramp_speed*wave+ramp*self.AMPLITUDE*(scale_speed*oscillation+scale*derivative)
+            # d(lateral)/d(distance) remains defined when speed reaches zero.
+            # Dividing a time-driven oscillation by ~0 previously spun the scan
+            # broadside (up to 90 degrees), exposing unreconstructed surfaces.
+            yaw=math.atan2(velocity,self.weave_reference_speed)
+            return self.route.sample(self.lead_s,lateral,yaw,self.height),lateral,yaw
 
     def target_speed(self):
         if not self.enabled:return None

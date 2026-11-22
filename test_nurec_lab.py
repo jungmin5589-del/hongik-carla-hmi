@@ -60,10 +60,50 @@ class MotionTests(unittest.TestCase):
         self.assertGreater(wraps,0)
 
     def test_heading_tracks_actual_lateral_path_derivative(self):
-        sc=self.scenario(NaturalWeaving);sc.onset=True;sc.LEAD_SPEED=sc.lead_speed=8.
-        for t in (30.1,31.,34.,36.,43.):
-            sc.elapsed=t;_,_,heading=sc.pose();sc.elapsed=t+.0001;right=sc.pose()[1];sc.elapsed=t-.0001;left=sc.pose()[1]
-            self.assertAlmostEqual(math.tan(heading)*8.,(right-left)/.0002,places=4)
+        sc=self.scenario(NaturalWeaving);sc.onset=True
+        # Check the path tangent during onset, normal weaving and horn recovery.
+        for horn_at in (None,6.):
+            sc.horn_motion_at=horn_at
+            for t in (.1,1.,4.,6.,6.5,7.,8.,9.5,10.,13.):
+                sc.weave_clock=t;_,_,heading=sc.pose()
+                sc.weave_clock=t+.000001;right=sc.pose()[1]
+                sc.weave_clock=t-.000001;left=sc.pose()[1]
+                self.assertAlmostEqual(math.tan(heading)*sc.weave_reference_speed,(right-left)/.000002,places=5)
+
+    def test_horn_near_source_end_never_spins_or_slides_stopped_scan(self):
+        sc=NaturalWeaving(route(312),Path(self.temp.name)/'late-horn.jsonl');self.addCleanup(sc.events.close)
+        sc.onset=True;sc.onset_monotonic=0.;sc.dialog_open=True
+        sc.elapsed=80.;sc.weave_clock=50.;sc.lead_s=sc.route.length-8.3
+        sc.interaction('horn',sc.session)
+        previous=sc.pose()[0];maximum_yaw=0.
+        for _ in range(160):
+            sc.advance(.1,True,[sc.lead_s-12.,0.],0.)
+            pose,_,yaw=sc.pose();maximum_yaw=max(maximum_yaw,abs(math.degrees(yaw)))
+            self.assertLess(np.linalg.norm(pose[:3,3]-previous[:3,3]),.13)
+            previous=pose
+        self.assertTrue(sc.completed);self.assertLess(maximum_yaw,20.)
+        self.assertEqual(sc.lead_s,sc.route.length-8.)
+        stopped=sc.pose()[0].copy()
+        sc.advance(.2,False,[sc.lead_s-12.,0.],0.)
+        np.testing.assert_array_equal(sc.pose()[0],stopped)
+
+    def test_stationary_horn_does_not_change_vehicle_pose(self):
+        sc=self.scenario(NaturalWeaving)
+        sc.onset=True;sc.onset_monotonic=0.;sc.dialog_open=True
+        sc.elapsed=80.;sc.weave_clock=50.;sc.lead_s=sc.route.length-8.
+        before=sc.pose()[0].copy();sc.interaction('horn',sc.session)
+        for _ in range(80):sc.advance(.1,True,[sc.lead_s-12.,0.],0.)
+        np.testing.assert_array_equal(sc.pose()[0],before)
+        self.assertEqual(sc.lead_speed,0.)
+
+    def test_paused_weaving_and_horn_response_are_frozen(self):
+        sc=self.scenario(NaturalWeaving)
+        sc.onset=True;sc.onset_monotonic=0.;sc.dialog_open=True
+        sc.elapsed=40.;sc.weave_clock=10.
+        sc.interaction('horn',sc.session);before=sc.pose()[0].copy()
+        for _ in range(20):sc.advance(.2,False,[0.,0.],0.)
+        np.testing.assert_array_equal(sc.pose()[0],before)
+        self.assertEqual(sc.weave_clock,10.)
 
     def test_short_source_keeps_room_after_the_normal_intro(self):
         sc=NaturalWeaving(route(240),Path(self.temp.name)/'short.jsonl');self.addCleanup(sc.events.close)
