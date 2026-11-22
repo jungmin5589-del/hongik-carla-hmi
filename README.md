@@ -1,3 +1,5 @@
+[팀원 시작 안내 · 최신 실험 세팅과 업데이트](docs/TEAM-START-HERE-KO.md) · [브라우저로 읽는 안내](TEAM_START_HERE.html): 설치, 64번 실험, 아이패드 QR, 음성, 기록, GitHub 협업과 CARLA/NuRec의 현재 검증 범위를 정리했습니다.
+
 [NuRec 연구실 준비 · 66번 설치 / 65번 실행 / 67번 종료](docs/NUREC-LAB-OPTION-KO.md): 정체·불안정한 앞차의 16:3 세 화면을 노트북에서 실제 주행 검증했습니다. 현재 3면·540p 실측은 약 3.4 / 6.3fps이며 연구실 6축 모션 검증은 별도입니다.
 
 [주행 후 설문·차량 신호·비상 정지 확인](docs/POST_DRIVE_SURVEY_KO.md): 주행 완료 후 설문 자동 표시, 임시 저장, 같은 주행 ID의 신호·행동과 통합 보관, Pretendard 글꼴을 적용했습니다.
