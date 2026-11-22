@@ -6,6 +6,7 @@
 
 - [최신 코드 · 공유 브랜치](https://github.com/jungmin5589-del/hongik-carla-hmi/tree/codex/portable-motion-20261111)
 - [Google Drive · 실행본과 최신 업데이트](https://drive.google.com/drive/folders/1W-h_GiLCqybHn4jzeNg_gRI3eTw0wFz2)
+- [이번 최신 업데이트 ZIP 직접 받기](https://drive.google.com/file/d/1SXdvhYvtkOcuSA5Tbausj3Lju7_5hIK1/view?usp=drivesdk)
 - ZIP을 풀면 **00_팀원_사용안내.html**부터 엽니다. 브라우저로 읽을 수 있습니다.
 - 최신 업데이트는 **Hongik-Experiment-Update-20261122.zip**입니다. 기존 실행본에 적용하는 파일이며 엔진이 들어 있는 완전 설치본은 아닙니다.
 - GitHub는 공개 열람 가능합니다. Drive는 공유받은 Google 계정으로 접속합니다. 권한이 없으면 소유자에게 접근 요청을 보냅니다.
@@ -26,8 +27,8 @@ Drive 폴더에서 아래 파일을 받습니다.
 
 | 파일 | 역할 |
 | --- | --- |
-| Hongik-CARLA-Lab-20261107-App-Python-Audio.zip | 기본 앱·휴대용 Python·기본 음성 |
-| CARLA_0.9.16.zip | CARLA 엔진 · 약 6.8GB |
+| [Hongik-CARLA-Lab-20261107-App-Python-Audio.zip](https://drive.google.com/file/d/1T8mAnT7SU-kurOYdPcE-EzSRh2DbD5NW/view?usp=drivesdk) | 기본 앱·휴대용 Python·기본 음성 |
+| [CARLA_0.9.16.zip](https://drive.google.com/file/d/1xwlyE0iy7PC9VNs0hlxJp2u5I1wADdu_/view?usp=drivesdk) | CARLA 엔진 · 약 6.8GB |
 | Hongik-Experiment-Update-20261122.zip | 이번 최신 코드·설정·음성 |
 
 기본 앱 ZIP을 풀어 생성된 Hongik-CARLA-Lab-20261107 폴더 안에 CARLA_0.9.16.zip을 둡니다. 그다음 위 업데이트 순서를 따릅니다. GitHub 소스 ZIP만으로는 전체 실행 환경이 구성되지 않습니다.
