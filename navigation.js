@@ -20,7 +20,7 @@
  $('nurec-start').onclick=()=>control({mode:'auto'});$('nurec-pause').onclick=()=>control({mode:'paused'});$('nurec-reset').onclick=()=>control({reset:true});$('nurec-quality').onchange=()=>control({quality:$('nurec-quality').value});
  const previous=window.CockpitUpdate;
  window.CockpitUpdate=data=>{
-  previous?.(data);const n=data.nurec;if(!n)return;const s=n.scenario;controlSession=n.kind==='hongik-native-carla'?s.session:null;
+  previous?.(data);const n=data.nurec;if(!n)return;const s=n.scenario;controlSession=['hongik-native-carla','hongik-nurec'].includes(n.kind)?s.session:null;
   beam.hidden=!s.high_beam?.on;
   if(!window.HongikSceneAudio&&lastHorn?.session===s.session&&s.horn_count>lastHorn.count&&document.visibilityState==='visible')horn(s.horn_duration_s);lastHorn={session:s.session,count:s.horn_count};
   const key=s.session+':'+s.crash?.phase;if(lastImpact?.session===s.session&&lastImpact.key!==key&&s.crash?.primary_collision_verified&&['primary_impact','secondary_impact'].includes(s.crash.phase)&&document.visibilityState==='visible')impactSound();lastImpact={session:s.session,key};

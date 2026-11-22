@@ -1,5 +1,9 @@
 # Existing local runtime setup
 
+The experimental NuRec three-panel option starts with `65_START_NUREC_LAB.bat`.
+See [deployment, display calibration and verification limits](NUREC-LAB-OPTION-KO.md).
+The existing native CARLA research launcher remains separate.
+
 This repository versions application code, the passenger UI, scenario settings,
 tests and pinned runtime references. It does not contain a self-contained CARLA
 or NVIDIA environment.

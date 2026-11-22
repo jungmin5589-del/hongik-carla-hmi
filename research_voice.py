@@ -1,9 +1,9 @@
 """Verified offline Qwen responses; no model inference during driving."""
-import hashlib,json,wave
+import hashlib,json,wave,os
 from functools import lru_cache
 from pathlib import Path
 
-CACHE=Path(__file__).resolve().parents[1]/'cache/research-voice'
+CACHE=Path(os.environ.get('HONGIK_RESEARCH_VOICE_CACHE',str(Path(__file__).resolve().parents[1]/'cache/research-voice')))
 ENGINE='Qwen3-TTS-12Hz-0.6B-CustomVoice'
 # Each row is Korean, English, Mandarin. Completion claims are outcome-gated.
 LINES={

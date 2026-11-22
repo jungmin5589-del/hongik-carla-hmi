@@ -11,6 +11,8 @@ import urllib.request
 import webbrowser
 import argparse
 from profile_sources import manifest_name,source_id
+from nurec_paths import data_root,wsl_path
+from runtime_version import REVISION
 
 ROOT = Path(__file__).resolve().parent
 PYTHON = Path(r"C:\CARLA_0.9.16\diagnostics\nurec-env\Scripts\python.exe")
@@ -64,19 +66,27 @@ def require_startup_memory(timeout=30.):
 def open_displays(owned):
     if '--no-ui' in sys.argv:
         return
+    surround='--lab-surround' in sys.argv
+    layout=('surround-fullscreen' if '--surround-fullscreen' in sys.argv else 'surround-preview') if surround else 'mono'
+    expected='lab_viewer.py' if surround else 'live_window.py'
     pid = owned.get('display')
     running = False
     if isinstance(pid, int):
         query = "$p=Get-CimInstance Win32_Process -Filter 'ProcessId="+str(pid)+"';if($p){$p.CommandLine}"
         command = subprocess.check_output(['powershell.exe','-NoProfile','-Command',query],creationflags=NO_WINDOW).decode(errors='replace')
-        running = 'live_window.py' in command and str(ROOT).lower() in command.lower()
+        ours=any(name in command for name in ('live_window.py','lab_viewer.py')) and str(ROOT).lower() in command.lower()
+        running=ours and expected in command and owned.get('display_layout')==layout
+        if ours and not running:
+            subprocess.run(['taskkill','/PID',str(pid),'/T','/F'],capture_output=True,creationflags=NO_WINDOW,check=False)
     if not running:
         stamp = time.strftime('%Y%m%d-%H%M%S')
-        log = (ROOT/'launches'/('display-'+stamp+'.log')).open('w',encoding='utf-8')
         env = dict(os.environ,OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='2',MKL_NUM_THREADS='1')
-        process = subprocess.Popen([str(PYTHON),str(ROOT/'live_window.py')],cwd=ROOT,
-            stdout=log,stderr=subprocess.STDOUT,creationflags=NO_WINDOW,env=env)
+        if surround:env['HONGIK_LAB_PREVIEW']='0' if '--surround-fullscreen' in sys.argv else '1'
+        with (ROOT/'launches'/('display-'+stamp+'.log')).open('w',encoding='utf-8') as log:
+            process = subprocess.Popen([str(PYTHON),str(ROOT/('lab_viewer.py' if surround else 'live_window.py'))],cwd=ROOT,
+                stdout=log,stderr=subprocess.STDOUT,creationflags=NO_WINDOW,env=env)
         owned['display'] = process.pid
+        owned['display_layout']=layout
         (ROOT/'owned-processes.json').write_text(json.dumps(owned,indent=2),encoding='utf-8')
     if '--no-browser' not in sys.argv:
         webbrowser.open('http://127.0.0.1:8774/navigation')
@@ -85,6 +95,10 @@ def open_displays(owned):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--profile',choices=['night','congestion','fog','rattle','night_pedestrian'],default='night')
+    parser.add_argument('--lab-surround',action='store_true')
+    parser.add_argument('--surround-fullscreen',action='store_true')
+    parser.add_argument('--natural-motion',action='store_true')
+    parser.add_argument('--skip-hub',action='store_true')
     parser.add_argument('--appearance-mode',choices=['source','legacy'],default=None)
     parser.add_argument('--night-mode',choices=['straight','overtake-crash'],default='straight')
     parser.add_argument('--no-ui',action='store_true')
@@ -102,19 +116,24 @@ def main():
     if not ROOT.parent.is_dir() or not PYTHON.is_file():
         raise RuntimeError("Connect D drive and restore the existing NuRec environment")
     # Direct legacy entries also retain a working route back to the chooser.
-    subprocess.run([str(PYTHON),str(ROOT/'open_app.py'),'--no-browser'],cwd=ROOT,
-        stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=True,creationflags=NO_WINDOW)
+    if not args.skip_hub:
+        subprocess.run([str(PYTHON),str(ROOT/'open_app.py'),'--no-browser'],cwd=ROOT,
+            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=True,creationflags=NO_WINDOW)
     if open_port(8774):
         with urllib.request.urlopen('http://127.0.0.1:8774/state',timeout=5) as response:
             state=json.load(response)
         if (can_reuse_drive(state,args.profile,args.renderer,args.night_mode,args.appearance_mode)
                 and state.get('target_fps') == args.fps
+                and bool(state.get('lab_rig'))==args.lab_surround
+                and bool(state.get('natural_motion'))==args.natural_motion
+                and (not args.lab_surround or (state.get('quality')==args.quality and state.get('runtime_revision')==REVISION))
                 and state.get('scenario_load','full') == args.scenario_load
                 and state.get('traffic_load','standard') == args.traffic_load
                 and state.get('proxy_update_mode') == args.proxy_update_mode):
             path = ROOT/'owned-processes.json'
-            req=urllib.request.Request('http://127.0.0.1:8774/control',data=json.dumps({'quality':args.quality}).encode(),headers={'Content-Type':'application/json'})
-            with urllib.request.urlopen(req,timeout=5):pass
+            if not args.lab_surround:
+                req=urllib.request.Request('http://127.0.0.1:8774/control',data=json.dumps({'quality':args.quality}).encode(),headers={'Content-Type':'application/json'})
+                with urllib.request.urlopen(req,timeout=5):pass
             open_displays(json.loads(path.read_text(encoding='utf-8-sig')) if path.is_file() else {})
             print("Live bridge already running")
             return
@@ -138,8 +157,9 @@ def main():
         if isinstance(display, int):
             query = "$p=Get-CimInstance Win32_Process -Filter 'ProcessId="+str(display)+"';if($p){$p.CommandLine}"
             command = subprocess.check_output(['powershell.exe','-NoProfile','-Command',query],creationflags=NO_WINDOW).decode(errors='replace')
-            if 'live_window.py' in command and str(ROOT).lower() in command.lower():
+            if any(name in command for name in ('live_window.py','lab_viewer.py')) and str(ROOT).lower() in command.lower():
                 owned['display'] = display
+                owned['display_layout']=json.loads(previous.read_text(encoding='utf-8-sig')).get('display_layout')
     if open_port(2016) and previous.is_file():
         pid = json.loads(previous.read_text(encoding="utf-8-sig")).get("carla")
         if isinstance(pid, int):
@@ -179,7 +199,8 @@ def main():
                                '--physics-only', '--renderer-backend', args.renderer, '--night-mode', args.night_mode,
                                '--fps', str(args.fps), '--proxy-update-mode', args.proxy_update_mode,
                                '--scenario-load',args.scenario_load,'--traffic-load',args.traffic_load,'--appearance-mode',args.appearance_mode,
-                               '--width',str(render_size[0]),'--height',str(render_size[1])], cwd=ROOT,
+                               '--width',str(render_size[0]),'--height',str(render_size[1])]
+        +(['--lab-surround'] if args.lab_surround else [])+(['--natural-motion'] if args.natural_motion else []), cwd=ROOT,
         stdout=out, stderr=subprocess.STDOUT, creationflags=NO_WINDOW, env=bridge_env)
     owned["bridge"] = bridge.pid
     # Build the small road BEFORE loading NuRec on GPU; avoid two large maps in VRAM.
@@ -191,7 +212,8 @@ def main():
     if not open_port(46435):
         out = (launch / "renderer-launch.log").open("w", encoding="utf-8")
         proc = subprocess.Popen(["wsl.exe", "-d", "Ubuntu-22.04", "-u", "root", "--exec", "bash",
-            "/mnt/d/CARLA-Maps/NuRec-OneScene-20261018/live/serve-live.sh", args.profile, args.renderer,args.scenario_load],
+            wsl_path(ROOT/'serve-live.sh'), args.profile, args.renderer,args.scenario_load,
+            'surround' if args.lab_surround else 'mono'],
             stdout=out, stderr=subprocess.STDOUT, creationflags=NO_WINDOW)
         owned["renderer_launcher"] = proc.pid
     (ROOT / "owned-processes.json").write_text(json.dumps(owned, indent=2), encoding="utf-8")

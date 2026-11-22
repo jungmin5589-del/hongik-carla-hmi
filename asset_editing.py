@@ -7,7 +7,8 @@ import ast
 from pathlib import Path
 from google.protobuf import descriptor_pool, message_factory
 
-ROOT=Path(__file__).resolve().parents[1]
+from nurec_paths import data_root
+ROOT=data_root()
 POOL=descriptor_pool.DescriptorPool()
 for name in ('common','sensorsim'):
     tree=ast.parse((ROOT/'source/runtime-protocol-26.4'/(name+'_pb2.py')).read_text(encoding='utf-8'))

@@ -33,6 +33,11 @@ def main():
     print(json.dumps(dict(client=version,carla_root=str(root),monitors=rects,detected_surround=rect,render=cfg['render'],fov=cfg['fov'],yaw=cfg['yaw'],motion_enabled=args.motion,motion=motion),ensure_ascii=True,indent=2))
     if not rect and not args.preview:raise RuntimeError('Enable the existing lab 5760x1080 Surround layout, or use --preview on a laptop')
     if args.check:return
+    try:
+        from render_options import ensure_server
+        ensure_server()
+    except (OSError,RuntimeError,ValueError) as exc:
+        print('CARLA / NuRec 선택 화면: '+str(exc),flush=True)
     os.environ['CARLA_ROOT']=str(root);os.environ['HONGIK_LAB_RIG']='1';os.environ['HONGIK_LAB_PREVIEW']='1' if args.preview else '0'
     os.environ['HONGIK_MOTION']='1' if args.motion else '0'
     if args.carla_root:

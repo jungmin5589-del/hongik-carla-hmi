@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # One authorized scene; pinned runtime; localhost only; no privileged container.
 set -euo pipefail
-root=/mnt/d/CARLA-Maps/NuRec-OneScene-20261018
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 image=nvcr.io/nvidia/nre/nre-ga@sha256:97f43e7130c5636ce3e80ea3184d97f56a87fdd989b05cce42230881dbdea284
 container=nurec-live-20261019
 artifact=/data/sample_set/26.04_release/00040136-e651-4abd-991d-0655ccda9430/00040136-e651-4abd-991d-0655ccda9430.usdz
 profile=${1:-night}
 backend=${2:-trained}
 workload=${3:-full}
+layout=${4:-mono}
 case "$backend" in
   trained) renderer_args=(--renderer default) ;;
   nrend) renderer_args=(--renderer nrend) ;;
@@ -34,7 +35,7 @@ case "$workload" in
   essential)
     [[ -f "$root/live/vendor/lean-runtime/gaussians_composite.py" && -f "$root/live/lean_runtime.py" ]] || exit 3
     lean_source="$root/live/vendor/lean-runtime/gaussians_composite.py"
-    if [[ "$profile" == congestion && "$backend" == trained && -f "$root/live/static-view-cache.enabled" ]]; then
+    if [[ "$layout" != surround && "$profile" == congestion && "$backend" == trained && -f "$root/live/static-view-cache.enabled" ]]; then
       lean_source="$root/live/vendor/static-view/gaussians_composite.py"
       [[ -f "$lean_source" ]] || exit 3
     fi

@@ -26,7 +26,12 @@ def surround_rect(rects):
 
 def preview_layout(rects):
     external=next((r for r in rects if r[0]!=0 or r[1]!=0),None)
-    return (external[:2],external[2:],True) if external else ([40,60],[1200,225],False)
+    # An external laptop monitor is not a reason to silently change 3 views
+    # into a single front view. Fit the exact 16:3 preview on that monitor.
+    if external:
+        width=min(1920,external[2],int(external[3]*16/3));width=max(16,width//16*16);height=width*3//16
+        return ([external[0]+(external[2]-width)//2,external[1]+(external[3]-height)//2],[width,height],False)
+    return ([40,60],[1200,225],False)
 
 def main():
     cfg=settings();preview=os.environ.get('HONGIK_LAB_PREVIEW')=='1';rect=surround_rect(monitors())
@@ -38,7 +43,7 @@ def main():
     from display_frames import CachedFrame
     pygame.display.init();pygame.font.init();size=tuple(preview_size) if preview else tuple(cfg['display'])
     screen=pygame.display.set_mode(size,pygame.RESIZABLE if preview else pygame.NOFRAME)
-    pygame.display.set_caption('Hongik CARLA · Lab Surround'+(' · preview' if preview else ''))
+    pygame.display.set_caption('Hongik Drive · Lab Surround'+(' · preview' if preview else ''))
     stop=threading.Event();lock=threading.Lock();latest=[None];last_frame=[-1];token=[''];received=[0.]
     message=pygame.font.Font(None,28).render('Waiting for live camera views',True,(235,235,235))
     def receive():
@@ -74,19 +79,26 @@ def main():
             for event in pygame.event.get():
                 if event.type==pygame.QUIT or event.type==pygame.KEYDOWN and event.key==pygame.K_ESCAPE:stop.set()
             screen.fill((8,10,14));w,h=screen.get_size();panel=w//3
+            # Preserve the whole viewport ratio even after a manual resize.
+            fit_w=min(w,round(h*16/3));fit_h=round(fit_w*3/16)
+            origin_x,origin_y=(w-fit_w)//2,(h-fit_h)//2
             with lock:parts=latest[0];fresh=time.monotonic()-received[0]<3
             if parts:
                 shown_parts=[parts[1]] if center_only else parts
-                panel=w if center_only else w//3
+                panel=fit_w if center_only else fit_w//3
                 for i,jpeg in enumerate(shown_parts):
-                    surf=caches[i].surface(jpeg,(panel,h))
-                    if surf:screen.blit(surf,(i*panel+(panel-surf.get_width())//2,(h-surf.get_height())//2))
+                    surf=caches[i].surface(jpeg,(panel,fit_h))
+                    if surf:screen.blit(surf,(origin_x+i*panel+(panel-surf.get_width())//2,origin_y+(fit_h-surf.get_height())//2))
             if not fresh:
                 shade=pygame.Surface((w,h));shade.set_alpha(170);screen.blit(shade,(0,0));screen.blit(message,((w-message.get_width())//2,(h-message.get_height())//2))
             pygame.display.flip();clock.tick(cfg['fps'])
     finally:
         stop.set();pygame.quit()
         try:
-            req=urllib.request.Request('http://127.0.0.1:8774/control',data=b'{"mode":"paused"}',headers={'Content-Type':'application/json'})
+            with urllib.request.urlopen('http://127.0.0.1:8774/state',timeout=2) as response:current=json.load(response)
+            body=json.dumps(dict(mode='paused',session_id=(current.get('scenario') or {}).get('session'))).encode()
+            req=urllib.request.Request('http://127.0.0.1:8774/control',data=body,headers={'Content-Type':'application/json'})
             urllib.request.urlopen(req,timeout=2).close()
         except OSError:pass
+
+if __name__=='__main__':main()

@@ -20,8 +20,9 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
 ROOT = Path(__file__).resolve().parent
-TRIAL = ROOT.parent
-OFFICIAL = Path(r"D:\CARLA-Build\carla-0.9.16\PythonAPI\examples\nvidia\nurec")
+from nurec_paths import data_root,stored_file,official_root
+TRIAL = data_root()
+OFFICIAL = official_root()
 sys.path.insert(0, str(OFFICIAL))
 sys.path.insert(0, str(ROOT / "vendor"))
 import carla
@@ -53,6 +54,7 @@ from range_transport import decode_range_hint
 from performance_presets import traffic_config
 from fog_scene import LEAD_TRACK_ID as FOG_LEAD_TRACK_ID
 from natural_drive import NaturalDrive,RecordedCamera,RecordedTraffic
+from runtime_version import REVISION
 
 MIRROR = np.diag([1., -1., 1., 1.])
 QUALITY_PRESETS = {"smooth": (640, 360), "balanced": (960, 540), "high": (1280, 720), "fullhd": (1920, 1080)}
@@ -85,10 +87,7 @@ class Scene:
         report = json.loads((TRIAL / 'reports' / manifest).read_text())
         if report["phase"] != "download_verified":
             raise RuntimeError("Verified authorized scene required")
-        stored_path = report["local_path"]
-        if stored_path.startswith("/mnt/d/"):
-            stored_path = "D:/" + stored_path[len("/mnt/d/"):]
-        self.path = Path(stored_path)
+        self.path = stored_file(report['local_path'],TRIAL)
         if self.path.stat().st_size != report["actual_bytes"]:
             raise RuntimeError("Scene file size changed")
         with zipfile.ZipFile(self.path) as z:
@@ -274,6 +273,10 @@ class Bridge:
         self.rgb_audit_time = 0.
         self.validated_image_size = None
         self.render_size = (args.width, args.height)
+        self.rig = None
+        if getattr(args,'lab_surround',False):
+            from nurec_surround import NuRecSurround
+            self.rig=NuRecSurround()
         self.quality = next((key for key, size in QUALITY_PRESETS.items() if size == self.render_size), "custom")
         self.state = {"phase": "loading_road", "speed_kph": 0, "mode": "paused",
                       "frames": 0, "source": "CARLA pose -> NuRec gRPC", "error": None,
@@ -281,6 +284,10 @@ class Bridge:
                       "profile": args.profile, "scene_id": self.scene.scene_id}
         self.state['renderer_backend'] = getattr(args, 'renderer_backend', 'trained')
         self.state['target_fps'] = args.fps
+        self.state.update(kind='hongik-nurec',lab_rig=bool(self.rig),motion=dict(enabled=False),
+            runtime_revision=REVISION,
+            display=[5760,1080] if self.rig else [args.width,args.height],
+            natural_motion=bool(getattr(args,'natural_motion',False)))
         self.state['proxy_update_mode'] = getattr(args, 'proxy_update_mode', 'batch')
         self.state['scenario_load'] = getattr(args, 'scenario_load', 'full')
         self.state['traffic_load'] = getattr(args,'traffic_load','standard')
@@ -304,6 +311,10 @@ class Bridge:
             config=traffic_config(config,getattr(args,'traffic_load','standard'))
             if config['scene_id']!=self.scene.scene_id:raise RuntimeError('Four-lane source/config mismatch')
             self.scenario=HighwayBlockade(self.scene.route,self.run_dir/'interactions.jsonl',config)
+            if getattr(args,'natural_motion',False):
+                from nurec_natural import NaturalBlockade
+                self.scenario.events.close()
+                self.scenario=NaturalBlockade(self.scene.route,self.run_dir/'interactions.jsonl',config)
         elif args.profile=='fog':
             config = json.loads((TRIAL / 'reports/long-scene-config.json').read_text())
             if config['scene_id'] != self.scene.scene_id:
@@ -316,12 +327,19 @@ class Bridge:
             straight = getattr(args, 'night_mode', 'straight') == 'straight'
             trial = BoundaryWeaving if straight else NightOvertakeScenario
             self.scenario = trial(self.scene.route, self.run_dir / "interactions.jsonl")
+            if straight and getattr(args,'natural_motion',False):
+                from nurec_natural import NaturalWeaving
+                self.scenario.events.close()
+                self.scenario=NaturalWeaving(self.scene.route,self.run_dir/'interactions.jsonl')
             config_name = 'night-straight-v1-config.json' if straight else 'night-overtake-assets-v1-config.json'
             asset_config = json.loads((TRIAL / 'reports' / config_name).read_text(encoding='utf-8-sig'))
             if asset_config['scene_id'] != self.scene.scene_id:
                 raise RuntimeError('Night crash asset/source mismatch')
             self.scenario.crash_asset_specs = asset_config['insert_assets']
         self.navigation = NavigationAdapter(self)
+        if self.rig:
+            from nurec_navigation import NuRecNavigation
+            self.navigation=NuRecNavigation(self)
         self.fog_effect=FogEffect() if args.profile=='fog' else None
         self.high_beam_effect=HighBeamEffect() if args.profile=='congestion' else None
         self.last_light_state=None
@@ -735,12 +753,17 @@ class Bridge:
             dynamic_actor_ids=[a.track_id for a in objects],wall_s=time.monotonic()-started)),encoding='utf-8')
 
     def control_loop(self):
-        previous = time.monotonic()
+        previous = None
+        previous_steer=0.
         speed_integral=0.
         while not self.stop.wait(0.025):
             try:
                 now = time.monotonic()
-                dt, previous = now - previous, now
+                snapshot=self.world.get_snapshot()
+                sim_time=snapshot.timestamp.elapsed_seconds
+                dt=0. if previous is None else max(0.,min(.2,sim_time-previous))
+                previous=sim_time
+                if dt==0.:continue
                 with self.lock:
                     cmd = dict(self.command)
                     if self.ready_for_driving.is_set():self.command["reset"] = False
@@ -779,6 +802,10 @@ class Bridge:
                 if crash_active and mode=='manual':mode='auto'
                 following_speed = self.scenario.advance(dt, mode in ('auto', 'manual'),
                     [tr.location.x, -tr.location.y], speed)
+                if self.rig:self.navigation.tick()
+                if getattr(self.args,'natural_motion',False) and self.ready_for_driving.is_set():
+                    # Physics proxies follow simulation cadence, not slow RGB RPCs.
+                    self.update_tracks(self.scene.source_timestamp(tr),tr)
                 if self.hybrid:self.hybrid.walker.update(self.scenario,mode in ('auto','manual'))
                 high_beam=getattr(self.scenario,'high_beam',None)
                 if high_beam is not None:
@@ -808,7 +835,9 @@ class Bridge:
                     angle = math.atan2(dy, dx) - math.radians(tr.rotation.yaw)
                     angle = math.atan2(math.sin(angle), math.cos(angle))
                     ctl.steer = float(np.clip(math.atan2(2 * 2.9 * math.sin(angle), lookahead) / .6, -.55, .55))
-                    speed_cap=36. if isinstance(self.scenario,HighwayBlockade) else self.args.speed
+                    if getattr(self.args,'natural_motion',False):
+                        ctl.steer=float(np.clip(ctl.steer,previous_steer-.4*dt,previous_steer+.4*dt))
+                    speed_cap=36. if isinstance(self.scenario,HighwayBlockade) or getattr(self.args,'natural_motion',False) else self.args.speed
                     target_speed = speed_cap if following_speed is None else min(speed_cap, following_speed)
                     error = target_speed - speed
                     ctl.throttle = float(np.clip(error * .08, 0., .55))
@@ -843,6 +872,7 @@ class Bridge:
                     ctl.throttle,ctl.brake=0.,1.
                 if self.hybrid and self.scenario.nearest_gap is not None and self.scenario.nearest_gap<5:
                     ctl.throttle,ctl.brake=0.,1.
+                previous_steer=ctl.steer
                 self.ego.apply_control(ctl)
                 self.state.update(speed_kph=round(speed, 1), mode=mode, route_index=index,
                     cross_track_m=round(distance, 2), route_end=index >= len(self.scene.route) - 5 or self.scenario.completed,
@@ -872,10 +902,12 @@ class Bridge:
         cam_matrix = hybrid_camera if self.hybrid else self.scene.camera_pose(tr)
         pose = grpc_pose(cam_matrix)
         render_objects=dynamic_objects
-        if self.args.scenario_load=='essential' and isinstance(self.scenario,HighwayBlockade) and self.scenario.enabled:
+        if not self.rig and self.args.scenario_load=='essential' and isinstance(self.scenario,HighwayBlockade) and self.scenario.enabled:
             angle=getattr(self.intrinsics.ftheta_param,'max_angle',None)
             render_objects=visible_fast_traffic(dynamic_objects,cam_matrix,angle,self.scenario.config['vehicles'],
                 {self.scenario.TRACK_ID,*self.scenario.large_ids})
+        if self.rig:
+            return self.render_lab_frame(snapshot,tr,index,distance,timestamp,cam_matrix,render_objects,render_scenario,label,frame_started)
         # Explicit poses follow each active proxy. Scenario 2 isolates one lead
         # stimulus; free-drive preserves the measured editable traffic timeline.
         req = proto.RGBRenderRequest(scene_id=self.scene.scene_id,
@@ -1004,6 +1036,33 @@ class Bridge:
         self.state['frame_timings_ms'] = {key: round(value, 2) for key, value in timings.items()}
         return record
 
+    def render_lab_frame(self,snapshot,tr,index,distance,timestamp,camera,objects,scenario,label,started):
+        size=self.render_size
+        current=lambda:scenario['session']==self.scenario.session and not self.stop.is_set()
+        jpeg=self.rig.render(self.stub,proto,grpc_pose,self.scene.scene_id,timestamp,camera,objects,size,self.frame_id+1,current)
+        if jpeg is None:return None
+        from collections import deque
+        clock_mode=(scenario['session'],self.state.get('mode'))
+        if getattr(self,'rig_clock_mode',None)!=clock_mode:
+            self.rig_clock_mode=clock_mode;self.rig_present_times=deque(maxlen=31)
+        self.rig_present_times.append(time.monotonic())
+        times=self.rig_present_times
+        cadence=(len(times)-1)/(times[-1]-times[0]) if len(times)>1 and times[-1]>times[0] else 0.
+        record=dict(id=self.frame_id+1,carla_frame=snapshot.frame,scene_timestamp_us=timestamp,
+            carla_transform=tr.get_matrix(),camera_pose=camera.tolist(),cross_track_m=distance,
+            scenario=scenario,rig=self.rig.last,dimensions=list(size),label=label)
+        self.trace.write(json.dumps(record)+'\n')
+        if label:
+            (self.run_dir/(label+'.jpg')).write_bytes(jpeg)
+            (self.run_dir/(label+'.json')).write_text(json.dumps(record,indent=2),encoding='utf-8')
+            (self.run_dir/(label+'-surround.zip')).write_bytes(self.rig.frames.zip)
+        with self.frame_event:
+            self.jpeg=jpeg;self.frame_id+=1;self.last_frame_time=time.monotonic();self.frame_event.notify_all()
+        self.state.update(phase='live',frames=self.frame_id,width=size[0],height=size[1],quality=self.quality,
+            rpc_ms=self.rig.last['rpc_ms'],error=None,rig=self.rig.last,
+            measured_render_fps=round(cadence,2),render_processing_fps=round(1/max(.001,time.perf_counter()-started),2))
+        return record
+
     def warm_fog_compositor(self):
         """Compile the fog/range path before exposing frames or advancing the trial."""
         tr=self.ego.get_transform();timestamp=self.scene.source_timestamp(tr)
@@ -1042,6 +1101,7 @@ class Bridge:
 
     def close(self):
         self.stop.set()
+        if self.rig:self.rig.close()
         self.render_wake.set()
         for actor in reversed(self.actors):
             try:
@@ -1068,7 +1128,41 @@ def make_handler(bridge):
         def do_GET(self):
             path = urlparse(self.path).path
             if path == '/navigation':
-                data, content = navigation_html(city_audio=getattr(bridge.scenario,'SOURCE_FAITHFUL',False)), 'text/html; charset=utf-8'
+                if bridge.rig:
+                    from nurec_navigation import navigation
+                    data=navigation()
+                else:data=navigation_html(city_audio=getattr(bridge.scenario,'SOURCE_FAITHFUL',False))
+                content='text/html; charset=utf-8'
+            elif path == '/rig/bundle':
+                if not bridge.rig:self.send_error(409);return
+                params=parse_qs(urlparse(self.path).query)
+                after=int(params.get('after',['-1'])[0]) if params.get('token',[''])[0]==bridge.rig.frames.token else -1
+                _,data=bridge.rig.frames.after(after)
+                self.send_response(200 if data else 204);self.send_header('Content-Type','application/zip')
+                self.send_header('Cache-Control','no-store');self.end_headers()
+                if data:self.wfile.write(data)
+                return
+            elif bridge.rig and path in ('/api/research-voice','/api/language/zh'):
+                if path=='/api/research-voice':
+                    from research_voice import catalog
+                    value=catalog(parse_qs(urlparse(self.path).query).get('lang',['ko'])[0])
+                else:
+                    from chinese_locale import catalog
+                    value=catalog()
+                data,content=json.dumps(value,ensure_ascii=False).encode('utf-8'),'application/json; charset=utf-8'
+            elif bridge.rig and path.startswith('/api/research-audio/'):
+                from research_voice import audio_path
+                data,content=audio_path(path.removeprefix('/api/research-audio/').removesuffix('.wav')).read_bytes(),'audio/wav'
+            elif bridge.rig and path.startswith('/api/chinese-audio/'):
+                from research_voice import audio_path,ALIASES
+                key=path.removeprefix('/api/chinese-audio/').removesuffix('.wav')
+                data,content=audio_path('zh_scene_'+ALIASES.get(key,key)).read_bytes(),'audio/wav'
+            elif bridge.rig and path in ('/midterm-panel.js','/midterm-panel.css','/feedback-voice.js'):
+                name={'/midterm-panel.js':'midterm_panel.js','/midterm-panel.css':'midterm_panel.css','/feedback-voice.js':'feedback_voice.js'}[path]
+                data=(ROOT/name).read_bytes()
+                if path=='/midterm-panel.js':
+                    data=data.replace(b"location.assign(target.pathname+target.search)",b"location.assign('http://127.0.0.1:8779/')")
+                content='text/css' if path.endswith('.css') else 'application/javascript; charset=utf-8'
             elif path == '/api/cabin-audio':
                 from cabin_recording import catalog
                 data,content=json.dumps(catalog(),ensure_ascii=False).encode('utf-8'),'application/json; charset=utf-8'
@@ -1101,7 +1195,9 @@ def make_handler(bridge):
                 data = json.dumps(bridge.navigation.reply(query.get('session',[''])[0], query.get('id',[''])[0]),ensure_ascii=False).encode('utf-8')
                 content = 'application/json; charset=utf-8'
             elif path == "/":
-                data = navigation_html(city_audio=getattr(bridge.scenario,'SOURCE_FAITHFUL',False)) if bridge.args.profile in ('fog','rattle') else (ROOT / "viewer.html").read_bytes()
+                if bridge.rig:
+                    data=b'<meta http-equiv="refresh" content="0;url=http://127.0.0.1:8779/">'
+                else:data = navigation_html(city_audio=getattr(bridge.scenario,'SOURCE_FAITHFUL',False)) if bridge.args.profile in ('fog','rattle') else (ROOT / "viewer.html").read_bytes()
                 content = "text/html; charset=utf-8"
             elif path == "/state":
                 public_state = dict(bridge.state)
@@ -1151,7 +1247,7 @@ def make_handler(bridge):
             else:self.send_error(404)
 
         def do_POST(self):
-            if self.path not in ("/control", '/api/command'):
+            if self.path not in ("/control", '/api/command','/api/select'):
                 self.send_error(404)
                 return
             if self.headers.get("Origin") not in (None, f"http://127.0.0.1:{bridge.args.web_port}",
@@ -1164,6 +1260,14 @@ def make_handler(bridge):
                 return
             try:
                 body = json.loads(self.rfile.read(size))
+                if not isinstance(body,dict):raise ValueError('Invalid request')
+                if self.path=='/api/select':
+                    if not bridge.rig or not bridge.scenario.completed:raise ValueError('현재 주행이 끝난 뒤 다시 시작해 주세요.')
+                    if body.get('profile')!=bridge.args.profile:raise ValueError('다른 상황은 시작 화면에서 선택해 주세요.')
+                    with bridge.lock:bridge.command.update(reset=True,mode='paused')
+                    data=b'{"accepted":true}'
+                    self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
+                    return
                 if self.path == '/api/command':
                     result = bridge.navigation.command(body)
                     bridge.render_wake.set()
@@ -1185,11 +1289,14 @@ def make_handler(bridge):
                     self.wfile.write(data)
                     return
                 with bridge.lock:
+                    if body.get('session_id')!=bridge.scenario.session and bridge.rig:
+                        raise ValueError('현재 주행 화면에서 다시 요청해 주세요.')
                     if 'duration_s' in body:
                         if not isinstance(bridge.scenario, Congestion) or body['duration_s'] not in (300, 450, 600):
                             raise ValueError('이 체험에서는 5분, 7분 30초, 10분을 선택할 수 있습니다.')
                         bridge.command.update(duration_s=body['duration_s'], reset=True, mode='paused')
                     if body.get("quality") in QUALITY_PRESETS:
+                        if bridge.rig:raise ValueError('3면 화질은 시작 화면에서 선택해 주세요.')
                         bridge.quality = body["quality"]
                         bridge.render_size = QUALITY_PRESETS[bridge.quality]
                     if body.get("mode") in ("auto", "paused", "manual"):
@@ -1219,6 +1326,8 @@ def make_handler(bridge):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--profile', choices=['night', 'congestion','fog','rattle','night_pedestrian'], default='night')
+    parser.add_argument('--lab-surround',action='store_true')
+    parser.add_argument('--natural-motion',action='store_true')
     parser.add_argument('--appearance-mode',choices=['legacy','source'],default=None)
     parser.add_argument('--night-mode', choices=['straight','overtake-crash'], default='straight')
     parser.add_argument("--carla-port", type=int, default=2016)
@@ -1234,6 +1343,7 @@ def main():
                         help='Skip unused CARLA drawing; keep separate NuRec RGB, DX12 and async physics')
     parser.add_argument('--renderer-backend', choices=['trained','nrend','gsplat','gsplat-native'], default='trained')
     args = parser.parse_args()
+    if args.lab_surround and args.profile not in ('night','congestion'):parser.error('NuRec lab option supports congestion and night only')
     args.appearance_mode=args.appearance_mode or ('source' if args.profile in ('fog','rattle','night_pedestrian') else 'legacy')
     if args.profile=='rattle' and args.appearance_mode!='source':parser.error('Rattle requires original source traffic')
     bridge = Bridge(args)
