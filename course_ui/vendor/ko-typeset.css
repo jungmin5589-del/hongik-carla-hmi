@@ -1,0 +1,37 @@
+/*! ko-typeset.css — 한국어 웹 조판 기본값
+ * :where()로 감싸서 우선순위 0. 내 스타일이 항상 이긴다. */
+
+/* 1. 줄바꿈: 어절 단위 + 긴 URL 등만 강제로 끊기 + 문장부호 금칙 */
+:where(:lang(ko)) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  line-break: strict;
+  font-kerning: normal;
+}
+
+/* 2. 문단: 마지막 줄 한 어절(과부) 방지 */
+:where(:lang(ko)) :where(p, li, dd, blockquote, figcaption, td, th) {
+  text-wrap: pretty;
+}
+
+/* 3. 제목·짧은 문구: 줄 길이 균형 */
+:where(:lang(ko)) :where(h1, h2, h3, h4, h5, h6, caption, .ko-balance) {
+  text-wrap: balance;
+}
+
+/* 4. 자막(최대 2줄) — JS가 실제 폭을 재서 최적 위치에 <br>을 넣음. JS 전에는 balance로 대체 */
+:where(.ko-subtitle, [data-ko="subtitle"]) {
+  text-wrap: balance;
+}
+
+/* 5. 조판 디테일 (원치 않으면 이 블록만 지우세요) */
+:where(:lang(ko)) :where(h1, h2, h3) { letter-spacing: -0.02em; line-height: 1.35; }
+:where(:lang(ko)) :where(p, li, dd, blockquote) { line-height: 1.7; }
+:where(.ko-measure) { max-width: 36em; } /* 한 줄 약 30~36자: 한국어 본문에 읽기 좋은 길이 */
+
+/* 6. 코드·입력창은 원래대로 */
+:where(pre, code, kbd, samp, textarea, input) {
+  word-break: normal;
+  overflow-wrap: normal;
+  text-wrap: wrap;
+}

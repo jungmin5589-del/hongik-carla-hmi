@@ -78,7 +78,7 @@ def static_asset(path):
     elif path in {'/cockpit.css', '/cockpit.js', '/research-events.css', '/research-events.js',
                   '/multimodal.css', '/hongik-assistant.css', '/vendor/three.module.js'}:
         file = WEB / path.lstrip('/')
-    elif path.startswith('/vendor/') and path.endswith(('.js', '.woff2')):
+    elif path.startswith('/vendor/') and path.endswith(('.js', '.css', '.woff2')):
         file = (WEB / path.lstrip('/')).resolve()
         if not file.is_relative_to((WEB / 'vendor').resolve()):
             return None

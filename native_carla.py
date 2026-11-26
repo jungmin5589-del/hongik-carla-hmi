@@ -861,7 +861,7 @@ def native_navigation_html(midterm=False):
 
 
 def native_home_html():
-    return (ROOT/'native_home.html').read_bytes().replace(b'<main>',b'<script src="/language.js"></script><script defer src="/participant-setup.js"></script><main><p><a href="/experiment">AI OFF / ON experiment</a></p>',1)
+    return (ROOT/'native_home.html').read_bytes().replace(b'<main>',b'<script src="/language.js"></script><script defer src="/participant-setup.js"></script><main>',1)
 
 
 def finish_emergency(bridge,speed):
