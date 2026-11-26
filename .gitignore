@@ -42,5 +42,11 @@
 !/course_ui/vendor/THREE-LICENSE.txt
 !/course_ui/vendor/PretendardVariable.woff2
 !/course_ui/vendor/Pretendard-LICENSE.txt
+!/course_ui/vendor/ko-typeset.js
+!/course_ui/vendor/ko-typeset.css
+!/course_ui/vendor/operator-geist.css
+!/course_ui/vendor/Geist-Variable.woff2
+!/course_ui/vendor/GeistMono-Variable.woff2
+!/course_ui/vendor/Geist-LICENSE.txt
 # This is an unmodified proprietary SDK source copy, not our application.
 /serve-reference.py
