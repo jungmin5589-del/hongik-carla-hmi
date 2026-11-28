@@ -3,7 +3,7 @@
 All clocks advance with the owned CARLA scenario. No perception or remote-agent
 claims are derived from this scripted passenger study controller.
 """
-from native_alignment import cached_map
+from native_alignment import cached_map,actor_route_distance
 import math,time
 
 from action_outcome import ActionOutcome
@@ -266,6 +266,8 @@ class StudyRequests:
         if self.phase=='applying':
             ready,status=self._ready(speed,age)
             timeout=120. if self.action in ('safe_stop','end_ride') and self.safe_bay else 50.
+            if self.action in ('merge','pass'):
+                timeout=max(120.,(self.lane_start_elapsed-self.started_at+35.) if self.lane_started else 120.)
             if ready or age>=timeout:
                 self.status=status if ready else 'unfulfilled';self.summary=self.describe()
                 sc.action_complete=bool(ready and status=='achieved');sc.outcome.status=self.status;sc.outcome.summary=self.summary
@@ -334,10 +336,17 @@ class StudyRequests:
         return target,lateral
 
     def steering_offset(self,distance,default):
+        if self.action in ('merge','pass') and self.lane_started and self.phase in ('applying','observing'):
+            return self.lane_offset(distance)
         if self.action not in ('safe_stop','end_ride') or self.phase not in ('applying','observing') or not self.safe_bay or self.bay_waiting:return default
         runway=max(16.,self.safe_bay['s']-self.bay_start_s)
         u=min(1.,max(0.,(distance-self.bay_start_s)/max(4.,runway-12.)));u=u*u*(3.-2.*u)
         return self.base_lateral+(self.safe_bay['offset']-self.base_lateral)*u
+
+    def lane_offset(self,distance):
+        u=min(1.,max(0.,(distance-self.lane_start_s)/40.))
+        u=u**3*(10.-15.*u+6.*u*u)
+        return self.lane_start_offset+(self.target_offset-self.lane_start_offset)*u
 
     def raw_targets(self,speed,offset):
         if self.finish_after_horn:return 0.,self.horn_stop_offset
@@ -387,10 +396,16 @@ class StudyRequests:
             else:self.safe_stable=0.
             if self.safe_stable>=1.5 and not self.lane_started:
                 self.lane_started=True;self.lane_start_elapsed=sc.elapsed;self.lane_start_offset=self.offset
-            if not self.lane_started:return speed,offset
-            if not clear and abs(self.offset-self.target_offset)>.8:return 0.,self.offset
-            u=min(1.,max(0.,(sc.elapsed-self.lane_start_elapsed)/5.));u=u*u*(3.-2.*u)
-            lateral=self.lane_start_offset+(self.target_offset-self.lane_start_offset)*u
+                self.lane_start_s=b.ego_s
+            if not self.lane_started:
+                self.feedback='왼쪽 차량이 지나가고 안전한 간격이 생기기를 기다리고 있어요. 아직 차로를 바꾸지 않았어요.'
+                sc.feedback=self.feedback
+                return speed,offset
+            self.feedback='확보한 공간을 따라 왼쪽 차로로 천천히 이동하고 있어요.'
+            sc.feedback=self.feedback
+            # Commit to one continuous mapped path. Advancing the timer while
+            # halted used to skip sideways when a car cleared the lane.
+            lateral=self.lane_offset(b.ego_s)
             return (40. if a=='pass' else 36.),lateral
         if a=='slow':return min(12.,speed),offset
         if a=='support':return (0. if sc.profile in ('carpool','yield') else min(speed,12.)),offset
@@ -441,12 +456,12 @@ def rear_approach_clear(b):
     ego_speed=b.ego.get_velocity().length()
     for item in b.vehicles[1:]:
         actor=item['actor'];loc=actor.get_location()
-        s,_=b.route.project([loc.x,loc.y],b.ego_s)
+        s=actor_route_distance(b.route,[loc.x,loc.y],b.ego_s,item.get('s'))
         centre,yaw=b.route.sample(s)
         offset=(loc.x-centre[0])*-math.sin(yaw)+(loc.y-centre[1])*math.cos(yaw)
         if abs(offset+b.route.width)>item['extent'].y+1.35:continue
         behind=b.ego_s-s;closing=(item.get('render_speed',0.)/3.6 if item.get('guided_flow') else actor.get_velocity().length())-ego_speed
-        if 0.<behind<120. and closing>.5 and behind/closing<5.:return False
+        if 0.<behind<180. and closing>.5 and behind/closing<8.:return False
     return True
 
 

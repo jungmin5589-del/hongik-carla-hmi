@@ -17,7 +17,7 @@ class ControlAuditTests(unittest.TestCase):
    projected,error=r.project(xy,previous)
    self.assertAlmostEqual(projected,s,places=7);self.assertAlmostEqual(error,float(distance[i]),places=7)
  def test_damaged_drive_cannot_resume_without_reset(self):
-  b=NativeBridge.__new__(NativeBridge);b.lock=threading.RLock();b.state={'drive_guard':'collision','phase':'live'};b.command={'mode':'paused'}
+  b=NativeBridge.__new__(NativeBridge);b.lock=threading.RLock();b.state={'drive_guard':'collision','phase':'live'};b.command={'mode':'paused'};b.scenario=S(emergency_requested=False)
   with self.assertRaisesRegex(ValueError,'다시 준비'):b.control({'mode':'auto'})
   self.assertEqual(b.command['mode'],'paused')
  def test_collision_latches_pause_before_another_request(self):

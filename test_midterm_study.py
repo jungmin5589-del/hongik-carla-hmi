@@ -85,15 +85,18 @@ class MidtermTests(unittest.TestCase):
 
     def test_lane_request_interpolates_instead_of_jumping(self):
         study=self.sc.study;study.phase='applying';study.action='pass';study.target_offset=-3.5
-        self.b.route=SimpleNamespace(width=3.5)
+        self.b.route=SimpleNamespace(width=3.5);self.b.ego_s=100.
         with patch('fallen_cargo.left_lane_clear',return_value=True),patch('midterm_study.rear_approach_clear',return_value=True):
             for _ in range(40):first=study.targets(30.,0.)
             self.assertEqual(first[1],0.)
-            self.sc.elapsed+=2.5
+            self.sc.elapsed+=2.5;self.b.ego_s=120.
             middle=study.targets(30.,0.)
             self.assertAlmostEqual(middle[1],-1.75)
-            self.sc.elapsed+=2.5
+            self.sc.elapsed+=2.5;self.b.ego_s=140.
             self.assertEqual(study.targets(30.,0.)[1],-3.5)
+            self.sc.elapsed+=20.
+            self.assertEqual(study.lane_offset(120.),-1.75)
+            self.assertEqual(study.steering_offset(120.,0.),-1.75)
 
     def test_acknowledgement_delay_uses_current_interface_language(self):
         self.select('study_horn')

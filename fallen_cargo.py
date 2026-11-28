@@ -1,4 +1,4 @@
-from native_alignment import cached_map
+from native_alignment import cached_map,actor_route_distance
 from event_writer import open_events
 """One physical dropped box; scripted uncertainty, not a perception benchmark."""
 import math
@@ -293,10 +293,11 @@ def left_lane_clear(bridge):
     if ego_wp is None or wp.lane_id*ego_wp.lane_id<=0:
         return False
     extents={item['actor'].id:item.get('extent') for item in bridge.vehicles}
+    tracked={item['actor'].id:item.get('s') for item in bridge.vehicles}
     for actor in bridge.world.get_actors().filter('vehicle.*'):
         if actor.id==bridge.ego.id:continue
         loc=actor.get_location()
-        s,_=bridge.route.project([loc.x,loc.y],bridge.ego_s)
+        s=actor_route_distance(bridge.route,[loc.x,loc.y],bridge.ego_s,tracked.get(actor.id))
         if abs(s-bridge.ego_s)>35.:continue
         c,yaw=bridge.route.sample(s)
         off=(loc.x-c[0])*-math.sin(yaw)+(loc.y-c[1])*math.cos(yaw)

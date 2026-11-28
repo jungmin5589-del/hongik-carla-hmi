@@ -12,7 +12,7 @@ class IntroTests(unittest.TestCase):
    for t in (30,40,45,50,55,60,65,70):
     before=lead_targets(profile,t-.001);after=lead_targets(profile,t+.001)
     self.assertLess(abs(before[0]-after[0]),.01);self.assertLess(abs(before[1]-after[1]),.01)
-  self.assertEqual(following_gap('congestion',45),5.5)
+  self.assertEqual(following_gap('congestion',45),4.)
   self.assertEqual(following_gap('night',45),6.5)
  def test_pausing_does_not_advance_onset(self):
   with tempfile.TemporaryDirectory() as d:

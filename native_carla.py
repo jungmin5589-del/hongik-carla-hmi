@@ -37,7 +37,8 @@ from fallen_cargo import CargoScenario, CargoActor, OPTIONS as CARGO_OPTIONS, na
 from lab_settings import sun_altitude
 from research_store import ResearchStore
 from runtime_version import REVISION
-from traffic_intro import ONSET_SECONDS,INTRO_GAP,blend,following_gap,truck_formation,lead_targets
+from traffic_intro import ONSET_SECONDS,INTRO_GAP,NOVICE_GAP,blend,following_gap,truck_formation,lead_targets
+from traffic_intro import FAST_CYCLE,FAST_REAR,fast_positions,passing_speed,limited_offset
 from passing_traffic import recycle_destination
 from vehicle_following import following_speed as safe_following_speed,imminent_contact,longitudinal,driving_step
 
@@ -53,7 +54,7 @@ class NativeScenario(Scenario2):
         self.profile = profile
         self.TYPE_ID = 'congestion_long' if profile == 'congestion' else 'dense_fog' if profile == 'fog' else 'drowsy_night'
         if profile == 'congestion':self.FAST_SPEED=25.
-        self.BASE_GAP = 8. if profile == 'fog' else 6.5 if profile == 'night' else 5.5 if profile == 'congestion' else 9.
+        self.BASE_GAP = 8. if profile == 'fog' else 6.5 if profile == 'night' else NOVICE_GAP if profile == 'congestion' else 9.
         self.WIDE_GAP = 36. if profile == 'fog' else 28.
         self.ONSET_SECONDS = ONSET_SECONDS if profile in ('congestion','night') else 10.
         self.lock = threading.RLock()
@@ -445,9 +446,17 @@ class NativeBridge:
                         truck['formation_s']=relative_s;truck['formation_lane']=lane
                 # Enough cars to fill the off-camera recycling corridor without
                 # introducing a long empty gap between successive platoons.
-                for i in range(24):
-                    self.spawn('vehicle.tesla.model3',self.ego_s+160+i*13.,-self.route.width,'fast',55,
-                               color=['185,189,193','45,49,55','214,216,219'][i%3])
+                fleet=('vehicle.tesla.model3','vehicle.audi.a2','vehicle.lincoln.mkz_2020','vehicle.nissan.patrol','vehicle.mercedes.coupe','vehicle.dodge.charger_2020')
+                available={bp.id for bp in self.world.get_blueprint_library().filter('vehicle.*')}
+                fleet=[bp for bp in fleet if bp in available]
+                for i,relative in enumerate(fast_positions()):
+                    item=self.spawn(fleet[i%len(fleet)],self.ego_s+relative,-self.route.width,'fast',55,
+                               color=['185,189,193','45,49,55','214,216,219','110,39,35','40,62,91'][i%5])
+                    item['flow_index']=i
+            elif profile=='night' and not (setting and setting['practice']):
+                for i,(relative,lane) in enumerate(((85.,-1),(-150.,-1),(60.,2),(125.,2),(-60.,2),(-130.,-1))):
+                    item=self.spawn('vehicle.audi.a2' if i%2 else 'vehicle.tesla.model3',self.ego_s+relative,lane*self.route.width,'background',51.+i%3*4.,color=('158,163,171','62,70,81')[i%2])
+                    item['passing_flow']=True;item['flow_index']=i
             weather=carla.WeatherParameters(cloudiness=15,precipitation=0,sun_altitude_angle=sun_altitude(profile),
                                            fog_density=0,fog_distance=0,fog_falloff=.1,wetness=0)
             self.world.set_weather(weather)
@@ -633,7 +642,8 @@ class NativeBridge:
                     experiment=getattr(self,'experiment_spec',None)
                     if self.profile in ('congestion','night'):
                         practice=bool(experiment and experiment['practice'])
-                        lead['speed'],lead['offset']=lead_targets(self.profile,elapsed,practice,elapsed<sc.settle_until)
+                        lead['speed'],requested_offset=lead_targets(self.profile,elapsed,practice,elapsed<sc.settle_until)
+                        lead['offset']=limited_offset(lead['offset'],requested_offset,dt if driving else 0.)
                         target=lead['speed']
                         if not practice and getattr(getattr(sc,'study',None),'phase','idle')=='idle' and not getattr(getattr(sc,'study',None),'action',None):
                             sc.desired_gap=following_gap(self.profile,elapsed)
@@ -652,11 +662,11 @@ class NativeBridge:
                     for j,item in enumerate(self.vehicles):
                         if item.get('passing_flow'):
                             if snapshot.frame<=item.get('recycle_until_frame',-1):continue
-                            kph=blend(55.,90.,elapsed,30.,40.)
+                            kph=passing_speed(item.get('flow_index',0),elapsed,self.profile)
                             item['speed']=kph
                             if driving:
                                 others=[v['s'] for v in self.vehicles if v is not item and v.get('passing_flow')]
-                                destination=recycle_destination(item['s'],ego['s'],passing_count,others) if elapsed>=ONSET_SECONDS else None
+                                destination=recycle_destination(item['s'],ego['s'],passing_count,others,spacing=FAST_CYCLE/passing_count if self.profile=='congestion' else 70.,rear=FAST_REAR if self.profile=='congestion' else 120.) if elapsed>=ONSET_SECONDS else None
                                 if destination is not None:
                                     xyz,a=self.route.sample(destination,item['offset'])
                                     pose=carla.Transform(carla.Location(x=float(xyz[0]),y=float(xyz[1]),z=float(xyz[2]+item['rest_z'])),carla.Rotation(yaw=math.degrees(a)))
@@ -700,11 +710,13 @@ class NativeBridge:
                         throttle,brake,item['command_speed']=longitudinal(v,target_mps,item.get('command_speed',v),dt,emergency,driving)
                         controls.append(carla.command.ApplyVehicleControl(actor.id,carla.VehicleControl(
                             throttle=throttle,brake=brake,steer=item['steer'],hand_brake=not driving and v<.2)))
+                        lights=carla.VehicleLightState.Position|carla.VehicleLightState.LowBeam
+                        if brake>.05:lights|=carla.VehicleLightState.Brake
+                        if j==0 and sc.highbeam_on:lights|=carla.VehicleLightState.HighBeam
+                        if item.get('light_state')!=int(lights):
+                            controls.append(carla.command.SetVehicleLightState(actor.id,carla.VehicleLightState(lights)))
+                            item['light_state']=int(lights)
                     self.client.apply_batch(controls)
-                    lights=carla.VehicleLightState.Position|carla.VehicleLightState.LowBeam
-                    if sc.highbeam_on:lights|=carla.VehicleLightState.HighBeam
-                    if getattr(self,'last_lights',None)!=lights:
-                        self.ego.set_light_state(carla.VehicleLightState(lights));self.last_lights=lights
                     self.state.update(frame=snapshot.frame,speed_kph=round(speed,2),lane_error_m=round(error,3),
                                       profile=self.profile,physical_vehicles=len(self.vehicles),
                                       guided_background_vehicles=0,

@@ -91,3 +91,11 @@ def cached_map(bridge):
     if value is None:
         value=bridge.world.get_map();bridge.road_map=value
     return value
+
+
+def actor_route_distance(route,xy,anchor,known=None):
+    """Do not clamp a distant traffic actor into ego's +/-80m projection window."""
+    if known is not None:return float(known)
+    distance,_=route.project(xy,None)
+    length=getattr(route,'length',None)
+    return anchor+(distance-anchor+length/2)%length-length/2 if length else distance
