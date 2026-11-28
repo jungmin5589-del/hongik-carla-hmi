@@ -509,3 +509,8 @@ body.passenger-mode.docked .research-dialog-content{padding-top:calc(48*var(--u)
 body.passenger-mode.docked #research-options:not([hidden]){gap:calc(20*var(--u))!important}
 body.passenger-mode.docked #research-maintain.research-option{margin-top:calc(20*var(--u))!important}
 body.passenger-mode.docked #research-options-label{margin:calc(64*var(--u)) 0 calc(18*var(--u))!important}
+/* Keep new alert and music motion optional for reduced-motion users. */
+@media(prefers-reduced-motion:reduce){
+ #research-notice:not([hidden]),body.passenger-mode.docked #situation-card:not([hidden]),
+ body.passenger-mode.docked #sc-title::before,#now-playing{animation:none!important}
+}

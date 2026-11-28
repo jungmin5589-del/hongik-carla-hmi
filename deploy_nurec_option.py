@@ -23,7 +23,11 @@ NUREC=tuple(dict.fromkeys(SHARED+('launch_nurec_lab.py','nurec_surround.py','nur
     'feedback_voice.js','highway_blockade.py','night_weaving.py','language.js','scene_audio.js',
     'city_study.js','city_study.css','exterior_sound.js','underbody_sound.js','driving_sound.js',
     'driving_sound.css','recorded_cabin.js','course_ui/index.html','course_ui/cockpit.js','course_ui/cockpit.css',
-    'course_ui/vendor/PretendardVariable.woff2','course_ui/vendor/Pretendard-LICENSE.txt')))
+    'course_ui/vendor/PretendardVariable.woff2','course_ui/vendor/Pretendard-LICENSE.txt',
+    'course_ui/vendor/Geist-LICENSE.txt','course_ui/vendor/Geist-Variable.woff2',
+    'course_ui/vendor/GeistMono-Variable.woff2','course_ui/vendor/ko-typeset.css',
+    'course_ui/vendor/ko-typeset.js','course_ui/vendor/operator-geist.css',
+    'experiment_ui.js','survey_ui.js')))
 
 def changes(target,names):
     target=Path(target).resolve()

@@ -4,6 +4,8 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parent
 TEXT={'.py','.js','.cjs','.css','.html','.sh','.bat'}
 VENDOR={'three.core.js','three.module.js','THREE-LICENSE.txt','PretendardVariable.woff2','Pretendard-LICENSE.txt'}
+VENDOR.update({'Geist-LICENSE.txt','Geist-Variable.woff2','GeistMono-Variable.woff2',
+               'ko-typeset.css','ko-typeset.js','operator-geist.css'})
 
 def allowed(name):
     path=Path(name)

@@ -530,6 +530,7 @@ if(document.readyState==='complete')install();else window.addEventListener('load
 (()=>{
 'use strict';
 const $=id=>document.getElementById(id),body=document.body;
+if(!document.querySelector('.visualization')||!document.querySelector('.map-panel'))return;
 let data=null;
 const hhmm=d=>String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
 const header=document.querySelector('header');
